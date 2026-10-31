@@ -45,7 +45,11 @@ func TestPHPWeiboGuestProtocol(t *testing.T) {
 			var got any
 			switch unified.Str(entry["operation"]) {
 			case "transport":
-				got = legacyTransportFailure(unified.Map(args["response"]))
+				// A nil map stored in an interface is non-nil. Preserve the
+				// JSON null result rather than introducing a typed-nil value.
+				if failure := legacyTransportFailure(unified.Map(args["response"])); failure != nil {
+					got = failure
+				}
 			case "visitor":
 				got = legacyIsVisitor(unified.Map(args["response"]))
 			case "jsonp":

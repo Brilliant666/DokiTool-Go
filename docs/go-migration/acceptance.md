@@ -174,3 +174,7 @@ Go 增加 `internal/fetch/weibo_media.go` 单目标公网固定地址 TLS 流式
 由 `25beaee107f8c1a208ced9deb3c637068445e316` 的原 `backend/api/weibo.php`，在无网络、只读 PHP 8.3.6 环境中独立运行 51 个合成输入，冻结 transport failure、visitor HTML/passport 识别与 gen_callback/cross_domain JSONP 解析的完整结果，并逐字节 `cmp`。Go `internal/platform/weibo/session_protocol.go` 复刻纯协议层，`session_protocol_test.go` 读取不可变 PHP oracle 逐项比对；没有 Go 生成 expected。前期 PHP8.4 本地复制函数预览仅供建立输入，不作为最终 PHP8.3.6 运行证据；最终以同一 Head 的 CI 重放结果为准。
 
 本增量不包含真实上游请求、Cookie jar/游客二次请求、微博媒体候选 formatter、签名来源公开投影、正式微博 Parse/Resolve 对拍及在线浏览器保存。既有 relay 与 PHP 生产保持不变。未合并、未部署。
+
+### 本轮首次 CI 差异（已定位并修复测试桥接，待重跑）
+
+[Actions #41235263262](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41235263262)：固定 PHP 8.3.6 无网络重放与压缩基线逐字节匹配，`bilibili-php-oracle` 成功；`offline-contract` 中 Go 客户端校验测试首次有 7 个 `nil map` 与 JSON `null` 的 Go interface 表达差异。问题只在测试桥接层的 typed-nil，不在 PHP 产品输出或 Go 业务判断。保留严格期望，测试改为在 `legacyTransportFailure` 返回 nil 时向比较器交付真正的 nil；后续完整 CI 结果另行核实。
