@@ -9,12 +9,12 @@ import (
 
 func TestWeiboPinnedTargetValidation(t *testing.T) {
 	for raw, want := range map[string]bool{
-		"https://f.video.weibocdn.com/movie.mp4":                 true,
+		"https://f.video.weibocdn.com/movie.mp4":                true,
 		"https://f.video.weibocdn.com:0443/movie.mp4?token=abc": true,
-		"https://F.VIDEO.WEIBOCDN.COM/movie.mp4":                 false,
-		"https://f.video.weibocdn.com/movie.mp4#":                false,
-		"http://f.video.weibocdn.com/movie.mp4":                  false,
-		"https://f.video.weibocdn.com:444/movie.mp4":             false,
+		"https://F.VIDEO.WEIBOCDN.COM/movie.mp4":                false,
+		"https://f.video.weibocdn.com/movie.mp4#":               false,
+		"http://f.video.weibocdn.com/movie.mp4":                 false,
+		"https://f.video.weibocdn.com:444/movie.mp4":            false,
 		"https://f.video.weibocdn.com.evil.test/movie.mp4":      false,
 		"https://user@f.video.weibocdn.com/movie.mp4":           false,
 		"https://f.video.weibocdn.com/movie%ZZ.mp4":             false,
