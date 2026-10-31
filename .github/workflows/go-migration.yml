@@ -85,6 +85,7 @@ jobs:
 
       - name: Produce frozen PHP Weibo target identity preview for independent baseline freezing
         run: |
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
           # The frozen production function, not a Go implementation, is the oracle.
           frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
           current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"

@@ -441,6 +441,7 @@
 !/backend/internal/platform/douyin/request.go
 !/backend/internal/platform/douyin/testdata/
 !/backend/internal/platform/douyin/video.go
+/backend/internal/platform/weibo/*
 !/backend/internal/platform/weibo/target.go
 !/backend/internal/platform/weibo/target_test.go
 /backend/internal/testsupport/publicoracle/*
