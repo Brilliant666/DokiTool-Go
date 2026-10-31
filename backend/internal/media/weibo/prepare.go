@@ -43,12 +43,14 @@ func Prepare(ctx context.Context, method string, query unified.Object, rangeHead
 	if !valid {
 		return prepareFailure(403, "媒体链接无效或已过期，请重新解析")
 	}
-	var parsed unified.Object
+	var parsed any
 	if method == http.MethodGet {
-		var err error
-		parsed, err = ParseRange(rangeHeader)
+		value, err := ParseRange(rangeHeader)
 		if err != nil {
 			return prepareFailure(416, "视频请求范围无效")
+		}
+		if value != nil {
+			parsed = value
 		}
 	}
 	if lookup == nil {
