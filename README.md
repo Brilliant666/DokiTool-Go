@@ -1,6 +1,6 @@
 # DokiTool-Go
 
-本仓库是 `Brilliant666/DokiTool-Go` 的独立 Go 迁移工作区，按维护者决定在开发阶段公开协作。原 [DokiTool](https://github.com/Brilliant666/DokiTool) 的 main 继续维护 PHP；Go 提交和 Draft PR 进入本仓库，不整体反向合入 PHP 仓库。目前正在完成抖音之后的 B 站迁移；公共合同的 fragment 与安全整数问题已在 [PR #2](https://github.com/Brilliant666/DokiTool-Go/pull/2) 通过离线总门禁。Go 尚不能替代九平台生产入口，没有部署或切流。
+本仓库是 `Brilliant666/DokiTool-Go` 的独立 Go 迁移工作区，按维护者决定在开发阶段公开协作。原 [DokiTool](https://github.com/Brilliant666/DokiTool) 的 main 继续维护 PHP；Go 提交和 Draft PR 进入本仓库，不整体反向合入 PHP 仓库。抖音与 [B 站迁移](docs/go-migration/bilibili.md) 已通过离线总门禁；公共合同的 fragment 与安全整数问题由 [PR #2](https://github.com/Brilliant666/DokiTool-Go/pull/2) 修复。尚有七个平台和真实在线验收，Go 不能替代九平台生产入口，没有部署或切流。
 
 当前计划、版本化 PHP 对拍与证据见 [Go 迁移说明](docs/go-migration/README.md)，仓库、选择性同步及许可范围见 [维护边界](docs/go-migration/MAINTENANCE.md)。下方保留的功能与部署说明描述继承的 PHP/前端基线，不能据此认定 Go 已迁移全部平台。
 

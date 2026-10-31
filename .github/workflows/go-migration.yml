@@ -96,23 +96,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Report canonical formatting for the new Go sources
+      - name: Verify Go source formatting
         run: |
-          python3 - <<'PY'
-          import base64, gzip, json, subprocess
-          from pathlib import Path
-          paths = sorted(Path('backend/internal/platform/bilibili').glob('*.go'))
-          paths += [Path('backend/internal/api/bilibili_test.go'), Path('backend/cmd/dokitool/main.go')]
-          changed = {}
-          for path in paths:
-              formatted = subprocess.check_output(['gofmt', str(path)], text=True)
-              if formatted != path.read_text():
-                  changed[str(path)] = formatted
-          print('GOFMT_FILES=' + json.dumps(list(changed)))
-          if changed:
-              payload = json.dumps(changed, separators=(',', ':')).encode()
-              print('GOFMT_GZIP=' + base64.b64encode(gzip.compress(payload, mtime=0)).decode())
-          PY
+          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/api/bilibili_test.go backend/cmd/dokitool/main.go)"
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
 
       - name: Install validation dependencies
         run: |

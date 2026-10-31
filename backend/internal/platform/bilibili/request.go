@@ -22,65 +22,83 @@ func allowedVideoURL(raw string) bool { return allowedURL(raw) && videoHosts(raw
 func allowedShareURL(raw string) bool { return allowedURL(raw) && shareHosts(raw) }
 
 func allowedURL(raw string) bool {
-	if len(raw) > 8192 || strings.Contains(raw, "\\") || unified.MediaURL(raw) == "" { return false }
+	if len(raw) > 8192 || strings.Contains(raw, "\\") || unified.MediaURL(raw) == "" {
+		return false
+	}
 	u, err := url.Parse(raw)
-	if err != nil || u.User != nil || u.Opaque != "" { return false }
+	if err != nil || u.User != nil || u.Opaque != "" {
+		return false
+	}
 	return u.Scheme == "https" && (u.Port() == "" || u.Port() == "443") || u.Scheme == "http" && (u.Port() == "" || u.Port() == "80")
 }
 
 func allowedAPIURL(raw string) bool {
-	if strings.Contains(raw, "#") || !allowedURL(raw) { return false }
+	if strings.Contains(raw, "#") || !allowedURL(raw) {
+		return false
+	}
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme == "https" && u.Hostname() == "api.bilibili.com" && (u.EscapedPath() == "/x/web-interface/view" || u.EscapedPath() == "/x/player/playurl")
 }
 
 func shareRequest(raw string) fetch.Request {
 	return fetch.Request{URL: raw, Method: http.MethodHead, Header: http.Header{"User-Agent": {""}},
-		Policy: fetch.Policy{Purpose: "bilibili-share", AllowedURL: allowedShareURL, Timeout: 10*time.Second, MaxBytes: 1, FollowRedirects: true, MaxRedirects: 5}}
+		Policy: fetch.Policy{Purpose: "bilibili-share", AllowedURL: allowedShareURL, Timeout: 10 * time.Second, MaxBytes: 1, FollowRedirects: true, MaxRedirects: 5}}
 }
 
 func pageRequest(raw string, timeout time.Duration) fetch.Request {
 	return fetch.Request{URL: raw, Method: http.MethodGet,
 		Header: http.Header{"User-Agent": {desktopUA}, "Accept-Encoding": {"gzip,deflate"}},
-		Policy: fetch.Policy{Purpose: "bilibili-page", AllowedURL: allowedShareURL, Timeout: timeout, MaxBytes: 8<<20, FollowRedirects: true, MaxRedirects: 5}}
+		Policy: fetch.Policy{Purpose: "bilibili-page", AllowedURL: allowedShareURL, Timeout: timeout, MaxBytes: 8 << 20, FollowRedirects: true, MaxRedirects: 5}}
 }
 
 func viewRequest(bvid string, timeout time.Duration) fetch.Request {
-	return apiRequest("bilibili-view", "https://api.bilibili.com/x/web-interface/view?bvid=" + bvid, timeout)
+	return apiRequest("bilibili-view", "https://api.bilibili.com/x/web-interface/view?bvid="+bvid, timeout)
 }
 
 func playRequest(bvid string, cid any, timeout time.Duration) fetch.Request {
-	return apiRequest("bilibili-play", "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=" + bvid + "&cid=" + url.QueryEscape(stringValue(cid)) + "&platform=html5&high_quality=1", timeout)
+	return apiRequest("bilibili-play", "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid="+bvid+"&cid="+url.QueryEscape(stringValue(cid))+"&platform=html5&high_quality=1", timeout)
 }
 
 func apiRequest(purpose, raw string, timeout time.Duration) fetch.Request {
 	return fetch.Request{URL: raw, Method: http.MethodGet, Header: http.Header{"User-Agent": {""}, "Accept-Encoding": {"gzip,deflate"}},
-		Policy: fetch.Policy{Purpose: purpose, AllowedURL: allowedAPIURL, Timeout: timeout, MaxBytes: 8<<20}}
+		Policy: fetch.Policy{Purpose: purpose, AllowedURL: allowedAPIURL, Timeout: timeout, MaxBytes: 8 << 20}}
 }
 
 func remaining(ctx context.Context, maximum time.Duration) time.Duration {
 	if deadline, ok := ctx.Deadline(); ok {
 		// PHP floors its remaining budget to whole seconds for API requests.
 		left := time.Until(deadline) / time.Second * time.Second
-		if left < maximum { return left }
+		if left < maximum {
+			return left
+		}
 	}
 	return maximum
 }
 
 func (p *Parser) apiRequest(ctx context.Context, request fetch.Request) object {
-	if request.Policy.Timeout < time.Second { return decodeResponse(nil, 0, 28) }
+	if request.Policy.Timeout < time.Second {
+		return decodeResponse(nil, 0, 28)
+	}
 	response, err := p.executor.Do(ctx, request)
 	errno := int64(0)
-	if err != nil { errno = 1 }
+	if err != nil {
+		errno = 1
+	}
 	return decodeResponse(response.Body, response.StatusCode, errno)
 }
 
 func decodeResponse(body []byte, status int, errno int64) object {
 	var result object
-	if utf8.Valid(body) { result, _ = unified.Decode(body) }
-	if result == nil { result = object{} }
+	if utf8.Valid(body) {
+		result, _ = unified.Decode(body)
+	}
+	if result == nil {
+		result = object{}
+	}
 	result["_http_status"], result["_transport_errno"] = status, errno
-	if (errno != 0 || status != 200) && strictInteger(pick(result["code"], 0), 0) { result["code"] = -1 }
+	if (errno != 0 || status != 200) && strictInteger(pick(result["code"], 0), 0) {
+		result["code"] = -1
+	}
 	return result
 }
 
@@ -125,42 +143,53 @@ func redirectTarget(source, target string) string {
 	target = cleanURL(target)
 	sourceURL, sourceErr := url.Parse(source)
 	targetURL, targetErr := url.Parse(target)
-	if sourceErr != nil || targetErr != nil { return target }
+	if sourceErr != nil || targetErr != nil {
+		return target
+	}
 	part, exists, scalar := queryPart(sourceURL.RawQuery)
-	if !exists { return target }
+	if !exists {
+		return target
+	}
 	// Only p is consumed downstream. Keep the first position of scalar keys
 	// when replacing their value, and retain the ordered values of tracking
 	// arrays instead of collapsing repeated foo[] assignments in a map.
-	type entry struct { name, value string }
+	type entry struct{ name, value string }
 	entries := []entry{}
 	positions := map[string]int{}
 	nextIndexes := map[string]int64{}
 	set := func(name, value string) {
-		if position, exists := positions[name]; exists { entries[position].value = value; return }
+		if position, exists := positions[name]; exists {
+			entries[position].value = value
+			return
+		}
 		positions[name] = len(entries)
 		entries = append(entries, entry{name, value})
 	}
 	for _, pair := range strings.Split(targetURL.RawQuery, "&") {
 		key, value, _ := strings.Cut(pair, "=")
 		name, isArray := queryName(key)
-		if name == "" { continue }
+		if name == "" {
+			continue
+		}
 		if isArray && name != "p" {
 			decoded := strings.TrimLeft(formDecode(key), " ")
 			decoded, _, _ = strings.Cut(decoded, "\x00")
 			open := strings.IndexByte(decoded, '[')
 			close := open + 1 + strings.IndexByte(decoded[open+1:], ']')
-			index := decoded[open+1:close]
+			index := decoded[open+1 : close]
 			if close+1 < len(decoded) && decoded[close+1] == '[' {
 				// Preserve unfamiliar nested tracking parameters losslessly and
 				// in order; only the selected p controls media identity here.
-				entries = append(entries, entry{name+decoded[open:], formDecode(value)})
+				entries = append(entries, entry{name + decoded[open:], formDecode(value)})
 				continue
 			}
 			if index == "" || len(index) == 1 && strings.ContainsRune(" \t\r\n\v\f", rune(index[0])) {
 				index = strconv.FormatInt(nextIndexes[name], 10)
 				nextIndexes[name]++
 			} else if number, err := strconv.ParseInt(index, 10, 64); err == nil && strconv.FormatInt(number, 10) == index {
-				if next, exists := nextIndexes[name]; !exists || number >= next { nextIndexes[name] = number+1 }
+				if next, exists := nextIndexes[name]; !exists || number >= next {
+					nextIndexes[name] = number + 1
+				}
 			}
 			set(name+"["+index+"]", formDecode(value))
 			continue
@@ -171,8 +200,10 @@ func redirectTarget(source, target string) string {
 	pairs := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		encodedKey := entry.name
-		if entry.name == "p" && !scalar { encodedKey = "p[0]" }
-		pairs = append(pairs, formEncode(encodedKey) + "=" + formEncode(entry.value))
+		if entry.name == "p" && !scalar {
+			encodedKey = "p[0]"
+		}
+		pairs = append(pairs, formEncode(encodedKey)+"="+formEncode(entry.value))
 	}
 	base, _, _ := strings.Cut(target, "?")
 	return base + "?" + strings.Join(pairs, "&")
@@ -181,12 +212,21 @@ func redirectTarget(source, target string) string {
 func formEncode(value string) string { return strings.ReplaceAll(url.QueryEscape(value), "~", "%7E") }
 
 func formDecode(raw string) string {
-	if value, err := url.QueryUnescape(raw); err == nil { return value }
+	if value, err := url.QueryUnescape(raw); err == nil {
+		return value
+	}
 	var out strings.Builder
 	for i := 0; i < len(raw); i++ {
-		if raw[i] == '+' { out.WriteByte(' '); continue }
+		if raw[i] == '+' {
+			out.WriteByte(' ')
+			continue
+		}
 		if raw[i] == '%' && i+2 < len(raw) {
-			if value, err := url.QueryUnescape(raw[i:i+3]); err == nil { out.WriteString(value); i += 2; continue }
+			if value, err := url.QueryUnescape(raw[i : i+3]); err == nil {
+				out.WriteString(value)
+				i += 2
+				continue
+			}
 		}
 		out.WriteByte(raw[i])
 	}

@@ -4,6 +4,8 @@
 
 维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。当前从公共合同修复接续 B 站迁移，不部署 Go、不改变 PHP 生产；受控上游测试不等于真实平台或浏览器保存验收。
 
+[B 站实现与验收范围](bilibili.md)保留分 P、合集、单文件、分段和独立音轨的实际 PHP 行为；55 个固定 PHP 输入的 110 份 Go 公开响应已严格对拍通过。机器报告见 [bilibili-checks.json](bilibili-checks.json)，实际执行提交和 CI 链接见 [验收记录](acceptance.md)。
+
 ## 当前运行方式
 
 Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 随私库路径统一。固定工具链为 Go **1.27.3**，生产代码当前只使用标准库。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
