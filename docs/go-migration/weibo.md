@@ -29,6 +29,6 @@ PHP 源码固定在 `25beaee107f8c1a208ced9deb3c637068445e316`。这次只移植
 
 有界合成 HTTP 测试覆盖媒体请求与返回格式、拒绝恶意票据/目标、无效 ftyp、上游部分内容、HEAD、416、传输截断后的“禁止追加 JSON”。这些是 Go 受控连接/流式协议测试，不是 PHP 完整 `snapWeiboMediaStream` 回调的逐字节 oracle，更不是平台在线、真实浏览器保存或可上线证明。真实微博解析、签名来源公开投影、Parse/Resolve 仍未移植，媒体回传必须等待后续联调和进一步传输条件核对。
 
-## 微博 URL 身份解析：独立 PHP oracle 冻结中
+## 微博 URL 身份解析：47 组独立 PHP oracle
 
-从已发布 `25beaee` 的 `weiboTarget` 原产品函数新增固定输入生成器（包含 TV fid、status、parse_str 重复键与数组、主机与端口拒绝、非字符串 URL 等）。Go `internal/platform/weibo/target.go` 只识别身份，不执行任意 URL 请求。本检查点先由 CI 固定 PHP 8.3.6 生成不可变 expected；下一检查点从该次 PHP 证据入库并逐字段对拍。尚未注册微博 adapter，也不据此宣称解析链路完成。
+从已发布 `25beaee` 的 `weiboTarget` 原产品函数新增固定输入生成器（包含 TV fid、status、parse_str 重复键与数组、主机与端口拒绝、非字符串 URL 等）。Go `internal/platform/weibo/target.go` 只识别身份，不执行任意 URL 请求。实际已由 [固定 PHP 8.3.6 CI](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41230458238) 原函数生成 47 组 expected；原始 JSON 已逐字节冻结入库，Go 测试逐条比较完整 kind/id/null，CI 每轮从同一 PHP 产品路径重新生成并严格 cmp。尚未注册微博 adapter，也不据此宣称解析链路完成。

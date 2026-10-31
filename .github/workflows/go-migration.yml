@@ -83,20 +83,16 @@ jobs:
           cmp backend/internal/media/weibo/testdata/php-prepare-baseline.json "$RUNNER_TEMP/weibo-prepare-baseline.json"
           cp "$RUNNER_TEMP/weibo-prepare-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-prepare-baseline.json"
 
-      - name: Produce frozen PHP Weibo target identity preview for independent baseline freezing
+      - name: Replay original PHP Weibo target identity and compare immutable oracle
         run: |
           export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
           export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
-          # The frozen production function, not a Go implementation, is the oracle.
           frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
           current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
           test "$frozen" = "$current"
-          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-target.php > "$RUNNER_TEMP/weibo-target-preview.json"
-          cp "$RUNNER_TEMP/weibo-target-preview.json" "$RUNNER_TEMP/bilibili-php/weibo-target-preview.json"
-          echo WEIBO_TARGET_ORACLE_BEGIN
-          base64 -w 0 "$RUNNER_TEMP/weibo-target-preview.json"
-          echo
-          echo WEIBO_TARGET_ORACLE_END
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-target.php > "$RUNNER_TEMP/weibo-target-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/php-target-baseline.json "$RUNNER_TEMP/weibo-target-baseline.json"
+          cp "$RUNNER_TEMP/weibo-target-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-target-baseline.json"
 
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -158,6 +154,10 @@ jobs:
       - name: Exercise new Weibo preflight parity with actionable failure output
         working-directory: backend
         run: go test -race -count=1 -v ./internal/media/weibo -run 'TestPHPWeiboMediaPreparation|TestPHPMediaQueryBoundary|TestMediaRelay'
+
+      - name: Compare Go Weibo identity to immutable PHP product oracle
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/platform/weibo
 
       - name: Run the complete offline migration gate
         run: |

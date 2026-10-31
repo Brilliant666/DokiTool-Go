@@ -163,3 +163,8 @@ python -B -X utf8 scripts/go-migration/check.py \
 Go 增加 `internal/fetch/weibo_media.go` 单目标公网固定地址 TLS 流式访问及 `internal/media/weibo/relay.go` 原 PHP legacy GET/HEAD/Range/200/206/416 错误/响应格式；接口注册到现有验证二进制服务但保持生产 PHP 不变。HTTP/1.1 原始关键头检查，八字节 ftyp 前缀审查、1 GiB 限额、300 秒请求预算、310 秒媒体写/关停、有限内存/并发和源中断后的无 JSON 污染均纳入受控测试。原 33+21 组 PHP 来源函数预期仍严格保留，不能以 Go 输出覆盖。最终 Head 的 CI 结果另记。
 
 本轮**没有**真实微博解析器、签名媒体来源投影、受控真实 CDN 请求、完整 PHP 传输事件流对拍或浏览器保存。因此这只是二进制迁移的可执行骨架，不是微博整体完成，也不能宣称生产可切流。
+
+
+## 2026-11-01 微博 URL 身份解析阶段（Draft PR #4）
+
+独立生成器 \`scripts/go-migration/produce-weibo-target.php\` 在 PHP 8.3.6 固定镜像中调用冻结 \`25beaee\` 的未修改 \`weiboTarget()\`，禁用实际网络。47 个固定 synthetic 输入覆盖视频 fid、正文 ID、短键覆盖、数组替换、URL 编码、主机端口验证、非字符串及越界输入。**原 PHP 完整 expected 已入库** \`backend/internal/platform/weibo/testdata/php-target-baseline.json\`，不以 Go 输出生成。CI 重播 PHP 并逐字节对比入库文件，再运行 Go 对拍和原有完整离线门禁。正式 Go 微博网络 parser/adapter、匿名会话及媒体签名公开投影尚未完成；这项身份阶段并非微博整平台通过或线上验收。

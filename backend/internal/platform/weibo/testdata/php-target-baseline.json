@@ -1,0 +1,413 @@
+{
+    "schema": 1,
+    "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "description": "Unmodified PHP weiboTarget from the pinned production parser, executed with fixed synthetic inputs; no network",
+    "cases": [
+        {
+            "id": "component-direct",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "component-trailing-slashes",
+            "input": {
+                "url": "https://video.weibo.com/show////?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "component-fid-encoded",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034%3A1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "component-md5",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=12345678:0123456789abcdef0123456789abcdef"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "12345678:0123456789abcdef0123456789abcdef"
+            }
+        },
+        {
+            "id": "weibo-tv-show",
+            "input": {
+                "url": "https://weibo.com/tv/show/1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "weibo-tv-v",
+            "input": {
+                "url": "https://www.weibo.com/tv/v/1034:1234567890123456/"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "weibo-tv-show-query",
+            "input": {
+                "url": "https://weibo.com/tv/show?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "weibo-tv-v-query",
+            "input": {
+                "url": "https://weibo.com/tv/v/?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "weibo-tv-path-urlencoded-slash",
+            "input": {
+                "url": "https://weibo.com/tv%2Fshow%2F1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "status-desktop",
+            "input": {
+                "url": "https://weibo.com/123456/AbC09"
+            },
+            "expected": {
+                "kind": "status",
+                "id": "AbC09"
+            }
+        },
+        {
+            "id": "status-desktop-www",
+            "input": {
+                "url": "https://www.weibo.com/000/xyzZ"
+            },
+            "expected": {
+                "kind": "status",
+                "id": "xyzZ"
+            }
+        },
+        {
+            "id": "status-mobile",
+            "input": {
+                "url": "https://m.weibo.cn/status/AbCdE"
+            },
+            "expected": {
+                "kind": "status",
+                "id": "AbCdE"
+            }
+        },
+        {
+            "id": "detail-mobile",
+            "input": {
+                "url": "https://m.weibo.cn/detail/012345"
+            },
+            "expected": {
+                "kind": "status",
+                "id": "012345"
+            }
+        },
+        {
+            "id": "http-80",
+            "input": {
+                "url": "http://video.weibo.com:80/show?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "https-80",
+            "input": {
+                "url": "https://video.weibo.com:80/show?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "http-443",
+            "input": {
+                "url": "http://video.weibo.com:443/show?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "host-uppercase",
+            "input": {
+                "url": "HTTPS://VIDEO.WEIBO.COM/show?fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "repeated-scalar-last",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456&fid=1034:1111111111111111"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1111111111111111"
+            }
+        },
+        {
+            "id": "repeated-scalar-first",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=wrong&fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "array-last",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456&fid[]=bad"
+            },
+            "expected": null
+        },
+        {
+            "id": "array-first-scalar-last",
+            "input": {
+                "url": "https://video.weibo.com/show?fid[]=bad&fid=1034:1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "nested-last",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456&fid[a]=bad"
+            },
+            "expected": null
+        },
+        {
+            "id": "unclosed-bracket",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456&fid[=bad"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "fid-dot-key",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456&fi.d=bad"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "fid-nul-key",
+            "input": {
+                "url": "https://video.weibo.com/show?fid%00=1034%3A1234567890123456"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "fid-nul-value",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456%00trailing"
+            },
+            "expected": null
+        },
+        {
+            "id": "fid-whitespace",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456%20"
+            },
+            "expected": null
+        },
+        {
+            "id": "fid-encoded-hash",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456%23"
+            },
+            "expected": null
+        },
+        {
+            "id": "fid-negative",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=-1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "fid-short",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1:123456789012345"
+            },
+            "expected": null
+        },
+        {
+            "id": "fid-long-prefix",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=123456789:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "status-too-long",
+            "input": {
+                "url": "https://m.weibo.cn/status/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "expected": null
+        },
+        {
+            "id": "status-invalid-underscore",
+            "input": {
+                "url": "https://weibo.com/123/a_b"
+            },
+            "expected": null
+        },
+        {
+            "id": "status-invalid-path",
+            "input": {
+                "url": "https://weibo.com/123/a-b"
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-scheme",
+            "input": {
+                "url": "ftp://video.weibo.com/show?fid=1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-host-suffix",
+            "input": {
+                "url": "https://video.weibo.com.evil.example/show?fid=1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-localhost",
+            "input": {
+                "url": "https://127.0.0.1/show?fid=1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-userinfo",
+            "input": {
+                "url": "https://user@video.weibo.com/show?fid=1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-port",
+            "input": {
+                "url": "https://video.weibo.com:444/show?fid=1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-control",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456\n"
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-backslash",
+            "input": {
+                "url": "https://video.weibo.com\\@evil.example/show?fid=1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "status-path-query",
+            "input": {
+                "url": "https://weibo.com/123/ab?foo=1"
+            },
+            "expected": {
+                "kind": "status",
+                "id": "ab"
+            }
+        },
+        {
+            "id": "query-not-status",
+            "input": {
+                "url": "https://weibo.com/123/?fid=1034:1234567890123456"
+            },
+            "expected": null
+        },
+        {
+            "id": "fragment",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456#seen"
+            },
+            "expected": {
+                "kind": "video",
+                "id": "1034:1234567890123456"
+            }
+        },
+        {
+            "id": "null-input",
+            "input": {
+                "url": null
+            },
+            "expected": null
+        },
+        {
+            "id": "array-input",
+            "input": {
+                "url": {
+                    "url": "https://video.weibo.com/show?fid=1034:1234567890123456"
+                }
+            },
+            "expected": null
+        },
+        {
+            "id": "too-long",
+            "input": {
+                "url": "https://video.weibo.com/show?fid=1034:1234567890123456AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "expected": null
+        }
+    ]
+}

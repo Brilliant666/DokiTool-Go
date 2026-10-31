@@ -443,7 +443,9 @@
 !/backend/internal/platform/douyin/video.go
 /backend/internal/platform/weibo/*
 !/backend/internal/platform/weibo/target.go
+!/backend/internal/platform/weibo/target_oracle_test.go
 !/backend/internal/platform/weibo/target_test.go
+!/backend/internal/platform/weibo/testdata/
 /backend/internal/testsupport/publicoracle/*
 !/backend/internal/testsupport/publicoracle/differences.json
 !/backend/internal/testsupport/publicoracle/public.go
@@ -505,3 +507,5 @@
 !/backend/internal/platform/douyin/testdata/README.md
 !/backend/internal/platform/douyin/testdata/php-integer-boundaries.json
 !/backend/internal/platform/douyin/testdata/produce_integer.py
+/backend/internal/platform/weibo/testdata/*
+!/backend/internal/platform/weibo/testdata/php-target-baseline.json
