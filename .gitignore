@@ -146,6 +146,8 @@
 !/docs/go-migration/MAINTENANCE.md
 !/docs/go-migration/README.md
 !/docs/go-migration/acceptance.md
+!/docs/go-migration/bilibili-checks.json
+!/docs/go-migration/bilibili.md
 !/docs/go-migration/frontend-checks.json
 !/docs/go-migration/known-issues.md
 !/docs/go-migration/mapping.md
@@ -216,6 +218,8 @@
 !/ops/examples/snap.caddy
 /scripts/go-migration/*
 !/scripts/go-migration/check.py
+!/scripts/go-migration/produce-bilibili.php
+!/scripts/go-migration/produce-bilibili.py
 !/scripts/go-migration/produce-douyin.php
 !/scripts/go-migration/produce-douyin.py
 !/scripts/go-migration/produce-php-25beaee.php
@@ -224,6 +228,7 @@
 !/scripts/go-migration/produce.py
 !/scripts/go-migration/public_projection.py
 !/scripts/go-migration/test-public-projection.py
+!/scripts/go-migration/verify-bilibili.py
 !/scripts/go-migration/verify-php-25beaee.py
 !/scripts/go-migration/verify.py
 /scripts/tests/*
@@ -243,6 +248,7 @@
 /backend/cmd/dokitool/*
 !/backend/cmd/dokitool/main.go
 /backend/internal/api/*
+!/backend/internal/api/bilibili_test.go
 !/backend/internal/api/douyin_test.go
 !/backend/internal/api/handler.go
 !/backend/internal/api/handler_test.go
@@ -258,6 +264,7 @@
 /backend/internal/media/*
 !/backend/internal/media/weibo/
 /backend/internal/platform/*
+!/backend/internal/platform/bilibili/
 !/backend/internal/platform/douyin/
 /backend/internal/probe/*
 !/backend/internal/probe/baseline_test.go
@@ -399,6 +406,14 @@
 /backend/internal/media/weibo/*
 !/backend/internal/media/weibo/ticket.go
 !/backend/internal/media/weibo/ticket_test.go
+/backend/internal/platform/bilibili/*
+!/backend/internal/platform/bilibili/adapter.go
+!/backend/internal/platform/bilibili/baseline_test.go
+!/backend/internal/platform/bilibili/helpers.go
+!/backend/internal/platform/bilibili/parser.go
+!/backend/internal/platform/bilibili/parser_test.go
+!/backend/internal/platform/bilibili/request.go
+!/backend/internal/platform/bilibili/testdata/
 /backend/internal/platform/douyin/*
 !/backend/internal/platform/douyin/baseline_test.go
 !/backend/internal/platform/douyin/formatter.go
@@ -460,6 +475,11 @@
 !/frontend/src/assets/platforms/weibo.svg
 !/frontend/src/assets/platforms/xhs.ico
 !/frontend/src/assets/platforms/zuiyou.png
+/backend/internal/platform/bilibili/testdata/*
+!/backend/internal/platform/bilibili/testdata/README.md
+!/backend/internal/platform/bilibili/testdata/inputs.json
+!/backend/internal/platform/bilibili/testdata/manifest.json
+!/backend/internal/platform/bilibili/testdata/php-baseline.json
 /backend/internal/platform/douyin/testdata/*
 !/backend/internal/platform/douyin/testdata/README.md
 !/backend/internal/platform/douyin/testdata/php-integer-boundaries.json

@@ -11,9 +11,10 @@ import subprocess
 import sys
 import tempfile
 
-from public_projection import DOUYIN, INTEGERS, verify_exports
+from public_projection import DOUYIN, INTEGERS, case_index, read_json, same_json, verify_exports
 
 ROOT = Path(__file__).resolve().parents[2]
+BILIBILI = ROOT / "backend/internal/platform/bilibili/testdata/php-baseline.json"
 
 
 def run(command, *, cwd=ROOT, env=None):
@@ -55,6 +56,18 @@ def legacy_provenance(check_source):
         return [json.loads(run(verify + flags)) for flags in ([], ["--douyin"], ["--integers"])]
 
 
+def verify_bilibili_exports(path):
+    """Compare every new platform view without a production-code oracle."""
+    frozen, actual = case_index(read_json(BILIBILI)), case_index(read_json(path))
+    if frozen.keys() != actual.keys():
+        raise ValueError("Actual Go Bilibili export inventory mismatch")
+    for case_id, case in frozen.items():
+        for view in ("normal", "debug"):
+            if view not in actual[case_id] or not same_json(case["expected"][view], actual[case_id][view]):
+                raise ValueError(f"Undeclared Bilibili public response difference: {case_id}/{view}")
+    return {"passed": True, "cases": len(frozen), "public_envelopes": 2 * len(frozen), "declared_differences": 0}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--go", default="go", help="Go executable")
@@ -69,14 +82,20 @@ def main():
     if args.check_php_source:
         verify.append("--check-git-source")
     php25_provenance = json.loads(run(verify))
+    verify = [sys.executable, "-X", "utf8", str(ROOT / "scripts/go-migration/verify-bilibili.py")]
+    if args.check_php_source:
+        verify.append("--check-git-source")
+    bilibili_provenance = json.loads(run(verify))
     with tempfile.TemporaryDirectory(prefix="dokitool-go-check-") as directory:
         temp = Path(directory)
         outputs = temp / "actual-go-responses.json"
         douyin_outputs = temp / "actual-go-douyin.json"
         integer_outputs = temp / "actual-go-integers.json"
         php25_outputs = temp / "actual-go-php25.json"
+        bilibili_outputs = temp / "actual-go-bilibili.json"
         environment = dict(os.environ, DOKITOOL_GO_BASELINE_OUTPUT=str(outputs), DOKITOOL_GO_DOUYIN_OUTPUT=str(douyin_outputs),
-                           DOKITOOL_GO_INTEGER_OUTPUT=str(integer_outputs), DOKITOOL_GO_PHP25_OUTPUT=str(php25_outputs))
+                           DOKITOOL_GO_INTEGER_OUTPUT=str(integer_outputs), DOKITOOL_GO_PHP25_OUTPUT=str(php25_outputs),
+                           DOKITOOL_GO_BILIBILI_OUTPUT=str(bilibili_outputs))
         command = [args.go, "test", "-json", "-count=1"]
         if args.race:
             command.append("-race")
@@ -100,6 +119,11 @@ def main():
         if len(php25["cases"]) != php25_provenance["cases"]:
             raise RuntimeError("Actual Go PHP 25beaee export inventory mismatch")
         douyin["cases"].extend(php25["cases"])
+        bilibili_comparison = verify_bilibili_exports(bilibili_outputs)
+        bilibili = json.loads(bilibili_outputs.read_text(encoding="utf-8"))
+        if len(bilibili["cases"]) != bilibili_provenance["parse_cases"]:
+            raise RuntimeError("Actual Go Bilibili provenance count mismatch")
+        douyin["cases"].extend(bilibili["cases"])
         douyin_outputs.write_text(json.dumps(douyin, ensure_ascii=False) + "\n")
         for case in douyin["cases"]:
             actual.extend([case["normal"], case["debug"]])
@@ -121,6 +145,8 @@ def main():
             "php_douyin_baseline": douyin_provenance,
             "php_integer_baseline": integer_provenance,
             "php_25beaee_baseline": php25_provenance,
+            "php_bilibili_baseline": bilibili_provenance,
+            "bilibili_exact_public_comparison": bilibili_comparison,
             "intentional_public_differences": intentional_differences,
             "go": {"leaf_scenarios": leaves, "passed_test_events": len(passed), "race": args.race, "vet": True},
             "independent_responses": {"total": independent["total"], "passed": independent["passed"],

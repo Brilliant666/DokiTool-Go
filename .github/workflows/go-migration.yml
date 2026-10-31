@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - codex/go-backend-migration
+      - codex/fix-public-media-projection
     paths:
       - backend/**
       - frontend/**
@@ -22,6 +23,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  bilibili-php-oracle:
+    if: github.repository == 'Brilliant666/DokiTool-Go'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the proposed commit and frozen PHP history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Execute the frozen PHP Bilibili product path without network
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          docker pull --platform linux/amd64 "$DOKITOOL_ORACLE_IMAGE"
+          printf 'PHP_ORACLE_IMAGE=%s\n' "$DOKITOOL_ORACLE_IMAGE"
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          mkdir -p "$DOKITOOL_ORACLE_TMP"
+          export TMPDIR="$DOKITOOL_ORACLE_TMP"
+          cat > "$RUNNER_TEMP/dokitool-fixed-php" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker run --rm -i --platform linux/amd64 --network=none --read-only \
+            --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=$GITHUB_WORKSPACE,readonly" \
+            --mount "type=bind,src=$DOKITOOL_ORACLE_TMP,dst=$DOKITOOL_ORACLE_TMP,readonly" \
+            --workdir "$GITHUB_WORKSPACE" --entrypoint php "$DOKITOOL_ORACLE_IMAGE" "$@"
+          SH
+          chmod +x "$RUNNER_TEMP/dokitool-fixed-php"
+          python3 -B scripts/go-migration/produce-bilibili.py \
+            --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/bilibili-php"
+          python3 -B scripts/go-migration/verify-bilibili.py \
+            --directory "$RUNNER_TEMP/bilibili-php" --check-git-source
+
+      - name: Verify that real PHP reproduces the frozen oracle exactly
+        run: |
+          cmp backend/internal/platform/bilibili/testdata/php-baseline.json "$RUNNER_TEMP/bilibili-php/php-baseline.json"
+          cmp backend/internal/platform/bilibili/testdata/manifest.json "$RUNNER_TEMP/bilibili-php/manifest.json"
+
+      - name: Retain the PHP oracle and provenance
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: bilibili-php-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/bilibili-php
+          if-no-files-found: error
+          retention-days: 7
+
   offline-contract:
     if: github.repository == 'Brilliant666/DokiTool-Go'
     runs-on: ubuntu-24.04
@@ -46,6 +95,14 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify Go source formatting
+        run: |
+          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/api/bilibili_test.go backend/cmd/dokitool/main.go)"
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
 
       - name: Install validation dependencies
         run: |
