@@ -1,6 +1,6 @@
 # Generated from public-files.json by scripts/check-public-files.py --write-ignore.
 # Unlisted local files are retained but excluded from Git.
-/*
+//*
 !/.gitattributes
 !/.github/
 !/.gitignore
@@ -228,6 +228,7 @@
 !/scripts/go-migration/produce-php-25beaee.php
 !/scripts/go-migration/produce-php-25beaee.py
 !/scripts/go-migration/produce-weibo-candidates.php
+!/scripts/go-migration/produce-weibo-formatter.php
 !/scripts/go-migration/produce-weibo-media.php
 !/scripts/go-migration/produce-weibo-network-headers.php
 !/scripts/go-migration/produce-weibo-prepare.php
@@ -522,6 +523,7 @@
 !/backend/internal/platform/douyin/testdata/php-integer-boundaries.json
 !/backend/internal/platform/douyin/testdata/produce_integer.py
 /backend/internal/platform/weibo/testdata/*
+!/backend/internal/platform/weibo/testdata/formatter-inputs.json
 !/backend/internal/platform/weibo/testdata/php-candidates-baseline.json
 !/backend/internal/platform/weibo/testdata/php-network-headers.json
 !/backend/internal/platform/weibo/testdata/php-request-baseline.json.gz
