@@ -32,6 +32,7 @@
     "public_parse_resolve": "not_implemented",
     "real_weibo": "not_tested",
     "browser_save": "not_tested",
-    "deployment": "not_performed"
+    "deployment": "not_performed",
+    "raw_json_order": "Go ordered-key extractor covered by 12 PHP candidate cases; formal parser unbound"
   }
 }

@@ -453,6 +453,7 @@
 !/backend/internal/platform/weibo/guest_request_test.go
 !/backend/internal/platform/weibo/network_request.go
 !/backend/internal/platform/weibo/network_request_test.go
+!/backend/internal/platform/weibo/ordered_json.go
 !/backend/internal/platform/weibo/session_protocol.go
 !/backend/internal/platform/weibo/session_protocol_test.go
 !/backend/internal/platform/weibo/target.go

@@ -4,7 +4,7 @@
 
 本阶段新增 Go `internal/platform/weibo/candidates.go`，从微博 `playback_list`、TV `urls` 和正文固定备用字段抽取候选，保留 MP4 URL、已证实的宽高/比特率/大小/FPS/codec、`template` 规格、标签回退及来源去重和排序。零、缺失、未知元数据仍明确区分；此处不自行决定 unified-v1 默认文件、创建公开签名或放开上游目标。
 
-`produce-weibo-candidates.php` **直接运行冻结 PHP `weiboCount`、`weiboCandidate`、`weiboCandidates` 原产品函数**，固定 23 组单候选、13 组计数、12 组多来源合并，共 **48 组输入与独立期望**。原始 PHP 8.3.6 从 `25beaee107f8c1a208ced9deb3c637068445e316` 重放，保留 `testdata/php-candidates-baseline.json` 原样并逐字节 `cmp`。Go `TestPHPWeiboCandidateExtraction` 按完整 JSON 逐项比较，另测同等级源顺序。PHP 对候选表按插入顺序保留 URL，Go helper 明确要求提供按原上游响应顺序读取的 `urlKeys`，**正式 status/TV 解析器尚须从原始响应提取这个顺序，不能迭代 Go map 假装等价**。
+`produce-weibo-candidates.php` **直接运行冻结 PHP `weiboCount`、`weiboCandidate`、`weiboCandidates` 原产品函数**，固定 23 组单候选、13 组计数、12 组多来源合并，共 **48 组输入与独立期望**。原始 PHP 8.3.6 从 `25beaee107f8c1a208ced9deb3c637068445e316` 重放，保留 `testdata/php-candidates-baseline.json` 原样并逐字节 `cmp`。Go `TestPHPWeiboCandidateExtraction` 按完整 JSON 逐项比较，另测同等级源顺序。PHP 对候选表按插入顺序保留 URL。Go 新增 `weiboURLKeysFromRaw`，从原始有界 JSON 对象按序提取键，重复键保留第一次插入位置；12 组 PHP 聚合案例现在由原始 fixture JSON 提取键序后再执行 Go 对拍。**正式 status/TV 解析器仍需把真实上游响应原始字节传入 helper，不能迭代 Go map 假装等价**。
 
 首次 [CI 41248574558](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41248574558) 的固定 PHP job 成功，Go job 仅因 4 个未生成候选的 `typed nil map` 在测试接口里与 JSON `null` 表示不同而失败；没有修改 PHP 预期、候选逻辑或比较规则。修正测试接口 nil 后，代码 Head `ef98b6b662abccba68d1ac30d3c8bc26afe02e9b` 的 [CI 41248677685](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41248677685) 两个 job 均 `completed/success`。完整机器摘要见 [weibo-candidates-checks.json](weibo-candidates-checks.json)。
 
