@@ -122,6 +122,9 @@ def build_cases():
                         ("array", "2&p[]=3"), ("nested", "2&p[x]=3"), ("empty", ""), ("fraction", "1.5")]:
         add("entry/invalid-p/" + name, "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection", url=URL + "?p=" + value, fetch_view=False, fetch_play=False)
     add("entry/duplicate-p-last-wins", "PHP parse_str takes the final scalar p; the parser still requests only that cid", url=URL + "?p=1&p=2", work=detail(3), cid=102)
+    add("entry/query-unclosed-bracket", "An unclosed bracket is normalized as a different PHP query key and must not overwrite scalar p", url=URL + "?p=2&p[=3", work=detail(3), cid=102)
+    add("entry/query-nul-key", "PHP truncates a decoded NUL in the query key; the resulting p still selects P2", url=URL + "?p%00=2", work=detail(3), cid=102)
+    add("entry/query-array-then-scalar", "A later scalar p replaces an earlier array p under PHP parse_str semantics", url=URL + "?p=2&p[x]=3&p=1", work=detail(3), cid=101)
     add("entry/mobile-host", "The allowed mobile host retains the same BVID and selected-P identity", url="https://m.bilibili.com/video/" + BV + "?p=2", work=detail(2), cid=102)
 
     short = "https://b23.tv/synthetic"
@@ -134,6 +137,10 @@ def build_cases():
     add("entry/short-failure", "A failed short-link HEAD maps to the actual parser error", url=short, fetch_view=False, fetch_play=False,
         prefix=[response(short, method="HEAD", status=0, follow=True, error="Synthetic connection failure")])
     html_url = "https://www.bilibili.com/video/av123456/?p=2"
+    short_html_target = "https://www.bilibili.com/video/av123456/?p=2&track=a%26b"
+    add("entry/short-html-source-p-wins", "An explicit original short-link p survives both target query rebuilding and the av-page HTML BV fallback", url=short + "?p=2", work=detail(3), cid=102,
+        prefix=[response(short + "?p=2", method="HEAD", follow=True, final_url="https://www.bilibili.com/video/av123456/?p=3&track=a%26b#discard"),
+                response(short_html_target, body='<html><meta itemprop="url" content="' + URL + '"></html>', follow=True)])
     add("entry/html-bvid", "The actual legacy meta itemprop=url fallback resolves a BV ID while retaining P2", url=html_url, work=detail(2), cid=102,
         prefix=[response(html_url, body='<html><meta itemprop="url" content="' + URL + '"></html>', follow=True)])
     add("entry/html-no-bvid", "A page without the supported BV meta field fails explicitly", url=html_url, fetch_view=False, fetch_play=False,

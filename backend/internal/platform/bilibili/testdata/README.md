@@ -23,9 +23,9 @@ Copy both generated JSON files into this directory after inspecting the real PHP
 
 ## Coverage
 
-The fixture covers 51 parser cases / 102 public responses:
+The fixture covers 55 parser cases / 110 public responses:
 
-- Exact P selection, invalid/array/duplicate P queries, missing P/cid, short-link HEAD behavior and explicit original P precedence.
+- Exact P selection, invalid/array/duplicate P queries, PHP unclosed-bracket/NUL-key/scalar-over-array query semantics, missing P/cid, short-link HEAD behavior and explicit original P precedence through the HTML BV fallback.
 - Mobile and HTML-meta entry paths, including the known suppressed PHP warning on failed HTML transport.
 - View-stage restriction/deletion/transport/JSON failures and strict integer success codes; selected-play failure remains an unavailable current item in a successful multipart work.
 - Current stream facts without inventing quality from the requested qn or uploaded view dimensions; ordinary and numeric-string metadata.

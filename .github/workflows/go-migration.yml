@@ -35,18 +35,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up the oracle's fixed PHP runtime
-        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # 2.35.5
-        with:
-          php-version: '8.3.6'
-          extensions: curl
-          tools: none
-          coverage: none
-
       - name: Execute the frozen PHP Bilibili product path without network
         run: |
+          docker pull --platform linux/amd64 php:8.3.6-cli-bookworm
+          export DOKITOOL_ORACLE_IMAGE="$(docker image inspect --format '{{index .RepoDigests 0}}' php:8.3.6-cli-bookworm)"
+          printf 'PHP_ORACLE_IMAGE=%s\n' "$DOKITOOL_ORACLE_IMAGE"
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          mkdir -p "$DOKITOOL_ORACLE_TMP"
+          export TMPDIR="$DOKITOOL_ORACLE_TMP"
+          cat > "$RUNNER_TEMP/dokitool-fixed-php" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker run --rm -i --platform linux/amd64 --network=none --read-only \
+            --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt=no-new-privileges \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=$GITHUB_WORKSPACE,readonly" \
+            --mount "type=bind,src=$DOKITOOL_ORACLE_TMP,dst=$DOKITOOL_ORACLE_TMP,readonly" \
+            --workdir "$GITHUB_WORKSPACE" --entrypoint php "$DOKITOOL_ORACLE_IMAGE" "$@"
+          SH
+          chmod +x "$RUNNER_TEMP/dokitool-fixed-php"
           python3 -B scripts/go-migration/produce-bilibili.py \
-            --php "$(command -v php)" --output "$RUNNER_TEMP/bilibili-php"
+            --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/bilibili-php"
+          python3 -B scripts/go-migration/verify-bilibili.py \
+            --directory "$RUNNER_TEMP/bilibili-php" --check-git-source
 
       - name: Export the initial synthetic oracle for review
         env:
