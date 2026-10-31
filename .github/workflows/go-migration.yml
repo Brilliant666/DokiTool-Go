@@ -1,0 +1,79 @@
+name: Go migration contract
+
+on:
+  pull_request:
+    branches:
+      - main
+      - codex/go-backend-migration
+    paths:
+      - backend/**
+      - frontend/**
+      - scripts/**
+      - docs/schema/**
+      - .github/workflows/go-migration.yml
+      - public-files.json
+      - .gitignore
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-migration-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  offline-contract:
+    if: github.repository == 'Brilliant666/DokiTool-Go'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the proposed commit and frozen PHP history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up the pinned Go toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+
+      - name: Set up Node for the unchanged frontend consumer
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install validation dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dokitool-validation"
+          "$RUNNER_TEMP/dokitool-validation/bin/python" -m pip install -r scripts/requirements-validation.txt
+          npm ci --prefix frontend --ignore-scripts --registry=https://registry.npmjs.org
+
+      - name: Verify reviewed source inventory
+        run: python3 -B scripts/check-public-files.py --staged
+
+      - name: Test strict public-difference comparison
+        run: python3 -B scripts/go-migration/test-public-projection.py
+
+      - name: Run the complete offline migration gate
+        run: |
+          "$RUNNER_TEMP/dokitool-validation/bin/python" -B -X utf8 scripts/go-migration/check.py \
+            --race --frontend --check-php-source \
+            --report "$RUNNER_TEMP/dokitool-go-checks.json"
+
+      - name: Build the Go executable
+        working-directory: backend
+        run: go build -o "$RUNNER_TEMP/dokitool-go" ./cmd/dokitool
+
+      - name: Retain the migration report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: go-migration-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/dokitool-go-checks.json
+          if-no-files-found: warn
+          retention-days: 7

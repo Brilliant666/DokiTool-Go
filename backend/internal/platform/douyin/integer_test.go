@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/testsupport/publicoracle"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
@@ -53,6 +54,10 @@ func TestPHPIntegerBoundaryBaseline(t *testing.T) {
 			seen[id] = true
 		}
 	}
+	oracle, err := publicoracle.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	exported := unified.Array{}
 	completedChecks, expectedChecks := 0, 0
 	for _, value := range unified.Slice(manifest["cases"]) {
@@ -74,7 +79,11 @@ func TestPHPIntegerBoundaryBaseline(t *testing.T) {
 			for _, view := range []string{"normal", "debug"} {
 				t.Run(view, func(t *testing.T) {
 					public := unified.PublicView(actual, view == "debug", now)
-					requireSameWire(t, public, expected[view])
+					want, err := oracle.Expected(publicoracle.IntegerFixture, unified.Str(c["id"]), view, expected[view])
+					if err != nil {
+						t.Fatal(err)
+					}
+					requireSameWire(t, public, want)
 					if err := unified.ValidateEnvelopeAt(public, now); err != nil {
 						t.Fatal(err)
 					}
@@ -115,6 +124,11 @@ func TestPHPIntegerBoundaryBaseline(t *testing.T) {
 			requireSameWire(t, got, c["expected"])
 			completedChecks++
 		})
+	}
+	if completedChecks == expectedChecks {
+		if err := oracle.RequireConsumed(publicoracle.IntegerFixture); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if destination := os.Getenv("DOKITOOL_GO_INTEGER_OUTPUT"); destination != "" && !t.Failed() {
 		if len(exported) != 13 || completedChecks != expectedChecks {
