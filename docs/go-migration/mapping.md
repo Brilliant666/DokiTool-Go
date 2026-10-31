@@ -1,6 +1,6 @@
 # DokiTool：PHP → Go 迁移对照与验收方案
 
-当前方向：**公开 PHP main 持续保留，Go 后续在独立私有仓库维护。** 维护和许可边界以 [MAINTENANCE.md](MAINTENANCE.md) 为准。本文保留第一阶段调研时的固定 PHP 源码证据；首个抖音实现与后续进度另记在 [验收记录](acceptance.md)。
+当前方向：**公开 PHP main 持续保留，Go 在独立仓库维护，现已由维护者公开用于开发协作。** 维护和许可边界以 [MAINTENANCE.md](MAINTENANCE.md) 为准。本文保留第一阶段调研时的固定 PHP 源码证据；首个抖音实现、公共合同修复及 B 站迁移另记在 [验收记录](acceptance.md)。下文私库建立阶段的描述保留历史语境，不代表当前可见性。
 
 入库位置：`docs/go-migration/mapping.md`。历史阶段顺序是先骨架、unified 层和稳定 ID 对拍，再迁抖音；未来 Go 发布属于私库计划且需另行授权，不以取代公开 PHP 分支为目标。
 
@@ -250,7 +250,7 @@ systemd 模板需明确非特权账户、只读发布目录、密钥来源、loo
 - 私库沿用 `public-files.json` 和生成的 `.gitignore` 作为显式版本文件清单；名称不表示私库内容已获公开授权。只登记本阶段必要 Go/fixture/文档，不提交原始签名 URL、Cookie 或临时私密证据。
 - 私库 README、API/部署说明按 Go 接续更新；公开 PHP 运行文档保留，不能整体覆盖回公开 main。历史验收记录保留其历史语境。
 - 保留 NOTICE、backend/LICENSE 与 UPSTREAM.json 的来源记录；迁语言不删除既有来源声明。上游 PHP 仍可作为平台变更线索，后续采用流程变为审查并移植到 Go。
-- 当前仓库只有 upstream-watch 定时/手动工作流，不把它当 Go PR 验收。是否增加轻量 Go PR 检查可在实现阶段结合成本另定，不能宣称已有完整迁移 CI。
+- 第一阶段只有 upstream-watch 定时/手动工作流；后续 PR #2 已增加 `Go migration contract`，执行固定 PHP 来源核验、Go race/vet、严格对拍、独立 Schema 和原前端消费。B 站增量另加固定 PHP 运行时的离线 oracle 重放，不把这些检查解释为真实平台或部署验收。
 
 证据：[当前部署说明](https://github.com/Brilliant666/DokiTool/blob/665bd55134982b9fe107aa1cd00373ba8da8ff3c/docs/DEPLOYMENT.md)、[Caddy 示例](https://github.com/Brilliant666/DokiTool/blob/665bd55134982b9fe107aa1cd00373ba8da8ff3c/ops/examples/snap.caddy)、[公共清单检查](https://github.com/Brilliant666/DokiTool/blob/665bd55134982b9fe107aa1cd00373ba8da8ff3c/scripts/check-public-files.py)、[来源声明](https://github.com/Brilliant666/DokiTool/blob/665bd55134982b9fe107aa1cd00373ba8da8ff3c/NOTICE)。
 

@@ -1,0 +1,112 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "php_version": "8.3.6",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "parse_case_count": 55,
+  "public_envelope_count": 110,
+  "evidence_scope": "Synthetic metadata responses only. Immutable PHP parser, actual numeric-check entry wire boundary, adapter and ordinary/debug policy generated every expectation. No Go-generated output, real platform request, media download or online quality claim.",
+  "entry_json_flags": 480,
+  "files": {
+    "php-baseline.json": "e806e85512cc7f5b2b8f2cb6bbcb1ae2cf70d7e3b6c9aea0e1f768ffbeb776d4"
+  },
+  "input_files": [
+    {
+      "path": "backend/internal/platform/bilibili/testdata/inputs.json",
+      "sha256": "196d5a0aa159ae143b869b0f966cc738e5f010ed87c7acf2c388370cdeed9722"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "backend/api/bilibili/bilibili.php",
+      "sha256": "ca820dfb8e120f039a08428fc21d676dc37337b057d6a3283e6138f0556c7397"
+    },
+    {
+      "path": "backend/lib/runtime.php",
+      "sha256": "0c90dca5e4e90498e904a69bb891625c7f66cbcf0723c15fedd72524d8134358"
+    },
+    {
+      "path": "backend/lib/gateway.php",
+      "sha256": "74f150b294220fd0c63e9851b31830c4ba2d11a8f8b58b1bf603c6a674e7a970"
+    },
+    {
+      "path": "backend/lib/media-adapters.php",
+      "sha256": "0257081ef5f4fe40bf1f288145405a56e05dfff6c887d2e73b117c6f27ea27db"
+    },
+    {
+      "path": "backend/lib/media-contract.php",
+      "sha256": "39e2e218917ad2ddc329cfbd2d7b4e6130e240bced8e4af6526656ad6b243817"
+    },
+    {
+      "path": "backend/lib/media-metadata.php",
+      "sha256": "d96a408e91029580085ef530cb99511887e165dd11063570dbb75fee58a3483e"
+    },
+    {
+      "path": "backend/lib/media-policy.php",
+      "sha256": "ccc523c6c8e53c4f8af18f51c2204a4ba14c124ed9aeb86448dafa7cf30840d9"
+    },
+    {
+      "path": "backend/lib/platforms.php",
+      "sha256": "5b82407a1fb6a1b7a849154fd65a44f030b2298466561dc289b60b182c359074"
+    },
+    {
+      "path": "backend/lib/weibo-media.php",
+      "sha256": "5530988ce434497251aef118af2dc0833b45640da84ad32450657aa7b86adb18"
+    },
+    {
+      "path": "backend/config/platforms.json",
+      "sha256": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487"
+    },
+    {
+      "path": "backend/tests/parser-contract.php",
+      "sha256": "758b2f39159891c262609cf46239c45e4e43512eecc48ab45d78c899cb63880b"
+    },
+    {
+      "path": "docs/schema/unified-v1/unified-v1.schema.json",
+      "sha256": "bde334422f63488da67b8a5a40f3081f143e031f9849f2df282a175a8df6165a"
+    }
+  ],
+  "producer_files": [
+    {
+      "path": "scripts/go-migration/produce-bilibili.py",
+      "sha256": "d607f718ac5dd7ed57dbc087316622db0a57e1f61b0d42556794b5061411917d"
+    },
+    {
+      "path": "scripts/go-migration/produce-bilibili.php",
+      "sha256": "176e7a0063001c085e64333e5b8a675ea671e356117e6b2f66ffcc677652e24a"
+    }
+  ],
+  "transport_substitution": {
+    "disabled_native_functions": [
+      "curl_init",
+      "curl_setopt_array",
+      "curl_setopt",
+      "curl_exec",
+      "curl_getinfo",
+      "curl_close",
+      "curl_error",
+      "curl_errno",
+      "get_headers"
+    ],
+    "mechanism": "Disabled native cURL/get_headers and allow_url_fopen=0; exact in-memory cURL responses. Unknown, reordered and unused requests fail. Parser source bytes are unmodified.",
+    "captured_request_fields": [
+      "method",
+      "url",
+      "headers",
+      "follow_redirects",
+      "transport"
+    ]
+  },
+  "comparison_rules": [
+    "Expected parser_response is before entry encoding; legacy_response is json_decode(json_encode(parser_response, 480), true), matching the gateway wire boundary.",
+    "Successful data is re-finalized at the explicit fixture clock before normal/debug policy. Internal PHP source merging still reads wall time; synthetic explicit expiry is 2000 or 2100, not near either clock.",
+    "JSON object order and equivalent number spelling are non-semantic; arrays/order, exact integer values, missing/null, booleans, URL bytes, stable IDs and default references remain exact.",
+    "HTTP transport labels and PHP accept-encoding empty string describe cURL implementation; compare URL/method/follow policy and forbid introduced Cookie/Authorization/browser headers on view/play calls.",
+    "The one known HTML transport E_USER_WARNING is captured without converting it into an exception, matching the real gateway's suppressed warning display; every unexpected warning remains fatal to the producer.",
+    "The expired source case exercises a source-object shape accepted by the legacy normalizer; it is deliberately synthetic and not a claimed live Bilibili response."
+  ]
+}

@@ -1,8 +1,8 @@
 # Go 迁移工作区
 
-后续 Go 开发在独立私有仓库 [Brilliant666/DokiTool-Go](https://github.com/Brilliant666/DokiTool-Go) 进行。公开 [Brilliant666/DokiTool](https://github.com/Brilliant666/DokiTool) 的 `main` 继续保留 PHP 开源版本，不合入私有迁移分支，也不以删除公开 PHP 为迁移目标。
+后续 Go 开发在独立仓库 [Brilliant666/DokiTool-Go](https://github.com/Brilliant666/DokiTool-Go) 进行，维护者已将其公开用于开发协作。原 [Brilliant666/DokiTool](https://github.com/Brilliant666/DokiTool) 的 `main` 继续保留 PHP 开源版本，不整体合入 Go 迁移分支，也不以删除公开 PHP 为迁移目标。
 
-维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。本轮仅建立私库和离线同步，不部署 Go、不改变 PHP 生产，也不重新下载媒体。
+维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。当前从公共合同修复接续 B 站迁移，不部署 Go、不改变 PHP 生产；受控上游测试不等于真实平台或浏览器保存验收。
 
 ## 当前运行方式
 
@@ -18,7 +18,7 @@ go build -o /tmp/dokitool-go ./cmd/dokitool
 /tmp/dokitool-go serve -listen 127.0.0.1:9082
 ```
 
-catalog 从原路径 `backend/config/platforms.json` 内嵌，公开字段与九平台 PHP 目录保持一致。目录表示项目的平台注册事实；某平台尚未绑定 Go adapter 时，其解析请求明确返回 `503 SERVICE_NOT_CONFIGURED`，不会把空媒体结果当迁移成功。当前只有抖音绑定了 Go adapter，仍存在 [未关闭的基线合同问题](known-issues.md)，Go 服务不能替代九平台生产入口。
+catalog 从原路径 `backend/config/platforms.json` 内嵌，公开字段与九平台 PHP 目录保持一致。目录表示项目的平台注册事实；某平台尚未绑定 Go adapter 时，其解析请求明确返回 `503 SERVICE_NOT_CONFIGURED`，不会把空媒体结果当迁移成功。本分支绑定抖音与 B 站，其他七个平台尚未迁移。两类 [历史基线合同问题](known-issues.md) 的公共修正已通过 PR #2 的完整离线门禁，Go 服务仍不能替代九平台生产入口。
 
 公开 JSON 仍为 `/api/parse`、`/api/resolve`、`/api/platforms`，需要 `schema_version=1.0`。例如检查目录：
 
@@ -54,7 +54,7 @@ python scripts/go-migration/check.py --race --report /tmp/dokitool-go-checks.jso
 python scripts/go-migration/check.py --race --frontend --report /tmp/dokitool-go-checks.json
 ```
 
-门禁会运行各项独立检查并保存失败明细，任何未通过的公共响应使总结果为 `passed: false`、进程退出 1。当前 fragment 与极限文件大小的基线冲突保留为失败项，没有跳过或白名单放行。
+门禁会运行各项独立检查并保存失败明细，任何未通过的公共响应使总结果为 `passed: false`、进程退出 1。fragment 与极限文件大小保留原 PHP 期望，在测试专用清单中精确声明 10 项公共响应修正；清单应用后仍逐字段比较整个实际输出，不跳过场景或放宽消费者。
 
 旧 `--check-php-source` 检查针对 `665bd55` 的来源字节；同步新 PHP 后，旧来源应从固定提交单独导出验证，不以当前工作区的合法产品差异作为旧 fixture 损坏。
 
@@ -68,7 +68,7 @@ python scripts/go-migration/check.py --race --frontend --report /tmp/dokitool-go
 python -X utf8 scripts/go-migration/check.py --check-php-source --frontend --report /tmp/dokitool-go-checks.json
 ```
 
-使用 UTF-8 运行含中文样本的 Python 工具。最新[实际门禁结果](php25-checks.json)保留非零退出及两个既有合同问题；不把 Go 单测通过或目录包含九个平台解释为可部署。
+使用 UTF-8 运行含中文样本的 Python 工具。[PHP 同步阶段结果](php25-checks.json)保留当时的非零退出及两个合同问题；后续修复和平台迁移的当前结果见 [验收记录](acceptance.md)。不把 Go 单测通过或目录包含九个平台解释为可部署。
 
 旧 `665bd55` 冻结目录：`backend/testdata/php-baseline/`（公共层）与 `backend/testdata/php-douyin/`（实际抖音 Parse、请求序列、探测及舍入）。这些原始输入、期望、生产器和哈希保持不变。已发布 PHP `25beaee107f8c1a208ced9deb3c637068445e316` 作为新增版本基线，变化须由该提交的 PHP 产品路径生成并逐项说明，不覆盖旧期望，也不使用 Go 输出反写期望。正常 Go 测试只读固定基线，不安装或运行 PHP。
 

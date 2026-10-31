@@ -16,7 +16,8 @@ assert.equal(cases.size, exported.cases.length, "Duplicate Go output identities"
 const php = JSON.parse(await readFile(new URL("../../backend/testdata/php-douyin/cases.json", import.meta.url), "utf8"));
 const integerPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/douyin/testdata/php-integer-boundaries.json", import.meta.url), "utf8"));
 const currentPhp = JSON.parse(await readFile(new URL("../../backend/testdata/php-25beaee/cases.json", import.meta.url), "utf8"));
-const phpCases = new Map([...php.cases, ...integerPhp.cases, ...currentPhp.cases].map(entry => [entry.id, entry.expected]));
+const bilibiliPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/bilibili/testdata/php-baseline.json", import.meta.url), "utf8"));
+const phpCases = new Map([...php.cases, ...integerPhp.cases, ...currentPhp.cases, ...bilibiliPhp.cases].map(entry => [entry.id, entry.expected]));
 let accepted = 0, rejected = 0;
 const failures = [];
 const vite = await createServer({

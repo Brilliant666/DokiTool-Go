@@ -146,6 +146,7 @@
 !/docs/go-migration/MAINTENANCE.md
 !/docs/go-migration/README.md
 !/docs/go-migration/acceptance.md
+!/docs/go-migration/bilibili.md
 !/docs/go-migration/frontend-checks.json
 !/docs/go-migration/known-issues.md
 !/docs/go-migration/mapping.md
@@ -246,6 +247,7 @@
 /backend/cmd/dokitool/*
 !/backend/cmd/dokitool/main.go
 /backend/internal/api/*
+!/backend/internal/api/bilibili_test.go
 !/backend/internal/api/douyin_test.go
 !/backend/internal/api/handler.go
 !/backend/internal/api/handler_test.go
@@ -404,6 +406,12 @@
 !/backend/internal/media/weibo/ticket.go
 !/backend/internal/media/weibo/ticket_test.go
 /backend/internal/platform/bilibili/*
+!/backend/internal/platform/bilibili/adapter.go
+!/backend/internal/platform/bilibili/baseline_test.go
+!/backend/internal/platform/bilibili/helpers.go
+!/backend/internal/platform/bilibili/parser.go
+!/backend/internal/platform/bilibili/parser_test.go
+!/backend/internal/platform/bilibili/request.go
 !/backend/internal/platform/bilibili/testdata/
 /backend/internal/platform/douyin/*
 !/backend/internal/platform/douyin/baseline_test.go
@@ -469,6 +477,8 @@
 /backend/internal/platform/bilibili/testdata/*
 !/backend/internal/platform/bilibili/testdata/README.md
 !/backend/internal/platform/bilibili/testdata/inputs.json
+!/backend/internal/platform/bilibili/testdata/manifest.json
+!/backend/internal/platform/bilibili/testdata/php-baseline.json
 /backend/internal/platform/douyin/testdata/*
 !/backend/internal/platform/douyin/testdata/README.md
 !/backend/internal/platform/douyin/testdata/php-integer-boundaries.json
