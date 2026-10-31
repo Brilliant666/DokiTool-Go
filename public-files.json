@@ -358,6 +358,7 @@
     "scripts/go-migration/produce-douyin.py",
     "scripts/go-migration/produce-php-25beaee.php",
     "scripts/go-migration/produce-php-25beaee.py",
+    "scripts/go-migration/produce-weibo-candidates.php",
     "scripts/go-migration/produce-weibo-media.php",
     "scripts/go-migration/produce-weibo-network-headers.php",
     "scripts/go-migration/produce-weibo-prepare.php",
