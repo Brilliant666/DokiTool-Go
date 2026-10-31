@@ -450,6 +450,8 @@
 /backend/internal/platform/weibo/*
 !/backend/internal/platform/weibo/candidates.go
 !/backend/internal/platform/weibo/candidates_test.go
+!/backend/internal/platform/weibo/formatter.go
+!/backend/internal/platform/weibo/formatter_test.go
 !/backend/internal/platform/weibo/guest_request.go
 !/backend/internal/platform/weibo/guest_request_test.go
 !/backend/internal/platform/weibo/network_request.go
