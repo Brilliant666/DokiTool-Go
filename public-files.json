@@ -167,6 +167,7 @@
     "docs/go-migration/phase2-checks.json",
     "docs/go-migration/phase3-checks.json",
     "docs/go-migration/php25-checks.json",
+    "docs/go-migration/remaining-platforms.md",
     "docs/go-migration/rollback.md",
     "docs/incidents/INC-20261031-001-download-delivery.md",
     "docs/research/xhs-4k-transport-comparison-2026-10-30.md",

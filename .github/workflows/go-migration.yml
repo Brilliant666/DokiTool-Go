@@ -6,6 +6,7 @@ on:
       - main
       - codex/go-backend-migration
       - codex/fix-public-media-projection
+      - codex/bilibili-go-migration
     paths:
       - backend/**
       - frontend/**

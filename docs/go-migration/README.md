@@ -2,7 +2,7 @@
 
 后续 Go 开发在独立仓库 [Brilliant666/DokiTool-Go](https://github.com/Brilliant666/DokiTool-Go) 进行，维护者已将其公开用于开发协作。原 [Brilliant666/DokiTool](https://github.com/Brilliant666/DokiTool) 的 `main` 继续保留 PHP 开源版本，不整体合入 Go 迁移分支，也不以删除公开 PHP 为迁移目标。
 
-维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。当前从公共合同修复接续 B 站迁移，不部署 Go、不改变 PHP 生产；受控上游测试不等于真实平台或浏览器保存验收。
+维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)；不部署 Go、不改变 PHP 生产，受控上游测试不等于真实平台或浏览器保存验收。
 
 [B 站实现与验收范围](bilibili.md)保留分 P、合集、单文件、分段和独立音轨的实际 PHP 行为；55 个固定 PHP 输入的 110 份 Go 公开响应已严格对拍通过。机器报告见 [bilibili-checks.json](bilibili-checks.json)，实际执行提交和 CI 链接见 [验收记录](acceptance.md)。
 
@@ -106,4 +106,4 @@ node frontend/scripts/test-go-media-integration.mjs /tmp/dokitool-go-douyin.json
 
 ## 阶段顺序
 
-骨架、公共合同、稳定身份、票据与首个抖音实现保留为当前阶段成果。本轮将已发布 PHP 的相关行为与版本化基线同步到私库；其他平台的后续迁移、Go 发布和目标环境切流均另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器及小红书 4K 新传输专项保持后续范围。
+骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和验证已获得持续开发授权，按 [剩余平台任务](remaining-platforms.md) 接续；Go 发布和目标环境切流仍另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器及小红书 4K 新传输专项保持后续范围。
