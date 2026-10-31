@@ -45,3 +45,7 @@ PHP 源码固定在 `25beaee107f8c1a208ced9deb3c637068445e316`。这次只移植
 - 28 组独立输入覆盖 status/TV 目标、成功 JSON（包括空对象/数组和大整数 ID）、不可解析数据、403/429/500、首次/重复 challenge、visitor gen/incarnate 失败与成功、一次重试、原始 POST/referrer/URL 请求序列。生成器 `scripts/go-migration/produce-weibo-request.php` 真正调用已发布 PHP `25beaee` 的 `weiboJsonRequest` 与 `weiboStartGuest`；仅将随机的 `_rand` cache-buster 值统一为 `<nonce>`，保留请求其余字段和顺序。输入、预期分别压缩入库，Go `TestPHPWeiboGuestRequestFlow` 完整字段比较；取消执行另有 Go 测试。
 - CI 需要固定 PHP 8.3.6，在无网络只读容器中验证 PHP 源哈希并重新生成 28 组预期，解压后逐字节 `cmp`；新增 Go 测试纳入原本的 race/全包/格式、Schema、前端消费和构建门禁。
 - 尚未实现真正的微博 cookie jar、受控上游 status/TV parser/adapter、媒体候选及签名公开投影。真实微博/CDN、浏览器保存与生产测试仍待验收。当前阶段结果必须以对应最终 Head CI 为准，不能把创建 PR 或触发 CI 算作成功。
+
+## 2026-11-01：微博请求级 Cookie jar 与有界上游 HTTP 执行器
+
+新增 `internal/platform/weibo/network_request.go`：可与既有 `guestSession` 直接组合的单次解析 Cookie jar，真实请求委托公共 `fetch.Executor`，不再依赖 Go 默认不携带 Cookie 的行为。限定固定微博/status/component 与 passport guest 两类端点，HTTPS、固定域名、DNS/IP 绑定、TLS、无环境代理、2 MiB 响应体上限，以及每跳最多 20 秒且服从父级解析 context；限制同官方域重定向最多三次，逐跳携带合格 Cookie，拒绝 public-suffix/无关域 Cookie。头部由冻结 PHP `getRequestHeaders()` 的四组独立预期校验，固定 PHP 8.3.6 无网络重放；另有受控 Go 集成测试验证 guest 初始化、请求顺序、跨域 Cookie 传递、会话隔离、拒绝不安全目标、取消和总预算。没有真实平台请求，不把合成 Cookie 测试当作真实微博登录或成功解析。真正的 status/TV formatter、签名公开媒体候选、正式 Parse/Resolve 绑定仍未完成。当前此阶段的 CI 以最终 Head 实测结果为准。

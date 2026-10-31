@@ -185,3 +185,7 @@ Go 增加 `internal/fetch/weibo_media.go` 单目标公网固定地址 TLS 流式
 - 28 组独立输入覆盖 status/TV 目标、成功 JSON（包括空对象/数组和大整数 ID）、不可解析数据、403/429/500、首次/重复 challenge、visitor gen/incarnate 失败与成功、一次重试、原始 POST/referrer/URL 请求序列。生成器 `scripts/go-migration/produce-weibo-request.php` 真正调用已发布 PHP `25beaee` 的 `weiboJsonRequest` 与 `weiboStartGuest`；仅将随机的 `_rand` cache-buster 值统一为 `<nonce>`，保留请求其余字段和顺序。输入、预期分别压缩入库，Go `TestPHPWeiboGuestRequestFlow` 完整字段比较；取消执行另有 Go 测试。
 - CI 需要固定 PHP 8.3.6，在无网络只读容器中验证 PHP 源哈希并重新生成 28 组预期，解压后逐字节 `cmp`；新增 Go 测试纳入原本的 race/全包/格式、Schema、前端消费和构建门禁。
 - 尚未实现真正的微博 cookie jar、受控上游 status/TV parser/adapter、媒体候选及签名公开投影。真实微博/CDN、浏览器保存与生产测试仍待验收。当前阶段结果必须以对应最终 Head CI 为准，不能把创建 PR 或触发 CI 算作成功。
+
+## 2026-11-01：微博正式上游请求执行边界（待最终 Head CI 核验）
+
+新 Go 单次请求 Cookie jar 通过已审查的 `fetch.Executor` 发起固定域 metadata 请求，逐跳保留会话 Cookie；阻止恶意跨域重定向、无关域 Cookie、非 HTTPS/未知入口以及取消后请求。新增 4 组冻结 PHP `getRequestHeaders` 独立预期并由固定 PHP 8.3.6 CI 复现；Go 模拟上游测试不等于真实微博可用性。实际 Head、失败/成功和工作流链接以本阶段提交后的结果单独登记；status/TV 产品级 Parse/Resolve 未完成。
