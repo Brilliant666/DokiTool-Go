@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 
+from public_projection import DOUYIN, INTEGERS, verify_exports
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -92,6 +94,7 @@ def main():
         integers = json.loads(integer_outputs.read_text())
         if len(integers["cases"]) != integer_provenance["parse_cases"]:
             raise RuntimeError("Actual Go integer export inventory mismatch")
+        intentional_differences = verify_exports({DOUYIN: douyin_outputs, INTEGERS: integer_outputs})
         douyin["cases"].extend(integers["cases"])
         php25 = json.loads(php25_outputs.read_text(encoding="utf-8"))
         if len(php25["cases"]) != php25_provenance["cases"]:
@@ -118,6 +121,7 @@ def main():
             "php_douyin_baseline": douyin_provenance,
             "php_integer_baseline": integer_provenance,
             "php_25beaee_baseline": php25_provenance,
+            "intentional_public_differences": intentional_differences,
             "go": {"leaf_scenarios": leaves, "passed_test_events": len(passed), "race": args.race, "vet": True},
             "independent_responses": {"total": independent["total"], "passed": independent["passed"],
                                       "failures": [{"id": labels[entry["index"]], "reason": entry["reason"]}

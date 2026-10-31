@@ -241,6 +241,7 @@ func PublicView(payload Object, debug bool, now int64) Object {
 		return Clone(payload)
 	}
 	data := objectCopy(Map(payload["data"]))
+	projectPublicSources(data)
 	if nonNullField(data, "refresh_url") {
 		data["refresh_url"] = ViewURL(Str(data["refresh_url"]), debug)
 	}

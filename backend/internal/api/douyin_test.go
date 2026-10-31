@@ -15,6 +15,7 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/testsupport/publicoracle"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
@@ -187,6 +188,19 @@ func douyinSameJSON(t *testing.T, got, want any) {
 	}
 }
 
+func douyinPublicExpected(t *testing.T, group string, fixture unified.Object, view string) unified.Object {
+	t.Helper()
+	oracle, err := publicoracle.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := oracle.Expected(group, unified.Str(fixture["id"]), view, unified.Map(fixture["expected"])[view])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return want
+}
+
 func TestDouyinHTTPParsePHPFixtures(t *testing.T) {
 	fixtures := douyinHTTPFixtures(t)
 	for _, test := range []struct {
@@ -197,7 +211,7 @@ func TestDouyinHTTPParsePHPFixtures(t *testing.T) {
 		{"pairing/identity/forward", 200}, // Ordinary view filters covered mux; debug keeps both explicit audio pairings.
 		{"pairing/mux-only", 200},
 		{"live/head-redirect-deduplicated", 200},
-		{"live/direct-and-still", 200}, // Preserves PHP's known fragment discrepancy; equality is not frontend acceptance.
+		{"live/direct-and-still", 200}, // Keeps the frozen PHP oracle; applies only the declared public URL correction.
 		{"original/higher-resolution", 200},
 		{"original/throws", 200}, // Optional probe failure still preserves known downloadable media.
 		{"entry/short-link-head-fallback", 200},
@@ -207,7 +221,7 @@ func TestDouyinHTTPParsePHPFixtures(t *testing.T) {
 			t.Run(test.id+"/"+view, func(t *testing.T) {
 				fixture := fixtures[test.id]
 				got := douyinFixtureHTTP(t, fixture, douyinRequestPath(fixture, "parse", view, ""))
-				want := unified.Map(fixture["expected"])[view]
+				want := douyinPublicExpected(t, publicoracle.DouyinFixture, fixture, view)
 				douyinSameJSON(t, got, unified.Object{"status": test.status, "payload": want})
 			})
 		}
@@ -229,7 +243,7 @@ func TestDouyinHTTPResolveKeepsWholeWork(t *testing.T) {
 				// Resolve's documented change is the top-level item pointer. Every
 				// item, per-item default, variant, source, attachment and group must
 				// retain the complete PHP public work, including unsupported mux.
-				want := unified.Clone(unified.Map(unified.Map(fixture["expected"])[view]))
+				want := douyinPublicExpected(t, publicoracle.DouyinFixture, fixture, view)
 				unified.Map(want["data"])["default_item_id"] = test.itemID
 				douyinSameJSON(t, got, unified.Object{"status": 200, "payload": want})
 			})
@@ -245,6 +259,38 @@ func TestDouyinHTTPResolveMissingTarget(t *testing.T) {
 			want := unified.Object{"schema_version": "1.0", "code": "CONTENT_UNAVAILABLE", "error": unified.Object{"code": "CONTENT_UNAVAILABLE", "message": "请求的媒体条目暂时不可用"}}
 			douyinSameJSON(t, got, unified.Object{"status": http.StatusNotFound, "payload": want})
 		})
+	}
+}
+
+func TestDouyinHTTPPublicIntegerBoundaries(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", publicoracle.IntegerFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := unified.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range unified.Slice(manifest["cases"]) {
+		fixture := unified.Map(value)
+		id := unified.Str(fixture["id"])
+		if !strings.HasPrefix(id, "source-size/") {
+			continue
+		}
+		for _, view := range []string{"normal", "debug"} {
+			for _, route := range []string{"parse", "resolve"} {
+				t.Run(id+"/"+view+"/"+route, func(t *testing.T) {
+					want := douyinPublicExpected(t, publicoracle.IntegerFixture, fixture, view)
+					items := unified.Slice(unified.Map(want["data"])["items"])
+					itemID := unified.Str(unified.Map(items[0])["id"])
+					if route == "resolve" {
+						unified.Map(want["data"])["default_item_id"] = itemID
+					}
+					got := douyinFixtureHTTP(t, fixture, douyinRequestPath(fixture, route, view, itemID))
+					douyinSameJSON(t, got, unified.Object{"status": http.StatusOK, "payload": want})
+				})
+			}
+		}
 	}
 }
 

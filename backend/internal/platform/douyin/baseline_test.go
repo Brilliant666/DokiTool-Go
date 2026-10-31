@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/testsupport/publicoracle"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
@@ -169,7 +170,12 @@ func TestPHPDouyinBaseline(t *testing.T) {
 	if len(cases) < 70 {
 		t.Fatalf("missing PHP migration fixtures: %d", len(cases))
 	}
+	oracle, err := publicoracle.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 	exported := array{}
+	checkedViews := 0
 	for _, value := range cases {
 		c := unified.Map(value)
 		t.Run(unified.Str(c["id"]), func(t *testing.T) {
@@ -191,7 +197,12 @@ func TestPHPDouyinBaseline(t *testing.T) {
 				t.Run(view, func(t *testing.T) {
 					got := unified.PublicView(full, debug, int64(now))
 					actual[view] = got
-					requireSameWire(t, got, expected[view])
+					want, err := oracle.Expected(publicoracle.DouyinFixture, unified.Str(c["id"]), view, expected[view])
+					if err != nil {
+						t.Fatal(err)
+					}
+					requireSameWire(t, got, want)
+					checkedViews++
 					if err := unified.ValidateEnvelopeAt(got, int64(now)); err != nil {
 						t.Fatal(err)
 					}
@@ -230,8 +241,13 @@ func TestPHPDouyinBaseline(t *testing.T) {
 			}
 		})
 	}
+	if checkedViews == 2*len(cases) {
+		if err := oracle.RequireConsumed(publicoracle.DouyinFixture); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if destination := os.Getenv("DOKITOOL_GO_DOUYIN_OUTPUT"); destination != "" && !t.Failed() {
-		if len(exported) != len(cases) {
+		if len(exported) != len(cases) || checkedViews != 2*len(cases) {
 			t.Fatal("Go output export requires all PHP Douyin baseline cases")
 		}
 		if !filepath.IsAbs(destination) {

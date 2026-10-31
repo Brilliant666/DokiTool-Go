@@ -1,5 +1,25 @@
 # Go 迁移验收记录
 
+## 公开响应合同修复：`09622a0` 后续
+
+修复分支 `codex/fix-public-media-projection` 从 `09622a05b69bcb4f1da435295fdafd59aba80455` 接续，面向独立 Go 仓库的迁移分支审查。维护者已将该仓库公开用于开发协作；下方私库建立与原阶段验证数字均保留为历史记录。
+
+产品变化限于 Go 的公开 Source 投影：删除 direct 媒体 URL 的字面 fragment，并省略无法由原前端精确表示的超限正整数文件大小。完整身份、默认选择、候选顺序和签名 query 保留；PHP、前端产品、Worker、bridge 与 schema 不变。详细边界及历史复现见 [合同问题与修复](known-issues.md)。
+
+冻结 PHP 输入、期望、生产器和来源摘要不改。测试使用独立的精确差异清单，对 10 份已知公开响应逐字段说明修正后继续比较完整输出；内部抽取和 formatter 仍对拍原始 PHP 结果。独立验证器和前端直接消费实际 Go 输出，没有后处理 actual 或放宽规则。
+
+本次完整检查命令：
+
+```sh
+python -B -X utf8 scripts/go-migration/check.py \
+  --race --frontend --check-php-source \
+  --report /tmp/dokitool-go-checks.json
+```
+
+修复分支增加单个 `Go migration contract` PR 检查，在 Ubuntu runner 上使用 `go.mod` 的工具链、Node 24 和现有 Python 校验依赖。它读取两版完整 Git 历史核对冻结源码，执行 Go 测试、race、vet、严格对拍、独立 Schema/语义、原前端消费与续签，并构建 CLI。报告作为短期 Actions artifact 保留，实际结果以对应提交的检查为准，不复用下方历史数字。
+
+当前会话本地缺少 Go，官方工具链下载被执行环境网络阻断，因此没有本地 Go 编译或运行通过声明。新代码须由上述远端检查提供执行证据。所有验证使用冻结合成输入或受控本地连接，不新增真实平台、媒体下载、浏览器落盘、生产发布或回滚演练。
+
 ## 当前接续与历史记录范围
 
 后续 Go 开发已转入独立私有仓库 [Brilliant666/DokiTool-Go](https://github.com/Brilliant666/DokiTool-Go)，公开 PHP main 持续保留。维护和许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。下文第二/三阶段数字、当时推送失败与部署限制保留为交接环境的历史证据，不代表本轮在本机新执行的结果。
