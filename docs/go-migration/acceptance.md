@@ -157,3 +157,9 @@ python -B -X utf8 scripts/go-migration/check.py \
 在此前单 Range/响应计划的 33 例之外，追加从冻结 `25beaee` PHP `snapWeiboMediaPrepare` 实际函数抽取的 21 例正常与异常输入。签名使用既有 PHP ticket/sign/canonical 基线，原始私钥仅为已公开的合成测试值；冻结 PHP 8.3.6 镜像的 CI 必须独立重放并与版本化 JSON 逐字节比较。Go 中覆盖方法/参数优先级、票据时效、HEAD 忽略 Range、DNS 结果逐项审查与 IPv4 优先。PHP 预期不能由 Go 输出反写。
 
 本阶段仅提交接口准备与离线测试，不代表已具备视频流式 relay、微博解析或在线验收。最终 Go/PHP CI 状态须按对应实际 Head 更新；不复用上次成功状态。
+
+## 2026-11-01：微博受控流式路径首次实现（尚待最终验收）
+
+Go 增加 `internal/fetch/weibo_media.go` 单目标公网固定地址 TLS 流式访问及 `internal/media/weibo/relay.go` 原 PHP legacy GET/HEAD/Range/200/206/416 错误/响应格式；接口注册到现有验证二进制服务但保持生产 PHP 不变。HTTP/1.1 原始关键头检查，八字节 ftyp 前缀审查、1 GiB 限额、300 秒请求预算、310 秒媒体写/关停、有限内存/并发和源中断后的无 JSON 污染均纳入受控测试。原 33+21 组 PHP 来源函数预期仍严格保留，不能以 Go 输出覆盖。最终 Head 的 CI 结果另记。
+
+本轮**没有**真实微博解析器、签名媒体来源投影、受控真实 CDN 请求、完整 PHP 传输事件流对拍或浏览器保存。因此这只是二进制迁移的可执行骨架，不是微博整体完成，也不能宣称生产可切流。

@@ -265,6 +265,8 @@
 !/backend/internal/fetch/media_headers.go
 !/backend/internal/fetch/media_headers_review_test.go
 !/backend/internal/fetch/media_headers_test.go
+!/backend/internal/fetch/weibo_media.go
+!/backend/internal/fetch/weibo_media_test.go
 /backend/internal/media/*
 !/backend/internal/media/weibo/
 /backend/internal/platform/*
@@ -412,6 +414,8 @@
 !/backend/internal/media/weibo/media_protocol_test.go
 !/backend/internal/media/weibo/prepare.go
 !/backend/internal/media/weibo/prepare_test.go
+!/backend/internal/media/weibo/relay.go
+!/backend/internal/media/weibo/relay_test.go
 !/backend/internal/media/weibo/testdata/
 !/backend/internal/media/weibo/ticket.go
 !/backend/internal/media/weibo/ticket_test.go

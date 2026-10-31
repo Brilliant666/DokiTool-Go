@@ -37,7 +37,7 @@
 
 | 平台 | 必须覆盖的产品路径与回归 | 当前状态 |
 | --- | --- | --- |
-| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | 进行中：新增单 Range/上游响应计划 33 个与请求 Prepare 21 个 PHP 来源对拍；解析、签名接入、实际 relay/超时与 HTTP 仍未实现 |
+| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | 进行中：33 个协议 + 21 个 Prepare 原 PHP 对拍已建立；实现受控二进制 relay 并加入正式媒体路由，解析、签名公开投影及真实流式/在线验收未完成 |
 | 今日头条 | 同域短链、请求内 Cookie jar/ttwid、页面 RENDER_DATA、准确作品身份、主备媒体、简介映射为 `author.description`、有界总预算 | 待实现 |
 | 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 待实现 |
 | 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 待实现 |
@@ -91,3 +91,7 @@
 ## 2026-11-01：微博 Prepare 追加门禁
 
 在独立的 33 组媒体协议基线之外追加 **21 组原 PHP 请求准备函数**的固定输入、正常/拒绝输出及重放，覆盖 ticket、方法、过期、HEAD/GET Range、单次 DNS 与所有答案的公网约束。新增 Go Prepare/PHPQuery；正式媒体 handler 仍未开放，也没有进行真实媒体传输或在线平台验收。本阶段不宣称微博迁移完成，CI 是否通过以新 Head 运行记录为准。
+
+## 2026-11-01：微博专用媒体流式路径
+
+新增 Go 专用固定 CDN/IP/TLS 流式连接与公开 `/api/media/weibo` 二进制路由，保留原 PHP GET/HEAD/单 Range、ftyp 验证、200/206/416、错误格式、不追加 JSON、取消/限制和独立超时窗口。无 `SNAP_MEDIA_SIGNING_KEY` 直接拒绝。现阶段以合成 HTTP 回归和已存在 54 例 PHP Range/ResponsePlan/Prepare 基线检验；真实上游、完整 PHP Stream 事件序列、浏览器保存、微博 JSON 解析与签名来源投影仍待验收。不可标记微博迁移完成。

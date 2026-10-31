@@ -118,7 +118,7 @@ jobs:
 
       - name: Verify Go source formatting
         run: |
-          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/media/weibo backend/internal/api/bilibili_test.go backend/cmd/dokitool/main.go)"
+          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             exit 1
@@ -138,7 +138,7 @@ jobs:
 
       - name: Exercise new Weibo preflight parity with actionable failure output
         working-directory: backend
-        run: go test -race -count=1 -v ./internal/media/weibo -run 'TestPHPWeiboMediaPreparation|TestPHPMediaQueryBoundary'
+        run: go test -race -count=1 -v ./internal/media/weibo -run 'TestPHPWeiboMediaPreparation|TestPHPMediaQueryBoundary|TestMediaRelay'
 
       - name: Run the complete offline migration gate
         run: |

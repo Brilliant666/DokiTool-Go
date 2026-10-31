@@ -155,3 +155,22 @@ func TestPublicMediaFailureKeepsStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestWeiboBinaryRelayBypassesUnifiedAPIBoundary(t *testing.T) {
+	h := testHandler(t, nil)
+	invoked := 0
+	h.SetWeiboRelay(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		invoked++
+		if r.Method != http.MethodHead || r.URL.RawQuery != "ticket=opaque" {
+			t.Fatalf("media method/query changed: %s %s", r.Method, r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Range", "bytes 0-7/100")
+		w.Header().Set("Content-Type", "video/mp4")
+		w.WriteHeader(http.StatusPartialContent)
+	}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodHead, "/api/media/weibo?ticket=opaque", nil))
+	if invoked != 1 || w.Code != http.StatusPartialContent || w.Body.Len() != 0 || w.Header().Get("Content-Type") != "video/mp4" {
+		t.Fatalf("binary relay rewritten: calls=%d code=%d headers=%v body=%q", invoked, w.Code, w.Header(), w.Body.String())
+	}
+}
