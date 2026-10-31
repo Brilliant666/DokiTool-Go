@@ -136,6 +136,10 @@ jobs:
       - name: Test strict public-difference comparison
         run: python3 -B scripts/go-migration/test-public-projection.py
 
+      - name: Exercise new Weibo preflight parity with actionable failure output
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/media/weibo -run 'TestPHPWeiboMediaPreparation|TestPHPMediaQueryBoundary'
+
       - name: Run the complete offline migration gate
         run: |
           "$RUNNER_TEMP/dokitool-validation/bin/python" -B -X utf8 scripts/go-migration/check.py \
