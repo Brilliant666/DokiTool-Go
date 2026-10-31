@@ -40,7 +40,9 @@ func TestPHPWeiboCandidateExtraction(t *testing.T) {
 					got = number
 				}
 			case "candidate":
-				got = legacyWeiboCandidate(input["url"], unified.Str(input["label"]), unified.Map(input["info"]))
+				if candidate := legacyWeiboCandidate(input["url"], unified.Str(input["label"]), unified.Map(input["info"])); candidate != nil {
+					got = candidate
+				}
 			case "candidates":
 				keys := make([]string, 0)
 				for _, key := range unified.Slice(input["url_keys"]) {
