@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - codex/go-backend-migration
+      - codex/fix-public-media-projection
     paths:
       - backend/**
       - frontend/**
@@ -22,6 +23,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  bilibili-php-oracle:
+    if: github.repository == 'Brilliant666/DokiTool-Go'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the proposed commit and frozen PHP history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up the oracle's fixed PHP runtime
+        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # 2.35.5
+        with:
+          php-version: '8.3.6'
+          extensions: curl
+          tools: none
+          coverage: none
+
+      - name: Execute the frozen PHP Bilibili product path without network
+        run: |
+          python3 -B scripts/go-migration/produce-bilibili.py \
+            --php "$(command -v php)" --output "$RUNNER_TEMP/bilibili-php"
+
+      - name: Export the initial synthetic oracle for review
+        env:
+          ORACLE_DIRECTORY: ${{ runner.temp }}/bilibili-php
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['ORACLE_DIRECTORY'])
+          files = {path.name: path.read_text(encoding='utf-8') for path in sorted(root.glob('*.json'))}
+          if not files:
+              raise SystemExit('No PHP oracle output was produced')
+          payload = json.dumps(files, ensure_ascii=False, separators=(',', ':')).encode()
+          print('BILIBILI_ORACLE_SHA256=' + hashlib.sha256(payload).hexdigest())
+          print('BILIBILI_ORACLE_GZIP=' + base64.b64encode(gzip.compress(payload, mtime=0)).decode())
+          PY
+
+      - name: Retain the PHP oracle and provenance
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: bilibili-php-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/bilibili-php
+          if-no-files-found: error
+          retention-days: 7
+
   offline-contract:
     if: github.repository == 'Brilliant666/DokiTool-Go'
     runs-on: ubuntu-24.04
