@@ -50,8 +50,8 @@ func TestMediaRelayFullAndRangeStreams(t *testing.T) {
 	const body = "\x00\x00\x00\x0cftypDATA"
 	for _, tc := range []struct {
 		name, requested, upstream, expectedBody string
-		status int
-		length, contentRange string
+		status                                  int
+		length, contentRange                    string
 	}{
 		{"full", "", body, body, 200, "12", ""},
 		{"from-start", "bytes=0-7", body[:8], body[:8], 206, "8", "bytes 0-7/12"},
@@ -121,8 +121,8 @@ func TestMediaRelayUnsatisfiedRange(t *testing.T) {
 func TestMediaRelayRejectsUnverifiedBytesAndNoJSONAfterCommit(t *testing.T) {
 	for _, tc := range []struct {
 		name, contentType, body, length string
-		expectedCode int
-		expectedBytes string
+		expectedCode                    int
+		expectedBytes                   string
 	}{
 		{"invalid-ftyp", "video/mp4", "\x00\x00\x00\x0cNOPEdata", "12", 502, ""},
 		{"wrong-mime", "text/html", "<html>error</html>", "18", 502, ""},
@@ -147,7 +147,7 @@ func TestMediaRelayRejectsUnverifiedBytesAndNoJSONAfterCommit(t *testing.T) {
 			} else {
 				var envelope struct {
 					Code int             `json:"code"`
-					Msg string          `json:"msg"`
+					Msg  string          `json:"msg"`
 					Data json.RawMessage `json:"data"`
 				}
 				if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil || envelope.Code != tc.expectedCode || string(envelope.Data) != "null" {
@@ -166,7 +166,7 @@ func TestMediaRelayAuthorizationAndMethodBoundary(t *testing.T) {
 	}
 	tests := []struct {
 		name, method, path string
-		code int
+		code               int
 	}{
 		{"post", "POST", path, 405},
 		{"unknown-param", "GET", path+"&url=https://evil.test/x", 400},
