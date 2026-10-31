@@ -121,6 +121,10 @@ jobs:
           unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
+            # Show exact formatter repairs for review, without modifying the index.
+            while IFS= read -r filename; do
+              gofmt -d "$filename"
+            done <<< "$unformatted"
             exit 1
           fi
 
