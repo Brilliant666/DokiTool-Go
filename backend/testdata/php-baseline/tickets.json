@@ -1,0 +1,289 @@
+{
+  "format_version": 1,
+  "synthetic_key_notice": "Every key is public synthetic fixture material, never a deployment key.",
+  "cases": [
+    {
+      "id": "ticket/sign/canonical",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600,
+        "expires_at": null
+      },
+      "expected": "/api/media/weibo?ticket=eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+    },
+    {
+      "id": "ticket/sign/query-and-unicode",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic&label=%E4%B8%AD%E6%96%87%F0%9F%98%80&x=a+b&x=a%2Bb&x=last",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600,
+        "expires_at": null
+      },
+      "expected": "/api/media/weibo?ticket=eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyZsYWJlbD0lRTQlQjglQUQlRTYlOTYlODclRjAlOUYlOTglODAmeD1hK2ImeD1hJTJCYiZ4PWxhc3QiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MzQwMH0.6_2Ct4DctIS1AvJZBbEMjOtZR5083ZomPAwMj4rSH_U"
+    },
+    {
+      "id": "ticket/sign/explicit-default-port",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://f.video.weibocdn.com:443/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600,
+        "expires_at": null
+      },
+      "expected": "/api/media/weibo?ticket=eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbTo0NDMvc3ludGhldGljLm1wND9tZWRpYV9pZD1maXh0dXJlJnRlbXBsYXRlPTEwODAmc3NpZz1zeW50aGV0aWMiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MzQwMH0.fS1cINBO6SSf_dX2csjIM6G2ucefPlDx6ulQWDRiWQM"
+    },
+    {
+      "id": "ticket/sign/upstream-expiry",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600,
+        "expires_at": 1793361660
+      },
+      "expected": "/api/media/weibo?ticket=eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYxNjYwfQ.XWo_BlQKFjxBMQ_V_04hFpdPRDvXfnyrQqoLgLzVFjQ"
+    },
+    {
+      "id": "ticket/sign/expired-upstream",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600,
+        "expires_at": 1793361599
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/sign/weak-key",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "key": "short",
+        "now": 1793361600,
+        "expires_at": null
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/sign/foreign-host",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://media.example.test/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600,
+        "expires_at": null
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/sign/raw-unicode-url",
+      "operation": "ticket_sign",
+      "scenario": "Approved PHP v1 ticket signing with a public synthetic key",
+      "input": {
+        "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic&label=中文",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600,
+        "expires_at": null
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/canonical",
+      "operation": "ticket_verify",
+      "scenario": "Verify a ticket actually minted by the approved PHP function",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "expected": {
+        "v": 1,
+        "u": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "iat": 1793361600,
+        "exp": 1793363400
+      }
+    },
+    {
+      "id": "ticket/verify/query-and-unicode",
+      "operation": "ticket_verify",
+      "scenario": "Verify a ticket actually minted by the approved PHP function",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyZsYWJlbD0lRTQlQjglQUQlRTYlOTYlODclRjAlOUYlOTglODAmeD1hK2ImeD1hJTJCYiZ4PWxhc3QiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MzQwMH0.6_2Ct4DctIS1AvJZBbEMjOtZR5083ZomPAwMj4rSH_U",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "expected": {
+        "v": 1,
+        "u": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic&label=%E4%B8%AD%E6%96%87%F0%9F%98%80&x=a+b&x=a%2Bb&x=last",
+        "iat": 1793361600,
+        "exp": 1793363400
+      }
+    },
+    {
+      "id": "ticket/verify/explicit-default-port",
+      "operation": "ticket_verify",
+      "scenario": "Verify a ticket actually minted by the approved PHP function",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbTo0NDMvc3ludGhldGljLm1wND9tZWRpYV9pZD1maXh0dXJlJnRlbXBsYXRlPTEwODAmc3NpZz1zeW50aGV0aWMiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MzQwMH0.fS1cINBO6SSf_dX2csjIM6G2ucefPlDx6ulQWDRiWQM",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "expected": {
+        "v": 1,
+        "u": "https://f.video.weibocdn.com:443/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "iat": 1793361600,
+        "exp": 1793363400
+      }
+    },
+    {
+      "id": "ticket/verify/upstream-expiry",
+      "operation": "ticket_verify",
+      "scenario": "Verify a ticket actually minted by the approved PHP function",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYxNjYwfQ.XWo_BlQKFjxBMQ_V_04hFpdPRDvXfnyrQqoLgLzVFjQ",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "expected": {
+        "v": 1,
+        "u": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+        "iat": 1793361600,
+        "exp": 1793361660
+      }
+    },
+    {
+      "id": "ticket/verify/wrong-key",
+      "operation": "ticket_verify",
+      "scenario": "Approved PHP rejection of invalid ticket credentials or lifetime",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg",
+        "key": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "now": 1793361600
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/expired",
+      "operation": "ticket_verify",
+      "scenario": "Approved PHP rejection of invalid ticket credentials or lifetime",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793363400
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/future-issued",
+      "operation": "ticket_verify",
+      "scenario": "Approved PHP rejection of invalid ticket credentials or lifetime",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361599
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/signature-tampered",
+      "operation": "ticket_verify",
+      "scenario": "Approved PHP rejection of invalid ticket credentials or lifetime",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4RA",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/malformed",
+      "operation": "ticket_verify",
+      "scenario": "Approved PHP rejection of invalid ticket credentials or lifetime",
+      "input": {
+        "ticket": "not-a-ticket",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/ttl-too-long",
+      "operation": "ticket_verify",
+      "scenario": "Input payload is synthetically signed; only PHP supplies the expected verification result",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P3g9MSZ4PTIiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MzQwMX0.tk1KUDx5vBNefAL3SjrK-CDDflAp7HSKrYyGMCALFBs",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "synthetic_payload": {
+        "v": 1,
+        "u": "https://f.video.weibocdn.com/synthetic.mp4?x=1&x=2",
+        "iat": 1793361600,
+        "exp": 1793363401
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/expiry-not-after-issue",
+      "operation": "ticket_verify",
+      "scenario": "Input payload is synthetically signed; only PHP supplies the expected verification result",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P3g9MSZ4PTIiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MTYwMH0.el2qh9EUhpf5V3N0xQMF_YY_kce1pu9uCRM_VA9P0N8",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "synthetic_payload": {
+        "v": 1,
+        "u": "https://f.video.weibocdn.com/synthetic.mp4?x=1&x=2",
+        "iat": 1793361600,
+        "exp": 1793361600
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/invalid-version",
+      "operation": "ticket_verify",
+      "scenario": "Input payload is synthetically signed; only PHP supplies the expected verification result",
+      "input": {
+        "ticket": "eyJ2IjoyLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P3g9MSZ4PTIiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MTY2MH0.gHjGgWINczoNgwOW90CTe6gQGkARfJ2SRYar2Xg1Ikg",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "synthetic_payload": {
+        "v": 2,
+        "u": "https://f.video.weibocdn.com/synthetic.mp4?x=1&x=2",
+        "iat": 1793361600,
+        "exp": 1793361660
+      },
+      "expected": null
+    },
+    {
+      "id": "ticket/verify/foreign-host",
+      "operation": "ticket_verify",
+      "scenario": "Input payload is synthetically signed; only PHP supplies the expected verification result",
+      "input": {
+        "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLnRlc3QvZmlsZS5tcDQiLCJpYXQiOjE3OTMzNjE2MDAsImV4cCI6MTc5MzM2MTY2MH0.3lk7ag-a_EvWNHJZGKJ-K3rKaTcmPrIMWKKMmawtmQU",
+        "key": "tttttttttttttttttttttttttttttttt",
+        "now": 1793361600
+      },
+      "synthetic_payload": {
+        "v": 1,
+        "u": "https://media.example.test/file.mp4",
+        "iat": 1793361600,
+        "exp": 1793361660
+      },
+      "expected": null
+    }
+  ]
+}

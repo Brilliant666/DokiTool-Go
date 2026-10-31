@@ -1,0 +1,162 @@
+{
+  "scope": "Offline frozen PHP inputs through actual Go code; no real platform or browser evidence",
+  "passed": false,
+  "toolchain": "go version go1.27.3 windows/amd64",
+  "php_baseline": {
+    "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+    "cases": 208,
+    "catalog": 1,
+    "passed": true,
+    "source_bytes_checked": true,
+    "source_files": 40,
+    "tickets": 21
+  },
+  "php_douyin_baseline": {
+    "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+    "numeric_round_cases": 72,
+    "parse_cases": 70,
+    "passed": true,
+    "probe_metadata_cases": 13,
+    "probe_transport_cases": 10,
+    "public_envelopes": 140,
+    "source_bytes_checked": true,
+    "source_files": 17
+  },
+  "php_integer_baseline": {
+    "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+    "fixture_sha256": "725412ca898a7ae20d632395c80803716b05865e9e01908520caa2a6c96e1046",
+    "parse_cases": 13,
+    "passed": true,
+    "private_cases": 12,
+    "public_envelopes": 26,
+    "source_bytes_checked": true,
+    "source_files": 12
+  },
+  "php_25beaee_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "runtime": "8.3.6",
+    "cases": 12,
+    "public_envelopes": 24,
+    "changed_cases": 6,
+    "reused_groups": 7,
+    "git_source_checked": true,
+    "known_contract_conflicts": [
+      "live/direct-and-still fragment (normal/debug)",
+      "integer size_bytes above JavaScript safe integer (8 public responses)"
+    ]
+  },
+  "go": {
+    "leaf_scenarios": 969,
+    "passed_test_events": 1093,
+    "race": false,
+    "vet": true
+  },
+  "independent_responses": {
+    "total": 266,
+    "passed": 264,
+    "failures": [
+      {
+        "id": "live/direct-and-still/normal",
+        "reason": "URL fragment is not a media request"
+      },
+      {
+        "id": "live/direct-and-still/debug",
+        "reason": "URL fragment is not a media request"
+      }
+    ]
+  },
+  "frontend_go_integration": {
+    "passed": false,
+    "responses": 190,
+    "valid_successes": 164,
+    "expected_errors": 16,
+    "unchanged_renewal_tests": 4,
+    "rejected_successes": 10,
+    "failures": [
+      {
+        "id": "live/direct-and-still/normal",
+        "reason": "媒体合同无效：资源地址不安全",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：资源地址不安全"
+      },
+      {
+        "id": "live/direct-and-still/debug",
+        "reason": "媒体合同无效：资源地址不安全",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：资源地址不安全"
+      },
+      {
+        "id": "source-size/9007199254740993/integer/normal",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      },
+      {
+        "id": "source-size/9007199254740993/integer/debug",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      },
+      {
+        "id": "source-size/9007199254740993/string/normal",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      },
+      {
+        "id": "source-size/9007199254740993/string/debug",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      },
+      {
+        "id": "source-size/9223372036854775800/integer/normal",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      },
+      {
+        "id": "source-size/9223372036854775800/integer/debug",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      },
+      {
+        "id": "source-size/9223372036854775800/string/normal",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      },
+      {
+        "id": "source-size/9223372036854775800/string/debug",
+        "reason": "媒体合同无效：文件大小无效",
+        "identical_php_response": true,
+        "php_rejection": "媒体合同无效：文件大小无效"
+      }
+    ],
+    "evidence": "Actual Go envelopes consumed by unchanged frontend validator, selection and download composables; mocked transfer bytes, no browser/file-save claim"
+  },
+  "exit_code": 1,
+  "new_failures_against_public_checkpoint": [],
+  "new_envelopes": {
+    "go_php_equal": 24,
+    "independent_accepted": 24,
+    "frontend_accepted": 24
+  },
+  "build": {
+    "compiled": true,
+    "module": "github.com/Brilliant666/DokiTool-Go/backend",
+    "sha256": "b2a6181b311f5927e2e03dd014250c4c784e38ee3e245714fbc52620efc45ea8",
+    "catalog_matches_php": true,
+    "catalog_platforms": 9,
+    "deployed": false
+  },
+  "php_version_comparison": {
+    "pinned_oracle": "8.3.6",
+    "other_runtime": "8.4.27",
+    "rounding_only_samples": 72,
+    "different": 6,
+    "product_code_difference": false
+  }
+}

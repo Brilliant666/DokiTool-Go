@@ -1,0 +1,1480 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dokitool:schema:unified-v1",
+  "title": "DokiTool Unified Media v1",
+  "description": "Structural contract. Reference, expiry, delivery and quality invariants are additionally checked by the backend and scripts/validate-unified-schema.py.",
+  "$defs": {
+    "APIError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_INPUT",
+            "UNSUPPORTED_PLATFORM",
+            "NO_MEDIA",
+            "CONTENT_UNAVAILABLE",
+            "UPSTREAM_INVALID_RESPONSE",
+            "UPSTREAM_UNAVAILABLE",
+            "UPSTREAM_TIMEOUT",
+            "UPSTREAM_BLOCKED",
+            "RATE_LIMITED",
+            "SERVICE_NOT_CONFIGURED",
+            "INTERNAL_ERROR"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "retry_after_seconds": {
+          "minimum": 0,
+          "title": "Retry After Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "APIError",
+      "type": "object"
+    },
+    "Attachment": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "background_audio",
+            "subtitle"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "resource": {
+          "$ref": "#/$defs/Resource"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "language": {
+          "title": "Language",
+          "type": "string"
+        },
+        "author": {
+          "$ref": "#/$defs/Author"
+        },
+        "cover": {
+          "$ref": "#/$defs/Source"
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "resource"
+      ],
+      "title": "Attachment",
+      "type": "object"
+    },
+    "Author": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "pattern": "^(?i:https?)://[^\\s/?#]+(?:[^\\s]*)$",
+          "title": "Url",
+          "type": "string"
+        },
+        "avatar": {
+          "$ref": "#/$defs/Source"
+        }
+      },
+      "title": "Author",
+      "type": "object"
+    },
+    "ByteRange": {
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "end_inclusive": {
+          "minimum": 0,
+          "title": "End Inclusive",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end_inclusive"
+      ],
+      "title": "ByteRange",
+      "type": "object"
+    },
+    "Chunk": {
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "byte_range": {
+          "$ref": "#/$defs/ByteRange"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "title": "Chunk",
+      "type": "object"
+    },
+    "Count": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "minimum": 0,
+          "title": "Value",
+          "type": "integer"
+        },
+        "state": {
+          "default": "known",
+          "enum": [
+            "known",
+            "unverified"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "Count",
+      "type": "object"
+    },
+    "Default": {
+      "additionalProperties": false,
+      "properties": {
+        "variant_id": {
+          "minLength": 1,
+          "title": "Variant Id",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "pattern": "^(?i:https?)://[^\\s/?#]+(?:[^\\s]*)$",
+              "type": "string"
+            },
+            {
+              "pattern": "^/api/[^\\s]*$",
+              "type": "string"
+            }
+          ],
+          "title": "Url"
+        },
+        "source_id": {
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "access": {
+          "default": "direct",
+          "enum": [
+            "direct",
+            "relay"
+          ],
+          "title": "Access",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
+          "title": "Expires At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variant_id",
+        "url"
+      ],
+      "title": "Default",
+      "type": "object"
+    },
+    "DeferredItem": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "video",
+            "image",
+            "live_photo",
+            "audio"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "exclusiveMinimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "source_url": {
+          "format": "uri",
+          "pattern": "^(?i:https?)://[^\\s/?#]+(?:[^\\s]*)$",
+          "title": "Source Url",
+          "type": "string"
+        },
+        "cover": {
+          "$ref": "#/$defs/Source"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "default": {
+          "type": "null",
+          "title": "Default"
+        },
+        "state": {
+          "const": "deferred",
+          "title": "State",
+          "type": "string"
+        },
+        "resolve_url": {
+          "pattern": "^/api/[^\\s]*$",
+          "title": "Resolve Url",
+          "type": "string"
+        },
+        "default_unavailable_reason": {
+          "const": "needs_resolve",
+          "title": "Default Unavailable Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "default",
+        "state",
+        "resolve_url",
+        "default_unavailable_reason"
+      ],
+      "title": "DeferredItem",
+      "type": "object"
+    },
+    "Failure": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "code": {
+          "enum": [
+            "INVALID_INPUT",
+            "UNSUPPORTED_PLATFORM",
+            "NO_MEDIA",
+            "CONTENT_UNAVAILABLE",
+            "UPSTREAM_INVALID_RESPONSE",
+            "UPSTREAM_UNAVAILABLE",
+            "UPSTREAM_TIMEOUT",
+            "UPSTREAM_BLOCKED",
+            "RATE_LIMITED",
+            "SERVICE_NOT_CONFIGURED",
+            "INTERNAL_ERROR"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/APIError"
+        },
+        "request_id": {
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/Warning"
+          },
+          "minItems": 1,
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "error"
+      ],
+      "title": "Failure",
+      "type": "object"
+    },
+    "FileDelivery": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "file",
+          "title": "Kind",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "sources"
+      ],
+      "title": "FileDelivery",
+      "type": "object"
+    },
+    "Group": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "album",
+            "multipart",
+            "collection"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "item_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Item Ids",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "total_count": {
+          "exclusiveMinimum": 0,
+          "title": "Total Count",
+          "type": "integer"
+        },
+        "complete": {
+          "default": false,
+          "title": "Complete",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "item_ids"
+      ],
+      "title": "Group",
+      "type": "object"
+    },
+    "HigherQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "variant_id": {
+          "minLength": 1,
+          "title": "Variant Id",
+          "type": "string"
+        },
+        "requires": {
+          "items": {
+            "enum": [
+              "hls",
+              "dash",
+              "segment_remux",
+              "segment_byte_concat",
+              "mux",
+              "pair"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Requires",
+          "type": "array"
+        }
+      },
+      "required": [
+        "variant_id",
+        "requires"
+      ],
+      "title": "HigherQuality",
+      "type": "object"
+    },
+    "ManifestDelivery": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "hls",
+            "dash"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "scope": {
+          "enum": [
+            "single",
+            "adaptive"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "selection": {
+          "$ref": "#/$defs/ManifestSelection"
+        },
+        "output": {
+          "$ref": "#/$defs/Output"
+        }
+      },
+      "required": [
+        "kind",
+        "sources",
+        "scope"
+      ],
+      "title": "ManifestDelivery",
+      "type": "object"
+    },
+    "ManifestSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "video_representation_id": {
+          "minLength": 1,
+          "title": "Video Representation Id",
+          "type": "string"
+        },
+        "audio_representation_id": {
+          "minLength": 1,
+          "title": "Audio Representation Id",
+          "type": "string"
+        },
+        "audio_group_id": {
+          "minLength": 1,
+          "title": "Audio Group Id",
+          "type": "string"
+        }
+      },
+      "title": "ManifestSelection",
+      "type": "object"
+    },
+    "MediaMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "fps": {
+          "exclusiveMinimum": 0,
+          "title": "Fps",
+          "type": "number"
+        },
+        "hdr_type": {
+          "type": "string",
+          "enum": ["sdr", "hdr10", "hdr10_plus", "hlg", "dolby_vision", "hdr_unknown"],
+          "description": "Omitted means unknown. hdr_unknown confirms HDR without a known type; it cannot prove coverage."
+        },
+        "bitrate_bps": {
+          "exclusiveMinimum": 0,
+          "title": "Bitrate Bps",
+          "type": "integer"
+        },
+        "video_bitrate_bps": {
+          "exclusiveMinimum": 0,
+          "title": "Video Bitrate Bps",
+          "type": "integer"
+        },
+        "audio_bitrate_bps": {
+          "exclusiveMinimum": 0,
+          "title": "Audio Bitrate Bps",
+          "type": "integer"
+        },
+        "has_audio": {
+          "title": "Has Audio",
+          "type": "boolean"
+        },
+        "video_codec": {
+          "minLength": 1,
+          "title": "Video Codec",
+          "type": "string"
+        },
+        "audio_codec": {
+          "minLength": 1,
+          "title": "Audio Codec",
+          "type": "string"
+        },
+        "audio_language": {
+          "minLength": 1,
+          "title": "Audio Language",
+          "type": "string"
+        },
+        "audio_language_role": {
+          "type": "string",
+          "enum": ["main", "alternate"],
+          "description": "Explicit upstream language role; requires audio_language. A track ID or non-default bitrate is not language evidence."
+        },
+        "audio_channels": {
+          "exclusiveMinimum": 0,
+          "title": "Audio Channels",
+          "type": "integer"
+        },
+        "sample_rate_hz": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Rate Hz",
+          "type": "integer"
+        },
+        "container": {
+          "minLength": 1,
+          "title": "Container",
+          "type": "string"
+        },
+        "extension": {
+          "pattern": "^[a-z0-9]+$",
+          "title": "Extension",
+          "type": "string"
+        },
+        "mime_type": {
+          "pattern": "^[a-z0-9.+-]+/[a-z0-9.+-]+$",
+          "title": "Mime Type",
+          "type": "string"
+        },
+        "evidence": {
+          "default": "unknown",
+          "enum": [
+            "probe",
+            "upstream",
+            "mixed",
+            "unknown"
+          ],
+          "title": "Evidence",
+          "type": "string"
+        },
+        "field_conflicts": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Contradictory trusted observations for one media identity. The same field must be absent from scalar metadata; these observations cannot prove capability coverage.",
+          "propertyNames": {
+            "enum": ["width", "height", "duration_ms", "fps", "hdr_type", "bitrate_bps", "video_bitrate_bps", "audio_bitrate_bps", "has_audio", "video_codec", "audio_codec", "audio_language", "audio_language_role", "audio_channels", "sample_rate_hz", "container", "extension", "mime_type"]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value", "evidence"],
+              "properties": {
+                "value": {"anyOf": [{"type": "number"}, {"type": "string"}, {"type": "boolean"}]},
+                "evidence": {"type": "string", "enum": ["probe", "upstream"]}
+              }
+            }
+          }
+        },
+        "field_evidence": {
+          "additionalProperties": {
+            "enum": [
+              "probe",
+              "upstream"
+            ],
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Field Evidence",
+          "type": "object"
+        }
+      },
+      "title": "MediaMetadata",
+      "type": "object"
+    },
+    "MuxDelivery": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "mux",
+          "title": "Kind",
+          "type": "string"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/Resource"
+          },
+          "minItems": 2,
+          "title": "Resources",
+          "type": "array"
+        },
+        "output": {
+          "$ref": "#/$defs/Output"
+        }
+      },
+      "required": [
+        "kind",
+        "resources",
+        "output"
+      ],
+      "title": "MuxDelivery",
+      "type": "object"
+    },
+    "Output": {
+      "additionalProperties": false,
+      "properties": {
+        "container": {
+          "minLength": 1,
+          "title": "Container",
+          "type": "string"
+        },
+        "extension": {
+          "pattern": "^[a-z0-9]+$",
+          "title": "Extension",
+          "type": "string"
+        },
+        "mime_type": {
+          "pattern": "^[a-z0-9.+-]+/[a-z0-9.+-]+$",
+          "title": "Mime Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "container",
+        "extension"
+      ],
+      "title": "Output",
+      "type": "object"
+    },
+    "PairDelivery": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "pair",
+          "title": "Kind",
+          "type": "string"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/Resource"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Resources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "resources"
+      ],
+      "title": "PairDelivery",
+      "type": "object"
+    },
+    "ParsedData": {
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Platform",
+          "type": "string"
+        },
+        "content_id": {
+          "minLength": 1,
+          "title": "Content Id",
+          "type": "string"
+        },
+        "source_url": {
+          "format": "uri",
+          "pattern": "^(?i:https?)://[^\\s/?#]+(?:[^\\s]*)$",
+          "title": "Source Url",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ReadyItem"
+              },
+              {
+                "$ref": "#/$defs/DeferredItem"
+              },
+              {
+                "$ref": "#/$defs/UnavailableItem"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        },
+        "default_item_id": {
+          "minLength": 1,
+          "title": "Default Item Id",
+          "type": "string"
+        },
+        "generated_at": {
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "refresh_url": {
+          "pattern": "^/api/[^\\s]*$",
+          "title": "Refresh Url",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "author": {
+          "$ref": "#/$defs/Author"
+        },
+        "cover": {
+          "$ref": "#/$defs/Source"
+        },
+        "published_at": {
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
+          "title": "Published At",
+          "type": "string"
+        },
+        "statistics": {
+          "$ref": "#/$defs/Statistics"
+        },
+        "tags": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Tags",
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/Group"
+          },
+          "minItems": 1,
+          "title": "Groups",
+          "type": "array"
+        },
+        "attachments": {
+          "items": {
+            "$ref": "#/$defs/Attachment"
+          },
+          "minItems": 1,
+          "title": "Attachments",
+          "type": "array"
+        },
+        "extra": {
+          "additionalProperties": true,
+          "minProperties": 1,
+          "title": "Extra",
+          "type": "object"
+        }
+      },
+      "required": [
+        "platform",
+        "items"
+      ],
+      "title": "ParsedData",
+      "type": "object"
+    },
+    "Piece": {
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "byte_range": {
+          "$ref": "#/$defs/ByteRange"
+        },
+        "index": {
+          "exclusiveMinimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sources",
+        "index"
+      ],
+      "title": "Piece",
+      "type": "object"
+    },
+    "ReadyItem": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "video",
+            "image",
+            "live_photo",
+            "audio"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "exclusiveMinimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "source_url": {
+          "format": "uri",
+          "pattern": "^(?i:https?)://[^\\s/?#]+(?:[^\\s]*)$",
+          "title": "Source Url",
+          "type": "string"
+        },
+        "cover": {
+          "$ref": "#/$defs/Source"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Default"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "const": "ready",
+          "default": "ready",
+          "title": "State",
+          "type": "string"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/Variant"
+          },
+          "minItems": 1,
+          "title": "Variants",
+          "type": "array"
+        },
+        "resolve_url": {
+          "pattern": "^/api/[^\\s]*$",
+          "title": "Resolve Url",
+          "type": "string"
+        },
+        "default_unavailable_reason": {
+          "enum": [
+            "processing_required",
+            "needs_resolve",
+            "needs_refresh",
+            "unavailable",
+            "needs_resolve"
+          ],
+          "title": "Default Unavailable Reason",
+          "type": "string"
+        },
+        "higher_quality_variants": {
+          "items": {
+            "$ref": "#/$defs/HigherQuality"
+          },
+          "minItems": 1,
+          "title": "Higher Quality Variants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "default",
+        "variants"
+      ],
+      "title": "ReadyItem",
+      "type": "object"
+    },
+    "Resource": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "media",
+            "muxed",
+            "video",
+            "audio",
+            "image",
+            "motion",
+            "subtitle"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/MediaMetadata"
+        },
+        "delivery": {
+          "discriminator": {
+            "mapping": {
+              "dash": "#/$defs/ManifestDelivery",
+              "file": "#/$defs/FileDelivery",
+              "hls": "#/$defs/ManifestDelivery",
+              "segments": "#/$defs/SegmentDelivery"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FileDelivery"
+            },
+            {
+              "$ref": "#/$defs/ManifestDelivery"
+            },
+            {
+              "$ref": "#/$defs/SegmentDelivery"
+            }
+          ],
+          "title": "Delivery"
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "delivery"
+      ],
+      "title": "Resource",
+      "type": "object"
+    },
+    "SegmentDelivery": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "segments",
+          "title": "Kind",
+          "type": "string"
+        },
+        "init": {
+          "$ref": "#/$defs/Chunk"
+        },
+        "pieces": {
+          "items": {
+            "$ref": "#/$defs/Piece"
+          },
+          "minItems": 1,
+          "title": "Pieces",
+          "type": "array"
+        },
+        "join": {
+          "enum": [
+            "byte_concat",
+            "remux"
+          ],
+          "title": "Join",
+          "type": "string"
+        },
+        "join_evidence": {
+          "default": "unknown",
+          "enum": [
+            "validated_fragment_layout",
+            "unknown"
+          ],
+          "title": "Join Evidence",
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/Output"
+        }
+      },
+      "required": [
+        "kind",
+        "pieces",
+        "join"
+      ],
+      "title": "SegmentDelivery",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "pattern": "^(?i:https?)://[^\\s/?#]+(?:[^\\s]*)$",
+              "type": "string"
+            },
+            {
+              "pattern": "^/api/[^\\s]*$",
+              "type": "string"
+            }
+          ],
+          "title": "Url"
+        },
+        "access": {
+          "default": "direct",
+          "enum": [
+            "direct",
+            "relay"
+          ],
+          "title": "Access",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "browser_fetch": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "allowed",
+            "blocked"
+          ],
+          "title": "Browser Fetch",
+          "type": "string"
+        },
+        "availability": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "available",
+            "unavailable"
+          ],
+          "title": "Availability",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "Statistics": {
+      "additionalProperties": false,
+      "properties": {
+        "plays": {
+          "$ref": "#/$defs/Count"
+        },
+        "views": {
+          "$ref": "#/$defs/Count"
+        },
+        "likes": {
+          "$ref": "#/$defs/Count"
+        },
+        "comments": {
+          "$ref": "#/$defs/Count"
+        },
+        "shares": {
+          "$ref": "#/$defs/Count"
+        },
+        "saves": {
+          "$ref": "#/$defs/Count"
+        }
+      },
+      "title": "Statistics",
+      "type": "object"
+    },
+    "Success": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "code": {
+          "const": "OK",
+          "title": "Code",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ParsedData"
+        },
+        "request_id": {
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/Warning"
+          },
+          "minItems": 1,
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "code",
+        "data"
+      ],
+      "title": "Success",
+      "type": "object"
+    },
+    "UnavailableItem": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "video",
+            "image",
+            "live_photo",
+            "audio"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "index": {
+          "exclusiveMinimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "source_url": {
+          "format": "uri",
+          "pattern": "^(?i:https?)://[^\\s/?#]+(?:[^\\s]*)$",
+          "title": "Source Url",
+          "type": "string"
+        },
+        "cover": {
+          "$ref": "#/$defs/Source"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "default": {
+          "type": "null",
+          "title": "Default"
+        },
+        "state": {
+          "const": "unavailable",
+          "title": "State",
+          "type": "string"
+        },
+        "default_unavailable_reason": {
+          "const": "unavailable",
+          "title": "Default Unavailable Reason",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/APIError"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "default",
+        "state",
+        "default_unavailable_reason",
+        "error"
+      ],
+      "title": "UnavailableItem",
+      "type": "object"
+    },
+    "Warning": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "item_id": {
+          "minLength": 1,
+          "title": "Item Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "Warning",
+      "type": "object"
+    },
+    "ReadyVariant": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "provenance": {
+          "enum": [
+            "original_endpoint",
+            "transcode",
+            "unknown"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/MediaMetadata"
+        },
+        "delivery": {
+          "discriminator": {
+            "mapping": {
+              "dash": "#/$defs/ManifestDelivery",
+              "file": "#/$defs/FileDelivery",
+              "hls": "#/$defs/ManifestDelivery",
+              "mux": "#/$defs/MuxDelivery",
+              "pair": "#/$defs/PairDelivery",
+              "segments": "#/$defs/SegmentDelivery"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FileDelivery"
+            },
+            {
+              "$ref": "#/$defs/ManifestDelivery"
+            },
+            {
+              "$ref": "#/$defs/SegmentDelivery"
+            },
+            {
+              "$ref": "#/$defs/MuxDelivery"
+            },
+            {
+              "$ref": "#/$defs/PairDelivery"
+            }
+          ],
+          "title": "Delivery"
+        },
+        "state": {
+          "const": "ready",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "delivery"
+      ],
+      "title": "ReadyVariant",
+      "type": "object"
+    },
+    "DeferredVariant": {
+      "type": "object",
+      "title": "DeferredVariant",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "const": "deferred"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "provenance": {
+          "enum": [
+            "original_endpoint",
+            "transcode",
+            "unknown"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "reason": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "reason"
+      ]
+    },
+    "Variant": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ReadyVariant"
+        },
+        {
+          "$ref": "#/$defs/DeferredVariant"
+        }
+      ]
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "CONTENT_UNAVAILABLE": "#/$defs/Failure",
+      "INTERNAL_ERROR": "#/$defs/Failure",
+      "INVALID_INPUT": "#/$defs/Failure",
+      "NO_MEDIA": "#/$defs/Failure",
+      "OK": "#/$defs/Success",
+      "RATE_LIMITED": "#/$defs/Failure",
+      "SERVICE_NOT_CONFIGURED": "#/$defs/Failure",
+      "UNSUPPORTED_PLATFORM": "#/$defs/Failure",
+      "UPSTREAM_BLOCKED": "#/$defs/Failure",
+      "UPSTREAM_INVALID_RESPONSE": "#/$defs/Failure",
+      "UPSTREAM_TIMEOUT": "#/$defs/Failure",
+      "UPSTREAM_UNAVAILABLE": "#/$defs/Failure"
+    },
+    "propertyName": "code"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Success"
+    },
+    {
+      "$ref": "#/$defs/Failure"
+    }
+  ]
+}

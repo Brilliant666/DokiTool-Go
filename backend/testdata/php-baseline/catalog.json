@@ -1,0 +1,103 @@
+{
+  "operation": "platform_catalog",
+  "input": {},
+  "producer": "backend/bin/catalog.php",
+  "expected": {
+    "schema_version": "1.0",
+    "code": "OK",
+    "data": {
+      "platforms": [
+        {
+          "id": "douyin",
+          "name": "抖音",
+          "site_url": "https://www.douyin.com/",
+          "icon": "douyin",
+          "capabilities": [
+            "video",
+            "image",
+            "live_photo"
+          ]
+        },
+        {
+          "id": "kuaishou",
+          "name": "快手",
+          "site_url": "https://www.kuaishou.com/",
+          "icon": "kuaishou",
+          "capabilities": [
+            "video",
+            "image"
+          ]
+        },
+        {
+          "id": "bilibili",
+          "name": "B站",
+          "site_url": "https://www.bilibili.com/",
+          "icon": "bilibili",
+          "capabilities": [
+            "video",
+            "multipart",
+            "collection"
+          ]
+        },
+        {
+          "id": "xiaohongshu",
+          "name": "小红书",
+          "site_url": "https://www.xiaohongshu.com/",
+          "icon": "xiaohongshu",
+          "capabilities": [
+            "video",
+            "image",
+            "live_photo"
+          ]
+        },
+        {
+          "id": "toutiao",
+          "name": "今日头条",
+          "site_url": "https://www.toutiao.com/",
+          "icon": "toutiao",
+          "capabilities": [
+            "video"
+          ]
+        },
+        {
+          "id": "weibo",
+          "name": "微博",
+          "site_url": "https://weibo.com/",
+          "icon": "weibo",
+          "capabilities": [
+            "video"
+          ]
+        },
+        {
+          "id": "pipixia",
+          "name": "皮皮虾",
+          "site_url": "https://h5.pipix.com/",
+          "icon": "pipixia",
+          "capabilities": [
+            "video",
+            "image"
+          ]
+        },
+        {
+          "id": "pipigx",
+          "name": "皮皮搞笑",
+          "site_url": "https://h5.pipigx.com/",
+          "icon": "pipigx",
+          "capabilities": [
+            "video"
+          ]
+        },
+        {
+          "id": "zuiyou",
+          "name": "最右",
+          "site_url": "https://www.izuiyou.com/",
+          "icon": "zuiyou",
+          "capabilities": [
+            "video",
+            "image"
+          ]
+        }
+      ]
+    }
+  }
+}

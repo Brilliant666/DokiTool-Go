@@ -1,0 +1,26 @@
+{
+  "scope": "Existing frontend regression/build checks; controlled/mocked transfers only, no real browser save or platform availability claim",
+  "unit": {
+    "passed": 294,
+    "total": 294,
+    "failed": 0
+  },
+  "production_build": {
+    "typecheck": true,
+    "vite": true,
+    "ssg_passed": 4,
+    "ssg_total": 4
+  },
+  "load_budget": {
+    "initialJavaScriptBytes": 86044,
+    "initialCssBytes": 12355,
+    "conservativeInitialBytes": 194074,
+    "budgets": {
+      "initialJavaScriptBytes": 100000,
+      "initialCssBytes": 16000,
+      "conservativeInitialBytes": 240000
+    }
+  },
+  "product_src_and_public_unchanged_from": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+  "compiled_go_catalog_matches_php": true
+}

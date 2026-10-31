@@ -1,4 +1,8 @@
-# DokiTool
+# DokiTool-Go
+
+本仓库是 `Brilliant666/DokiTool-Go` 的独立私有 Go 迁移工作区。公开 [DokiTool](https://github.com/Brilliant666/DokiTool) 的 main 继续维护 PHP；Go 后续提交和 Draft PR 只进入本私库，不整体反向合入公开仓库。目前 Go 只实现抖音，尚有两类基线合同冲突，不能替代九平台生产入口；本轮没有部署 Go。
+
+当前计划、版本化 PHP 对拍与证据见 [Go 迁移说明](docs/go-migration/README.md)，仓库、选择性同步及许可范围见 [维护边界](docs/go-migration/MAINTENANCE.md)。下方保留的功能与部署说明描述继承的 PHP/前端基线，不能据此认定 Go 已迁移全部平台。
 
 DokiTool 是在同一仓库维护 Vue 3 前端与自建 PHP 解析接口的短视频工具，支持视频、图片、实况照片、画质与备用源选择，以及 B 站分 P 的展示、播放和下载。普通媒体优先由用户浏览器直接从媒体 CDN 获取。
 
@@ -9,7 +13,7 @@ DokiTool 是在同一仓库维护 Vue 3 前端与自建 PHP 解析接口的短�
 | PHP 解析器 | [jiuhunwl/short_videos](https://github.com/jiuhunwl/short_videos) | `72e5b6e72ab21e695d510e1c4c45213ce9a25f0f` |
 | Vue 前端 | [jiuhunwl/shortvideo-html](https://github.com/jiuhunwl/shortvideo-html) | `cd16011960fe90b53dd87f57714d1a096e986e5a`，包版本 `4.1.0` |
 
-原作者的许可证与版权声明保留在 [backend/LICENSE](backend/LICENSE)、[frontend/LICENSE](frontend/LICENSE) 和源码注释中；新增适配代码采用 [MIT](LICENSE)。依赖许可见 [NOTICE](NOTICE) 及 [frontend/public/licenses](frontend/public/licenses)。详细来源记录在 [UPSTREAM.json](UPSTREAM.json)，人工引入更新的方法见 [上游维护说明](docs/UPSTREAM-MAINTENANCE.md)。
+原作者的许可证与版权声明保留在 [backend/LICENSE](backend/LICENSE)、[frontend/LICENSE](frontend/LICENSE) 和源码注释中；公开检查点 `1eb529f` 及继承的 DokiTool 适配代码继续采用 [MIT](LICENSE)。该检查点之后自有私有增量的范围见 [维护边界](docs/go-migration/MAINTENANCE.md#来源和许可边界)，不改变已公开或第三方部分的许可。依赖许可见 [NOTICE](NOTICE) 及 [frontend/public/licenses](frontend/public/licenses)。详细来源记录在 [UPSTREAM.json](UPSTREAM.json)，人工引入更新的方法见 [上游维护说明](docs/UPSTREAM-MAINTENANCE.md)。
 
 [上游每日更新检查](docs/UPSTREAM-WATCH.md) 由 GitHub Actions 在北京时间 09:00 运行，新变化通过仓库 Issue 通知；不自动合并或部署。
 
