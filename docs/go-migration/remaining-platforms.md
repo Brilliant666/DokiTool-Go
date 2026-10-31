@@ -37,7 +37,7 @@
 
 | 平台 | 必须覆盖的产品路径与回归 | 当前状态 |
 | --- | --- | --- |
-| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | **进行中**：媒体 Range/Prepare 54 组、目标身份 47 组、访客/协议 51+28 组、请求头 4 组；请求级 Cookie jar 与受控二进制 relay 已有离线测试。新增 **48 组原 PHP 候选/计数/来源聚合**和 Go 严格对拍，代码 CI 绿；真实 status/TV formatter、Parse/Resolve 正式绑定、原始 JSON 源顺序/签名公开来源及真实流式/浏览器验收未完成 |
+| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | **进行中**：受控 relay、Cookie jar、目标身份、访客协议/请求和候选抽取已实现；新增 **29 组完整 PHP formatter＋16 组完整 status/TV PHP 解析/请求序列 oracle**，内部 Go 逐字段对拍，固定 PHP 8.3.6 回放及 CI 成功（Head `c2c574f`）。**正式 Parser.Parse/Resolve、unified-v1 适配和签名来源投影尚未接入，在线/浏览器待验收** |
 | 今日头条 | 同域短链、请求内 Cookie jar/ttwid、页面 RENDER_DATA、准确作品身份、主备媒体、简介映射为 `author.description`、有界总预算 | 待实现 |
 | 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 待实现 |
 | 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 待实现 |

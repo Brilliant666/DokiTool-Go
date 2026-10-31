@@ -1,5 +1,11 @@
 # 微博 Go 迁移：阶段性证据和剩余工作
 
+## 2026-11-01：status/TV 全产品私有 formatter + 请求编排
+
+[代码 CI #41253090716](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41253090716) 的 PHP oracle、Go 离线合同两 Job 均成功，代码 Head `c2c574fd3a38d5070fe76bb3a49f903595828c1e`。已提交 `formatter.go`、`resolve.go`、严格测试、独立冻结 PHP 8.3.6 基线：**29 组 formatter + 16 组 weiboResolve 正式产品函数请求带/完整结果**。原 PHP 不变、无网络/只读执行，CI 每轮重放并逐字节 `cmp`。Go 使用真实原始 JSON 提取 TV `urls` 顺序，保留 status GET、component POST、匿名访客会话与仅一次重试、status 可选补充及错误兜底；候选及作品元数据与原 PHP 严格对拍。测试输入均合成公开，无 Cookie、凭据或真实媒体。
+
+**仍未完成**：正式 Go Parser.Parse/API/resolve 注册、unified-v1 adapter、签名票据来源公开投影及 public normal/debug 原 PHP/Go 对拍、真实微博/CDN 下载、浏览器落盘。现有前端通用回归成功不等于已验收微博正式 API。未合并、未部署、未更改 PHP 生产或平台能力边界。
+
 ## 2026-11-01：微博媒体候选与质量元数据（PHP 8.3.6 严格对拍）
 
 本阶段新增 Go `internal/platform/weibo/candidates.go`，从微博 `playback_list`、TV `urls` 和正文固定备用字段抽取候选，保留 MP4 URL、已证实的宽高/比特率/大小/FPS/codec、`template` 规格、标签回退及来源去重和排序。零、缺失、未知元数据仍明确区分；此处不自行决定 unified-v1 默认文件、创建公开签名或放开上游目标。

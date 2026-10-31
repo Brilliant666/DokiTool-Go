@@ -1,5 +1,15 @@
 # Go 迁移验收记录
 
+## 2026-11-01 微博 status/TV formatter 与完整请求编排的独立 PHP/Go 对拍
+
+实际代码 Head `c2c574fd3a38d5070fe76bb3a49f903595828c1e`，[最终 CI #41253090716](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41253090716) 的 `bilibili-php-oracle`、`offline-contract` **均 completed/success**。冻结 PHP 来源 `25beaee107f8c1a208ced9deb3c637068445e316`，固定 PHP **8.3.6**，无网络只读容器实际调用原产品函数并重新 `cmp` 入库预期，未修改旧基线。
+
+新增 **29 组完整私有 formatter**（`formatWeiboStatusResponse`、`formatWeiboResponse`、`weiboVideoResult`）与 **16 组完整 status/TV `weiboResolve` 请求带和解析结果**：覆盖成功与失败、画质候选、作者/时长/统计已知零值、TV component POST、status GET/补充、匿名访客挑战/初始化/仅一次重试、可播放内容的错误兜底、请求顺序/方法/Referer/POST 字节。只规范化不参与身份的随机 `_rand`。Go `TestPHPWeiboFullFormatter`、`TestPHPWeiboFullResolveFlow` 全量逐字段对拍，raw JSON URL 来源顺序来自原始字节。最终 CI 包含全包 Go/race/vet/gofmt/build、独立 Schema 和未修改的前端通用回归。
+
+最初 [CI #41252623902](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41252623902) PHP 通过、文件清单失败：新生成的 `.gitignore` 根规则笔误 `//*`；已修正并在最终 CI 验证，无放宽比较。中间被新提交取消的 CI 不作完成证据。
+
+**范围限制**：这仍是内部解析链路，尚未把微博注册进正式 `/api/parse`/`/api/resolve`，也未接入签名来源公开投影与前端下载。当前前端门禁只覆盖通用/此前已注册平台，并非微博正式 HTTP 输出的完整验收。真实微博、CDN、浏览器和生产均未测试。机器摘要见 [weibo-formatter-resolve-checks.json](weibo-formatter-resolve-checks.json)。
+
 ## 2026-11-01 微博候选与画质元数据独立 PHP/Go 对拍
 
 本阶段实际代码 Head `ef98b6b662abccba68d1ac30d3c8bc26afe02e9b`，提交了 Go 候选抽取、原 PHP 输入生产器、48 组由真实 PHP 8.3.6 产品函数产生的冻结预期、完整 Go 对拍测试及 CI 来源核验。未更改 PHP 产品、统一 Schema、原前端/Worker/bridge、四项能力保护或生产部署。
