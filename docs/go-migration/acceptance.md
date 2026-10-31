@@ -149,3 +149,5 @@ python -B -X utf8 scripts/go-migration/check.py \
 - 14 个 Range + 19 个响应计划固定样例；本地 Go 1.23.2 **隔离 stub** 与 PHP 8.4.24 本地预览的这些样例可逐字段一致。此本地预览不能充当固定 PHP 8.3.6 / Go 1.27.3 的正式验收。
 - GitHub CI 通过原先已验证的固定 PHP 8.3.6 镜像、源 SHA 校验和逐字节基线比较；完整 Go 1.27.3/race 等门禁仍需以本提交产生的 Actions 结果为准。
 - 未改现有 PHP 产品、前端、Worker、bridge、schema、生产路由与部署；微博 parse/resolve、签名改写、流式 relay、独立预算及真实平台/浏览器均 **未完成**。本阶段不得标记微博迁移通过。
+
+- CI 首次运行 [812b95e](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41220825246)：`offline-contract` 成功；PHP oracle job 因 GitHub Actions 各 step 不继承 `DOKITOOL_ORACLE_TMP` 导出变量而在新脚本启动前失败（非 PHP/Go 对拍差异）。下一提交为独立步骤显式设置固定镜像与临时挂载环境；需以重跑结果确认。
