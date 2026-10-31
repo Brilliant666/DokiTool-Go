@@ -169,7 +169,7 @@ func TestMediaRelayAuthorizationAndMethodBoundary(t *testing.T) {
 		code               int
 	}{
 		{"post", "POST", path, 405},
-		{"unknown-param", "GET", path+"&url=https://evil.test/x", 400},
+		{"unknown-param", "GET", path + "&url=https://evil.test/x", 400},
 		{"invalid-ticket", "GET", "/api/media/weibo?ticket=invalid", 403},
 		{"missing-ticket", "GET", "/api/media/weibo", 400},
 		{"multi-range", "GET", path, 416},
