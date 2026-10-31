@@ -1,6 +1,6 @@
 # Generated from public-files.json by scripts/check-public-files.py --write-ignore.
 # Unlisted local files are retained but excluded from Git.
-//*
+/*
 !/.gitattributes
 !/.github/
 !/.gitignore
@@ -525,6 +525,7 @@
 /backend/internal/platform/weibo/testdata/*
 !/backend/internal/platform/weibo/testdata/formatter-inputs.json
 !/backend/internal/platform/weibo/testdata/php-candidates-baseline.json
+!/backend/internal/platform/weibo/testdata/php-formatter-baseline.json
 !/backend/internal/platform/weibo/testdata/php-network-headers.json
 !/backend/internal/platform/weibo/testdata/php-request-baseline.json.gz
 !/backend/internal/platform/weibo/testdata/php-session-baseline.json.gz

@@ -146,10 +146,8 @@ jobs:
           current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
           test "$frozen" = "$current"
           "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-formatter.php > "$RUNNER_TEMP/weibo-formatter-baseline.json"
-          # A one-time handoff of synthetic oracle bytes, not a production secret.
-          printf 'WEIBO_FORMATTER_BASE64_BEGIN\n'
-          base64 -w0 "$RUNNER_TEMP/weibo-formatter-baseline.json"
-          printf '\nWEIBO_FORMATTER_BASE64_END\n'
+          cmp backend/internal/platform/weibo/testdata/php-formatter-baseline.json "$RUNNER_TEMP/weibo-formatter-baseline.json"
+          cp "$RUNNER_TEMP/weibo-formatter-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-formatter-baseline.json"
 
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

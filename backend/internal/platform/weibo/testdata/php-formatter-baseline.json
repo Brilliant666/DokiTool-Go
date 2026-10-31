@@ -1,0 +1,1360 @@
+{
+    "schema": 1,
+    "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "description": "Original frozen PHP formatWeiboStatusResponse/formatWeiboResponse/weiboVideoResult; synthetic offline fixtures",
+    "cases": [
+        {
+            "id": "status-ok-false",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "ok": 0
+                }
+            },
+            "expected": {
+                "code": 503,
+                "msg": "微博未返回可用的正文数据，可能暂时限制访问或作品不可见"
+            }
+        },
+        {
+            "id": "status-missing-identity",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "text_raw": "no media"
+                }
+            },
+            "expected": {
+                "code": 502,
+                "msg": "微博返回的正文数据不完整"
+            }
+        },
+        {
+            "id": "status-id-without-media",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "1029384756",
+                    "text_raw": "text"
+                }
+            },
+            "expected": {
+                "code": 404,
+                "msg": "该微博正文没有可用的视频"
+            }
+        },
+        {
+            "id": "status-empty-media",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "id": 123,
+                    "page_info": {
+                        "media_info": []
+                    }
+                }
+            },
+            "expected": {
+                "code": 404,
+                "msg": "该微博正文没有可用的视频"
+            }
+        },
+        {
+            "id": "status-single-playback",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-single-playback",
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/720.mp4",
+                                        "label": "720p",
+                                        "width": 1280,
+                                        "height": 720,
+                                        "bitrate": 2450000,
+                                        "size": 100000,
+                                        "fps": 29.97
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "text_raw": "作品标题",
+                    "user": {
+                        "screen_name": "作者甲",
+                        "idstr": "90071992547409930012",
+                        "avatar_hd": "https://example.com/a.jpg"
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "作品标题",
+                    "desc": "作品标题",
+                    "author": {
+                        "name": "作者甲",
+                        "id": "90071992547409930012",
+                        "avatar": "https://example.com/a.jpg"
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/720.mp4",
+                            "label": "720p",
+                            "quality": "720p",
+                            "width": 1280,
+                            "height": 720,
+                            "bit_rate": 2450000,
+                            "size": 100000,
+                            "fps": 29
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/720.mp4",
+                    "quality": "720p",
+                    "width": 1280,
+                    "height": 720,
+                    "bit_rate": 2450000,
+                    "size": 100000,
+                    "fps": 29
+                }
+            }
+        },
+        {
+            "id": "status-zero-statistics",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-zero-statistics",
+                    "page_info": {
+                        "media_info": {
+                            "online_users_number": 0,
+                            "mp4_720p_mp4": "https://f.video.weibocdn.com/zero.mp4"
+                        }
+                    },
+                    "attitudes_count": 0,
+                    "comments_count": 0,
+                    "reposts_count": 0,
+                    "text_raw": "zero"
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "zero",
+                    "desc": "zero",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/zero.mp4",
+                            "label": "mp4_720p_mp4",
+                            "quality": "720p"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": "",
+                        "statistics": {
+                            "play_count": 0,
+                            "digg_count": 0,
+                            "comment_count": 0,
+                            "share_count": 0
+                        }
+                    },
+                    "url": "https://f.video.weibocdn.com/zero.mp4",
+                    "quality": "720p"
+                }
+            }
+        },
+        {
+            "id": "status-comma-statistics",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-comma-statistics",
+                    "page_info": {
+                        "media_info": {
+                            "online_users_number": "1,234",
+                            "mp4_1080p_mp4": "https://f.video.weibocdn.com/comma.mp4"
+                        }
+                    },
+                    "attitudes_count": "9,999",
+                    "comments_count": "1,000",
+                    "reposts_count": 0
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/comma.mp4",
+                            "label": "mp4_1080p_mp4",
+                            "quality": "1080p"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": "",
+                        "statistics": {
+                            "play_count": 1234,
+                            "digg_count": 9999,
+                            "comment_count": 1000,
+                            "share_count": 0
+                        }
+                    },
+                    "url": "https://f.video.weibocdn.com/comma.mp4",
+                    "quality": "1080p"
+                }
+            }
+        },
+        {
+            "id": "status-tags-and-dedupe",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-tags-and-dedupe",
+                    "page_info": {
+                        "media_info": {
+                            "mp4_hd_url": "https://f.video.weibocdn.com/tags.mp4",
+                            "video_title": "风景"
+                        }
+                    },
+                    "topic_struct": [
+                        {
+                            "topic_title": "旅行"
+                        },
+                        {
+                            "topic_title": "旅行"
+                        },
+                        {
+                            "topic_title": " 摄影 "
+                        },
+                        {
+                            "topic_title": ""
+                        }
+                    ]
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "风景",
+                    "desc": "风景",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/tags.mp4",
+                            "label": "mp4_hd_url",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": "",
+                        "hashtags": [
+                            "旅行",
+                            "摄影"
+                        ]
+                    },
+                    "url": "https://f.video.weibocdn.com/tags.mp4",
+                    "quality": "unknown"
+                }
+            }
+        },
+        {
+            "id": "status-created-at",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-created-at",
+                    "page_info": {
+                        "media_info": {
+                            "mp4_hd_url": "https://f.video.weibocdn.com/time.mp4"
+                        }
+                    },
+                    "created_at": "Wed May 01 12:34:56 +0800 2024",
+                    "text_raw": "时间"
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "时间",
+                    "desc": "时间",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/time.mp4",
+                            "label": "mp4_hd_url",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/time.mp4",
+                    "quality": "unknown",
+                    "create_time": 1714538096,
+                    "publish_time": "2024-05-01 12:34:56"
+                }
+            }
+        },
+        {
+            "id": "status-fallback-publish-time",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-fallback-publish-time",
+                    "page_info": {
+                        "media_info": {
+                            "mp4_sd_url": "https://f.video.weibocdn.com/timestamp.mp4",
+                            "video_publish_time": 1714557296
+                        }
+                    },
+                    "text_raw": "fallback"
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "fallback",
+                    "desc": "fallback",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/timestamp.mp4",
+                            "label": "mp4_sd_url",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/timestamp.mp4",
+                    "quality": "unknown",
+                    "create_time": 1714557296,
+                    "publish_time": "2024-05-01 17:54:56"
+                }
+            }
+        },
+        {
+            "id": "status-metadata-codec",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-metadata-codec",
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/hevc.mp4",
+                                        "label": "1080P",
+                                        "width": 1920,
+                                        "height": 1080,
+                                        "video_codecs": "h265",
+                                        "size": 123456789
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/hevc.mp4",
+                            "label": "1080P",
+                            "quality": "1080p",
+                            "width": 1920,
+                            "height": 1080,
+                            "size": 123456789,
+                            "codec": "h265"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/hevc.mp4",
+                    "quality": "1080p",
+                    "width": 1920,
+                    "height": 1080,
+                    "codec": "h265",
+                    "size": 123456789
+                }
+            }
+        },
+        {
+            "id": "status-query-template",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-query-template",
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/template.mp4?template=3840x2160.custom",
+                                        "label": "超清"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/template.mp4?template=3840x2160.custom",
+                            "label": "超清",
+                            "quality": "2160p",
+                            "width": 3840,
+                            "height": 2160
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/template.mp4?template=3840x2160.custom",
+                    "quality": "2160p",
+                    "width": 3840,
+                    "height": 2160
+                }
+            }
+        },
+        {
+            "id": "status-fallback-priority",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-fallback-priority",
+                    "page_info": {
+                        "media_info": {
+                            "mp4_720p_mp4": "https://f.video.weibocdn.com/mid.mp4",
+                            "mp4_1080p_mp4": "https://f.video.weibocdn.com/full.mp4",
+                            "stream_url": "https://f.video.weibocdn.com/low.mp4"
+                        }
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/full.mp4",
+                            "label": "mp4_1080p_mp4",
+                            "quality": "1080p"
+                        },
+                        {
+                            "url": "https://f.video.weibocdn.com/mid.mp4",
+                            "label": "mp4_720p_mp4",
+                            "quality": "720p"
+                        },
+                        {
+                            "url": "https://f.video.weibocdn.com/low.mp4",
+                            "label": "stream_url",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/full.mp4",
+                    "quality": "1080p"
+                }
+            }
+        },
+        {
+            "id": "status-playback-duplicates",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-playback-duplicates",
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/same.mp4",
+                                        "label": "360p"
+                                    }
+                                },
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/same.mp4",
+                                        "label": "720p",
+                                        "width": 1280,
+                                        "height": 720
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/same.mp4",
+                            "label": "720p",
+                            "quality": "720p",
+                            "width": 1280,
+                            "height": 720
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/same.mp4",
+                    "quality": "720p",
+                    "width": 1280,
+                    "height": 720
+                }
+            }
+        },
+        {
+            "id": "status-filter-nonvideo",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-filter-nonvideo",
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "image/jpeg",
+                                        "url": "https://f.video.weibocdn.com/preview.jpg",
+                                        "label": "8K"
+                                    }
+                                },
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/safe.mp4",
+                                        "label": "540p"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/safe.mp4",
+                            "label": "540p",
+                            "quality": "540p"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/safe.mp4",
+                    "quality": "540p"
+                }
+            }
+        },
+        {
+            "id": "status-invalid-media-value",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-invalid-media-value",
+                    "page_info": {
+                        "media_info": "invalid"
+                    }
+                }
+            },
+            "expected": {
+                "code": 404,
+                "msg": "作品没有可用的视频地址"
+            }
+        },
+        {
+            "id": "status-author-fallback",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-author-fallback",
+                    "page_info": {
+                        "media_info": {
+                            "mp4_hd_url": "https://f.video.weibocdn.com/profile.mp4"
+                        }
+                    },
+                    "user": {
+                        "id": 1234567890123456,
+                        "screen_name": "回退作者",
+                        "profile_image_url": "//img.example.com/profile.jpg"
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "回退作者",
+                        "id": "1234567890123456",
+                        "avatar": "https://img.example.com/profile.jpg"
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/profile.mp4",
+                            "label": "mp4_hd_url",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/profile.mp4",
+                    "quality": "unknown"
+                }
+            }
+        },
+        {
+            "id": "status-duration-fraction",
+            "operation": "status",
+            "input": {
+                "status": {
+                    "idstr": "status-duration-fraction",
+                    "page_info": {
+                        "media_info": {
+                            "duration": "15.75",
+                            "mp4_hd_url": "https://f.video.weibocdn.com/duration.mp4"
+                        }
+                    },
+                    "text_raw": "fraction"
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "fraction",
+                    "desc": "fraction",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 15.75,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/duration.mp4",
+                            "label": "mp4_hd_url",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/duration.mp4",
+                    "quality": "unknown"
+                }
+            }
+        },
+        {
+            "id": "component-error-status",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 403,
+                    "data": []
+                },
+                "status": []
+            },
+            "expected": {
+                "code": 503,
+                "msg": "微博未返回可用的作品数据，可能暂时限制访问或作品不可见"
+            }
+        },
+        {
+            "id": "component-error-string",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": "blocked",
+                    "data": []
+                },
+                "status": []
+            },
+            "expected": {
+                "code": 503,
+                "msg": "微博未返回可用的作品数据，可能暂时限制访问或作品不可见"
+            }
+        },
+        {
+            "id": "component-no-info",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": []
+                },
+                "status": []
+            },
+            "expected": {
+                "code": 502,
+                "msg": "微博返回的作品数据不完整"
+            }
+        },
+        {
+            "id": "component-empty-info",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": []
+                    }
+                },
+                "status": []
+            },
+            "expected": {
+                "code": 502,
+                "msg": "微博返回的作品数据不完整"
+            }
+        },
+        {
+            "id": "component-only-urls",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": {
+                            "urls": {
+                                "标准": "https://f.video.weibocdn.com/sd.mp4?template=640x360",
+                                "超清": "https://f.video.weibocdn.com/hd.mp4?template=1920x1080"
+                            },
+                            "title": "首选标题",
+                            "author": "视频作者",
+                            "author_id": "000000123",
+                            "avatar": "//img.example.com/a.png",
+                            "duration_time": "23.75",
+                            "cover_image": "https://f.video.weibocdn.com/poster.jpg"
+                        }
+                    }
+                },
+                "status": []
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "首选标题",
+                    "desc": "首选标题",
+                    "author": {
+                        "name": "视频作者",
+                        "id": "000000123",
+                        "avatar": "https://img.example.com/a.png"
+                    },
+                    "cover": "https://f.video.weibocdn.com/poster.jpg",
+                    "duration": 23.75,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/hd.mp4?template=1920x1080",
+                            "label": "超清",
+                            "quality": "1080p",
+                            "width": 1920,
+                            "height": 1080
+                        },
+                        {
+                            "url": "https://f.video.weibocdn.com/sd.mp4?template=640x360",
+                            "label": "标准",
+                            "quality": "360p",
+                            "width": 640,
+                            "height": 360
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/hd.mp4?template=1920x1080",
+                    "quality": "1080p",
+                    "width": 1920,
+                    "height": 1080
+                }
+            }
+        },
+        {
+            "id": "component-merge-status",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": {
+                            "urls": {
+                                "普通": "https://f.video.weibocdn.com/co.mp4"
+                            },
+                            "title": "组件标题",
+                            "topics": [
+                                {
+                                    "content": "海边"
+                                },
+                                {
+                                    "content": "摄影"
+                                }
+                            ],
+                            "author": "组件作者",
+                            "duration_time": "31"
+                        }
+                    }
+                },
+                "status": {
+                    "idstr": "87654321",
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/status.mp4",
+                                        "label": "4K",
+                                        "width": 3840,
+                                        "height": 2160,
+                                        "bitrate": 4500000
+                                    }
+                                }
+                            ],
+                            "online_users_number": 23
+                        }
+                    },
+                    "user": {
+                        "screen_name": "正文作者",
+                        "idstr": "999"
+                    },
+                    "text_raw": "正文描述",
+                    "attitudes_count": 15,
+                    "comments_count": 4,
+                    "reposts_count": 2,
+                    "topic_struct": [
+                        {
+                            "topic_title": "摄影"
+                        },
+                        {
+                            "topic_title": "胶片"
+                        }
+                    ]
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "组件标题",
+                    "desc": "正文描述",
+                    "author": {
+                        "name": "组件作者",
+                        "id": "999",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 31,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/status.mp4",
+                            "label": "4K",
+                            "quality": "2160p",
+                            "width": 3840,
+                            "height": 2160,
+                            "bit_rate": 4500000
+                        },
+                        {
+                            "url": "https://f.video.weibocdn.com/co.mp4",
+                            "label": "普通",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": "",
+                        "statistics": {
+                            "play_count": 23,
+                            "digg_count": 15,
+                            "comment_count": 4,
+                            "share_count": 2
+                        },
+                        "hashtags": [
+                            "海边",
+                            "摄影",
+                            "胶片"
+                        ]
+                    },
+                    "url": "https://f.video.weibocdn.com/status.mp4",
+                    "quality": "2160p",
+                    "width": 3840,
+                    "height": 2160,
+                    "bit_rate": 4500000
+                }
+            }
+        },
+        {
+            "id": "component-meta-absent",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": {
+                            "urls": {
+                                "普通": "https://f.video.weibocdn.com/component.mp4"
+                            },
+                            "title": "只保留组件"
+                        }
+                    }
+                },
+                "status": {
+                    "id": "123",
+                    "page_info": {
+                        "media_info": []
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "只保留组件",
+                    "desc": "只保留组件",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/component.mp4",
+                            "label": "普通",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/component.mp4",
+                    "quality": "unknown"
+                }
+            }
+        },
+        {
+            "id": "component-playback-priority",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": {
+                            "urls": {
+                                "720p": "https://f.video.weibocdn.com/component720.mp4",
+                                "HD": "https://f.video.weibocdn.com/componentHD.mp4"
+                            },
+                            "play_count": "1,001"
+                        }
+                    }
+                },
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/playback.mp4",
+                                        "label": "1080P",
+                                        "width": 1920,
+                                        "height": 1080
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/playback.mp4",
+                            "label": "1080P",
+                            "quality": "1080p",
+                            "width": 1920,
+                            "height": 1080
+                        },
+                        {
+                            "url": "https://f.video.weibocdn.com/component720.mp4",
+                            "label": "720p",
+                            "quality": "720p"
+                        },
+                        {
+                            "url": "https://f.video.weibocdn.com/componentHD.mp4",
+                            "label": "HD",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": "",
+                        "statistics": {
+                            "play_count": 1001
+                        }
+                    },
+                    "url": "https://f.video.weibocdn.com/playback.mp4",
+                    "quality": "1080p",
+                    "width": 1920,
+                    "height": 1080
+                }
+            }
+        },
+        {
+            "id": "component-extra-topics",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": {
+                            "urls": {
+                                "1080p": "https://f.video.weibocdn.com/topic.mp4"
+                            },
+                            "topics": [
+                                {
+                                    "content": "话题A"
+                                },
+                                {
+                                    "content": "话题A"
+                                },
+                                {
+                                    "content": " 话题B "
+                                }
+                            ],
+                            "ip_info_str": "上海",
+                            "date": "2024-05-01"
+                        }
+                    }
+                },
+                "status": {
+                    "topic_struct": [
+                        {
+                            "topic_title": "话题C"
+                        },
+                        {
+                            "topic_title": "话题B"
+                        }
+                    ]
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "",
+                    "desc": "",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/topic.mp4",
+                            "label": "1080p",
+                            "quality": "1080p"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "上海",
+                        "date": "2024-05-01",
+                        "hashtags": [
+                            "话题A",
+                            "话题B",
+                            "话题C"
+                        ]
+                    },
+                    "url": "https://f.video.weibocdn.com/topic.mp4",
+                    "quality": "1080p"
+                }
+            }
+        },
+        {
+            "id": "component-big-author-id",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": {
+                            "urls": {
+                                "low": "https://f.video.weibocdn.com/big.mp4"
+                            },
+                            "author_id": "9223372036854775807",
+                            "duration_time": 0,
+                            "real_date": "1714557296",
+                            "title": "大整数作者"
+                        }
+                    }
+                },
+                "status": []
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "大整数作者",
+                    "desc": "大整数作者",
+                    "author": {
+                        "name": "",
+                        "id": "9223372036854775807",
+                        "avatar": ""
+                    },
+                    "cover": "",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/big.mp4",
+                            "label": "low",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/big.mp4",
+                    "quality": "unknown",
+                    "create_time": 1714557296,
+                    "publish_time": "2024-05-01 17:54:56"
+                }
+            }
+        },
+        {
+            "id": "component-status-cover-fallback",
+            "operation": "component",
+            "input": {
+                "component": {
+                    "code": 100000,
+                    "data": {
+                        "Component_Play_Playinfo": {
+                            "urls": {
+                                "SD": "https://f.video.weibocdn.com/backup.mp4"
+                            },
+                            "cover_image": null,
+                            "avatar": null,
+                            "title": null
+                        }
+                    }
+                },
+                "status": {
+                    "user": {
+                        "profile_image_url": "https://example.com/profile.jpg"
+                    },
+                    "page_info": {
+                        "page_pic": "//img.example.com/pic.jpg",
+                        "media_info": {
+                            "video_title": "正文标题"
+                        }
+                    },
+                    "text_raw": "desc"
+                }
+            },
+            "expected": {
+                "code": 200,
+                "msg": "解析成功",
+                "data": {
+                    "type": "video",
+                    "title": "正文标题",
+                    "desc": "desc",
+                    "author": {
+                        "name": "",
+                        "id": "",
+                        "avatar": "https://example.com/profile.jpg"
+                    },
+                    "cover": "https://img.example.com/pic.jpg",
+                    "duration": 0,
+                    "video_backup": [
+                        {
+                            "url": "https://f.video.weibocdn.com/backup.mp4",
+                            "label": "SD",
+                            "quality": "unknown"
+                        }
+                    ],
+                    "extra": {
+                        "ip_info": "",
+                        "date": ""
+                    },
+                    "url": "https://f.video.weibocdn.com/backup.mp4",
+                    "quality": "unknown"
+                }
+            }
+        }
+    ]
+}

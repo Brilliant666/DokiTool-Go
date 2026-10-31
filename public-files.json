@@ -94,6 +94,7 @@
     "backend/internal/platform/weibo/target_test.go",
     "backend/internal/platform/weibo/testdata/formatter-inputs.json",
     "backend/internal/platform/weibo/testdata/php-candidates-baseline.json",
+    "backend/internal/platform/weibo/testdata/php-formatter-baseline.json",
     "backend/internal/platform/weibo/testdata/php-network-headers.json",
     "backend/internal/platform/weibo/testdata/php-request-baseline.json.gz",
     "backend/internal/platform/weibo/testdata/php-session-baseline.json.gz",
