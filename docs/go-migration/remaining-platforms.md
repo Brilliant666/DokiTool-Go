@@ -37,7 +37,7 @@
 
 | 平台 | 必须覆盖的产品路径与回归 | 当前状态 |
 | --- | --- | --- |
-| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | 待实现；目前只有票据公共实现，媒体路由尚未配置 |
+| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | 进行中：新增单 Range/上游响应计划 33 个 PHP 来源对拍；解析、签名接入、实际 relay/超时与 HTTP 仍未实现 |
 | 今日头条 | 同域短链、请求内 Cookie jar/ttwid、页面 RENDER_DATA、准确作品身份、主备媒体、简介映射为 `author.description`、有界总预算 | 待实现 |
 | 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 待实现 |
 | 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 待实现 |
@@ -81,3 +81,9 @@
 - 抖音与 B 站已有实现。PR #3 最终 CI 成功；其完整证据见 [bilibili-checks.json](bilibili-checks.json) 与 [acceptance.md](acceptance.md)。这些是本任务起点的历史证据。
 - 本次检查点仅建立持续开发范围和接续流程，剩余七平台均未标记完成。
 - 下一项实际工作：冻结微博 PHP 产品路径的受控基线，同时设计公开票据签发与二进制 relay 的正式接入；不运行真实大文件下载。
+
+## 2026-11-01：微博二进制协议第一批实现
+
+新增 `backend/internal/media/weibo/media_protocol.go` 和固定输入 PHP 生产器：14 组 Range 与 19 组上游响应计划，含 200/206/416、前缀长度、超限、MIME、编码、重复关键字段、与请求不符。基线从 `25beaee` 中的 `backend/lib/weibo-media.php` 原 PHP 函数生成；提交包内附压缩的原始 JSON，CI 以固定 PHP 8.3.6 无网络重放并逐字节核对。实际 Go 单测按每个样例完整响应比较，不剔除字段。
+
+本阶段只实现协议检查函数，不开放微博路由，不把这些对拍认作 33 个媒体流式实测或平台完成。继续实现：微博上游 JSON 解析及匿名会话、公共签名改写、独立 300 秒流式 GET/HEAD/Range、严格 DNS/连接/TLS/取消、正式 API 与 PHP/Go 全路径对拍。此前的 B 站 CI 是历史证据；本次提交的 CI 结果必须另行核实。

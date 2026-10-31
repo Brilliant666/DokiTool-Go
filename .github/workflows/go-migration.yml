@@ -64,6 +64,15 @@ jobs:
           cmp backend/internal/platform/bilibili/testdata/php-baseline.json "$RUNNER_TEMP/bilibili-php/php-baseline.json"
           cmp backend/internal/platform/bilibili/testdata/manifest.json "$RUNNER_TEMP/bilibili-php/manifest.json"
 
+      - name: Reproduce Weibo media Range and response plan from frozen PHP 8.3.6
+        run: |
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/lib/weibo-media.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/lib/weibo-media.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-media.php > "$RUNNER_TEMP/weibo-media-baseline.json"
+          gzip -dc backend/internal/media/weibo/testdata/php-media-baseline.json.gz | cmp - "$RUNNER_TEMP/weibo-media-baseline.json"
+          cp "$RUNNER_TEMP/weibo-media-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-media-baseline.json"
+
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -99,7 +108,7 @@ jobs:
 
       - name: Verify Go source formatting
         run: |
-          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/api/bilibili_test.go backend/cmd/dokitool/main.go)"
+          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/media/weibo backend/internal/api/bilibili_test.go backend/cmd/dokitool/main.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             exit 1

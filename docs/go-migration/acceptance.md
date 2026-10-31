@@ -141,3 +141,11 @@ python -B -X utf8 scripts/go-migration/check.py \
 上述两类公开合同冲突、其他平台迁移、真实链接双实现对照、代表性浏览器保存、微博流式协议、目标部署配置与运行条件、完整旧发布包以及实际回滚演练，均未完成。后续结果按阶段追加，保留证据类别，不用新一轮合成通过数覆盖历史未验证项。
 
 旧发布包仍必须包含实际 Caddy/FPM 配置与配套前端产物，密钥仅记录受保护来源引用。当前源码/提交交接包不是这个旧生产发布包；本轮没有执行用户要求的最终切换前回滚演练。
+
+
+## 2026-11-01 微博媒体 Range 与上游响应计划（分阶段）
+
+- 本轮代码：`backend/internal/media/weibo/media_protocol.go`、`media_protocol_test.go`；PHP oracle 生产器 `scripts/go-migration/produce-weibo-media.php`；压缩原始 JSON fixture `testdata/php-media-baseline.json.gz`。
+- 14 个 Range + 19 个响应计划固定样例；本地 Go 1.23.2 **隔离 stub** 与 PHP 8.4.24 本地预览的这些样例可逐字段一致。此本地预览不能充当固定 PHP 8.3.6 / Go 1.27.3 的正式验收。
+- GitHub CI 通过原先已验证的固定 PHP 8.3.6 镜像、源 SHA 校验和逐字节基线比较；完整 Go 1.27.3/race 等门禁仍需以本提交产生的 Actions 结果为准。
+- 未改现有 PHP 产品、前端、Worker、bridge、schema、生产路由与部署；微博 parse/resolve、签名改写、流式 relay、独立预算及真实平台/浏览器均 **未完成**。本阶段不得标记微博迁移通过。
