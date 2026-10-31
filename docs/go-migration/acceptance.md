@@ -178,3 +178,10 @@ Go 增加 `internal/fetch/weibo_media.go` 单目标公网固定地址 TLS 流式
 ### 本轮首次 CI 差异（已定位并修复测试桥接，待重跑）
 
 [Actions #41235263262](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41235263262)：固定 PHP 8.3.6 无网络重放与压缩基线逐字节匹配，`bilibili-php-oracle` 成功；`offline-contract` 中 Go 客户端校验测试首次有 7 个 `nil map` 与 JSON `null` 的 Go interface 表达差异。问题只在测试桥接层的 typed-nil，不在 PHP 产品输出或 Go 业务判断。保留严格期望，测试改为在 `legacyTransportFailure` 返回 nil 时向比较器交付真正的 nil；后续完整 CI 结果另行核实。
+
+## 2026-11-01：微博访客请求编排（PHP/Go 固定对拍阶段）
+
+- 新增 Go `internal/platform/weibo/guest_request.go`：实现可注入的 `weiboJsonRequest` / `weiboStartGuest` 控制流程，包括首次挑战、单次访客初始化、同一目标重试、HTTP 失败与异常 JSON 不额外重试、上下文取消不调用请求器。访客调用仅使用原 PHP 两个固定 passport 端点；这仍是 parser 的内部组件，并未接入真实 HTTP/Cookie jar 或正式 Parse/Resolve。
+- 28 组独立输入覆盖 status/TV 目标、成功 JSON（包括空对象/数组和大整数 ID）、不可解析数据、403/429/500、首次/重复 challenge、visitor gen/incarnate 失败与成功、一次重试、原始 POST/referrer/URL 请求序列。生成器 `scripts/go-migration/produce-weibo-request.php` 真正调用已发布 PHP `25beaee` 的 `weiboJsonRequest` 与 `weiboStartGuest`；仅将随机的 `_rand` cache-buster 值统一为 `<nonce>`，保留请求其余字段和顺序。输入、预期分别压缩入库，Go `TestPHPWeiboGuestRequestFlow` 完整字段比较；取消执行另有 Go 测试。
+- CI 需要固定 PHP 8.3.6，在无网络只读容器中验证 PHP 源哈希并重新生成 28 组预期，解压后逐字节 `cmp`；新增 Go 测试纳入原本的 race/全包/格式、Schema、前端消费和构建门禁。
+- 尚未实现真正的微博 cookie jar、受控上游 status/TV parser/adapter、媒体候选及签名公开投影。真实微博/CDN、浏览器保存与生产测试仍待验收。当前阶段结果必须以对应最终 Head CI 为准，不能把创建 PR 或触发 CI 算作成功。

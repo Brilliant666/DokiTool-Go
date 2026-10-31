@@ -38,3 +38,10 @@ PHP 源码固定在 `25beaee107f8c1a208ced9deb3c637068445e316`。这次只移植
 新增 Go `internal/platform/weibo/session_protocol.go`，用于微博解析器的上游传输失败分类、Sina Visitor System 识别及安全的 JSONP 数据解码。使用独立的 51 例输入/输出集合，直接由固定 PHP `weiboTransportFailure()`、`weiboIsVisitor()`、`weiboJsonp()` 产品函数产生；独立 PHP 8.3.6 容器每次重新生成并与冻结输出逐字节比较，Go 单测对原输出逐项比较。输入和基线分别压缩入库，便于审查与继续扩展。
 
 这一阶段尚未注册完整微博平台 adapter，也未发起匿名游客会话或实现 status/TV component 的请求与 formatter；此前二进制 relay 不变。当前提交的 CI 结果须单独核实，不能沿用此前绿色结果。无真实平台调用、浏览器下载或生产切换。
+
+## 2026-11-01：微博访客请求编排（PHP/Go 固定对拍阶段）
+
+- 新增 Go `internal/platform/weibo/guest_request.go`：实现可注入的 `weiboJsonRequest` / `weiboStartGuest` 控制流程，包括首次挑战、单次访客初始化、同一目标重试、HTTP 失败与异常 JSON 不额外重试、上下文取消不调用请求器。访客调用仅使用原 PHP 两个固定 passport 端点；这仍是 parser 的内部组件，并未接入真实 HTTP/Cookie jar 或正式 Parse/Resolve。
+- 28 组独立输入覆盖 status/TV 目标、成功 JSON（包括空对象/数组和大整数 ID）、不可解析数据、403/429/500、首次/重复 challenge、visitor gen/incarnate 失败与成功、一次重试、原始 POST/referrer/URL 请求序列。生成器 `scripts/go-migration/produce-weibo-request.php` 真正调用已发布 PHP `25beaee` 的 `weiboJsonRequest` 与 `weiboStartGuest`；仅将随机的 `_rand` cache-buster 值统一为 `<nonce>`，保留请求其余字段和顺序。输入、预期分别压缩入库，Go `TestPHPWeiboGuestRequestFlow` 完整字段比较；取消执行另有 Go 测试。
+- CI 需要固定 PHP 8.3.6，在无网络只读容器中验证 PHP 源哈希并重新生成 28 组预期，解压后逐字节 `cmp`；新增 Go 测试纳入原本的 race/全包/格式、Schema、前端消费和构建门禁。
+- 尚未实现真正的微博 cookie jar、受控上游 status/TV parser/adapter、媒体候选及签名公开投影。真实微博/CDN、浏览器保存与生产测试仍待验收。当前阶段结果必须以对应最终 Head CI 为准，不能把创建 PR 或触发 CI 算作成功。
