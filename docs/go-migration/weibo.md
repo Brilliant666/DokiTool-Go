@@ -1,6 +1,16 @@
 # 微博 Go 迁移：阶段性证据和剩余工作
 
-## 范围
+## 2026-11-01：微博媒体候选与质量元数据（PHP 8.3.6 严格对拍）
+
+本阶段新增 Go `internal/platform/weibo/candidates.go`，从微博 `playback_list`、TV `urls` 和正文固定备用字段抽取候选，保留 MP4 URL、已证实的宽高/比特率/大小/FPS/codec、`template` 规格、标签回退及来源去重和排序。零、缺失、未知元数据仍明确区分；此处不自行决定 unified-v1 默认文件、创建公开签名或放开上游目标。
+
+`produce-weibo-candidates.php` **直接运行冻结 PHP `weiboCount`、`weiboCandidate`、`weiboCandidates` 原产品函数**，固定 23 组单候选、13 组计数、12 组多来源合并，共 **48 组输入与独立期望**。原始 PHP 8.3.6 从 `25beaee107f8c1a208ced9deb3c637068445e316` 重放，保留 `testdata/php-candidates-baseline.json` 原样并逐字节 `cmp`。Go `TestPHPWeiboCandidateExtraction` 按完整 JSON 逐项比较，另测同等级源顺序。PHP 对候选表按插入顺序保留 URL，Go helper 明确要求提供按原上游响应顺序读取的 `urlKeys`，**正式 status/TV 解析器尚须从原始响应提取这个顺序，不能迭代 Go map 假装等价**。
+
+首次 [CI 41248574558](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41248574558) 的固定 PHP job 成功，Go job 仅因 4 个未生成候选的 `typed nil map` 在测试接口里与 JSON `null` 表示不同而失败；没有修改 PHP 预期、候选逻辑或比较规则。修正测试接口 nil 后，代码 Head `ef98b6b662abccba68d1ac30d3c8bc26afe02e9b` 的 [CI 41248677685](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41248677685) 两个 job 均 `completed/success`。完整机器摘要见 [weibo-candidates-checks.json](weibo-candidates-checks.json)。
+
+**此阶段是私有候选提取函数，不是可用的完整微博解析器。** 仍需 status/TV 正式调用编排、整个 legacy formatter 到统一合同的映射、含来源签名的 Parse/Resolve 注册及原前端端到端消费。未进行真实微博请求、媒体下载、浏览器保存、部署或回滚。
+
+## 初始阶段范围（历史快照）
 
 PHP 源码固定在 `25beaee107f8c1a208ced9deb3c637068445e316`。这次只移植微博二进制转发前置的单段 Range 解析与上游响应头验证，不开放公开的 `/api/media/weibo`，该路由仍明确返回 503；尚不能替代 PHP 的完整传输路径。
 
@@ -11,7 +21,7 @@ PHP 源码固定在 `25beaee107f8c1a208ced9deb3c637068445e316`。这次只移植
 - CI 使用冻结 PHP 8.3.6 官方镜像 digest、核对产品源与固定提交相同，并复现 JSON 与入库原件逐字节对比；不允许把 PHP 8.4 预览结果作为正式 8.3.6 通过证据。
 - Go 的 `TestPHPWeiboMediaProtocol` 从这个 PHP JSON 读取 expected，比较完整字段和错误文本；本地隔离预览不能代表仓库最终 CI。
 
-## 仍须实现
+## 初始阶段待办（历史快照）
 
 微博 status / TV component 上游解析、匿名 session、主备来源和信息映射、统一 API/resolve、签名 URL 公开投影、完整受控媒体流式服务（GET/HEAD/单 Range、8 字节 ftyp、416、预算、取消、错误格式）。实现流式 transport 时不得复用只能读取 8 MiB 全 body 的普通元信息 `fetch.Executor`，需提供独立的受控流接口和严格原始响应头检查。现有 `main.go` 50 秒 `WriteTimeout` 与 PHP 300 秒媒体预算存在冲突，正式接入前必须解决并测试媒体服务超时/关停边界。无真实上游或浏览器保存证据。
 

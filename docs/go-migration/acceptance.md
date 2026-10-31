@@ -1,5 +1,20 @@
 # Go 迁移验收记录
 
+## 2026-11-01 微博候选与画质元数据独立 PHP/Go 对拍
+
+本阶段实际代码 Head `ef98b6b662abccba68d1ac30d3c8bc26afe02e9b`，提交了 Go 候选抽取、原 PHP 输入生产器、48 组由真实 PHP 8.3.6 产品函数产生的冻结预期、完整 Go 对拍测试及 CI 来源核验。未更改 PHP 产品、统一 Schema、原前端/Worker/bridge、四项能力保护或生产部署。
+
+| 验证层次 | 当前已核实 |
+| --- | --- |
+| 冻结 PHP 来源 | `backend/api/weibo.php` 与已发布 `25beaee` 文件哈希一致 |
+| PHP 产品基线 | 23 单候选＋13 计数＋12 来源聚合 = **48 组**；PHP 8.3.6、无网络、只读容器中重放并与原件逐字节一致 |
+| Go 私有合同 | 48 组 Go 候选、数值、来源合并及标签/质量/排序语义逐字段对拍；另外验证等等级来源的保序 |
+| CI | [最终代码 CI #41248677685](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41248677685)：`bilibili-php-oracle`、`offline-contract` **均 completed/success**；其中包含 Go 全包/race、vet、gofmt、build、独立 Schema 和原前端回归 |
+| 中间失败 | [#41248574558](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41248574558) 的 PHP job 通过、Go job 因 4 项 typed-nil 比较失败；仅修正测试桥接，PHP 原件和产品代码均未改 |
+| 未完成 | 候选代码尚未接正式微博 Parse/Resolve；TV/status formatter、上游 JSON 的源顺序保留、签名来源投影、真实平台/浏览器验收仍待完成 |
+
+机器摘要见 [weibo-candidates-checks.json](weibo-candidates-checks.json)。未将合成 HTTP 或候选推断当作真实平台质量证据，不得标记微博迁移完成。
+
 ## B 站迁移：PR #3
 
 分支 `codex/bilibili-go-migration` 从公共合同修复 `0bd08e03e47248b601ac4fc1afd6682c435d6013` 接续；[Draft PR #3](https://github.com/Brilliant666/DokiTool-Go/pull/3) 以 PR #2 分支为 base，避免混淆合同修复与平台迁移。没有合并 PR #1/#2/#3，没有部署或修改公开 PHP main。

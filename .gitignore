@@ -156,6 +156,7 @@
 !/docs/go-migration/php25-checks.json
 !/docs/go-migration/remaining-platforms.md
 !/docs/go-migration/rollback.md
+!/docs/go-migration/weibo-candidates-checks.json
 !/docs/go-migration/weibo.md
 /docs/incidents/*
 !/docs/incidents/INC-20261031-001-download-delivery.md
