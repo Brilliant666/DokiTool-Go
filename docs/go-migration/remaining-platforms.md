@@ -37,7 +37,7 @@
 
 | 平台 | 必须覆盖的产品路径与回归 | 当前状态 |
 | --- | --- | --- |
-| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | 进行中：33 个协议 + 21 个 Prepare 原 PHP 对拍已建立；实现受控二进制 relay 并加入正式媒体路由，新增 47 组 PHP URL 身份基线与 Go 解析器；上游解析、签名公开投影及真实流式/在线验收未完成 |
+| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | 进行中：33 个协议 + 21 个 Prepare 原 PHP 对拍已建立；实现受控二进制 relay 并加入正式媒体路由，新增 47 组 PHP URL 身份基线与 Go 解析器；本轮增加 51 组传输错误、访客识别及 JSONP 的 PHP/Go 固定对拍；上游解析、匿名会话、签名公开投影及真实流式/在线验收未完成 |
 | 今日头条 | 同域短链、请求内 Cookie jar/ttwid、页面 RENDER_DATA、准确作品身份、主备媒体、简介映射为 `author.description`、有界总预算 | 待实现 |
 | 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 待实现 |
 | 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 待实现 |
@@ -95,3 +95,9 @@
 ## 2026-11-01：微博专用媒体流式路径
 
 新增 Go 专用固定 CDN/IP/TLS 流式连接与公开 `/api/media/weibo` 二进制路由，保留原 PHP GET/HEAD/单 Range、ftyp 验证、200/206/416、错误格式、不追加 JSON、取消/限制和独立超时窗口。无 `SNAP_MEDIA_SIGNING_KEY` 直接拒绝。现阶段以合成 HTTP 回归和已存在 54 例 PHP Range/ResponsePlan/Prepare 基线检验；真实上游、完整 PHP Stream 事件序列、浏览器保存、微博 JSON 解析与签名来源投影仍待验收。不可标记微博迁移完成。
+
+## 2026-11-01：微博访客/接口错误/JSONP 严格语义（本次增量）
+
+新增 Go `internal/platform/weibo/session_protocol.go`，用于微博解析器的上游传输失败分类、Sina Visitor System 识别及安全的 JSONP 数据解码。使用独立的 51 例输入/输出集合，直接由固定 PHP `weiboTransportFailure()`、`weiboIsVisitor()`、`weiboJsonp()` 产品函数产生；独立 PHP 8.3.6 容器每次重新生成并与冻结输出逐字节比较，Go 单测对原输出逐项比较。输入和基线分别压缩入库，便于审查与继续扩展。
+
+这一阶段尚未注册完整微博平台 adapter，也未发起匿名游客会话或实现 status/TV component 的请求与 formatter；此前二进制 relay 不变。当前提交的 CI 结果须单独核实，不能沿用此前绿色结果。无真实平台调用、浏览器下载或生产切换。

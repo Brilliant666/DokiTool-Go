@@ -32,3 +32,9 @@ PHP 源码固定在 `25beaee107f8c1a208ced9deb3c637068445e316`。这次只移植
 ## 微博 URL 身份解析：47 组独立 PHP oracle
 
 从已发布 `25beaee` 的 `weiboTarget` 原产品函数新增固定输入生成器（包含 TV fid、status、parse_str 重复键与数组、主机与端口拒绝、非字符串 URL 等）。Go `internal/platform/weibo/target.go` 只识别身份，不执行任意 URL 请求。实际已由 [固定 PHP 8.3.6 CI](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41230458238) 原函数生成 47 组 expected；原始 JSON 已逐字节冻结入库，Go 测试逐条比较完整 kind/id/null，CI 每轮从同一 PHP 产品路径重新生成并严格 cmp。尚未注册微博 adapter，也不据此宣称解析链路完成。
+
+## 2026-11-01：微博访客/接口错误/JSONP 严格语义（本次增量）
+
+新增 Go `internal/platform/weibo/session_protocol.go`，用于微博解析器的上游传输失败分类、Sina Visitor System 识别及安全的 JSONP 数据解码。使用独立的 51 例输入/输出集合，直接由固定 PHP `weiboTransportFailure()`、`weiboIsVisitor()`、`weiboJsonp()` 产品函数产生；独立 PHP 8.3.6 容器每次重新生成并与冻结输出逐字节比较，Go 单测对原输出逐项比较。输入和基线分别压缩入库，便于审查与继续扩展。
+
+这一阶段尚未注册完整微博平台 adapter，也未发起匿名游客会话或实现 status/TV component 的请求与 formatter；此前二进制 relay 不变。当前提交的 CI 结果须单独核实，不能沿用此前绿色结果。无真实平台调用、浏览器下载或生产切换。

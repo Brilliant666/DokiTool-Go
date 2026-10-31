@@ -168,3 +168,9 @@ Go 增加 `internal/fetch/weibo_media.go` 单目标公网固定地址 TLS 流式
 ## 2026-11-01 微博 URL 身份解析阶段（Draft PR #4）
 
 独立生成器 \`scripts/go-migration/produce-weibo-target.php\` 在 PHP 8.3.6 固定镜像中调用冻结 \`25beaee\` 的未修改 \`weiboTarget()\`，禁用实际网络。47 个固定 synthetic 输入覆盖视频 fid、正文 ID、短键覆盖、数组替换、URL 编码、主机端口验证、非字符串及越界输入。**原 PHP 完整 expected 已入库** \`backend/internal/platform/weibo/testdata/php-target-baseline.json\`，不以 Go 输出生成。CI 重播 PHP 并逐字节对比入库文件，再运行 Go 对拍和原有完整离线门禁。正式 Go 微博网络 parser/adapter、匿名会话及媒体签名公开投影尚未完成；这项身份阶段并非微博整平台通过或线上验收。
+
+## 2026-11-01：微博访客协议前置增量（CI 待核实）
+
+由 `25beaee107f8c1a208ced9deb3c637068445e316` 的原 `backend/api/weibo.php`，在无网络、只读 PHP 8.3.6 环境中独立运行 51 个合成输入，冻结 transport failure、visitor HTML/passport 识别与 gen_callback/cross_domain JSONP 解析的完整结果，并逐字节 `cmp`。Go `internal/platform/weibo/session_protocol.go` 复刻纯协议层，`session_protocol_test.go` 读取不可变 PHP oracle 逐项比对；没有 Go 生成 expected。前期 PHP8.4 本地复制函数预览仅供建立输入，不作为最终 PHP8.3.6 运行证据；最终以同一 Head 的 CI 重放结果为准。
+
+本增量不包含真实上游请求、Cookie jar/游客二次请求、微博媒体候选 formatter、签名来源公开投影、正式微博 Parse/Resolve 对拍及在线浏览器保存。既有 relay 与 PHP 生产保持不变。未合并、未部署。

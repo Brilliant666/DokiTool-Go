@@ -228,6 +228,7 @@
 !/scripts/go-migration/produce-php-25beaee.py
 !/scripts/go-migration/produce-weibo-media.php
 !/scripts/go-migration/produce-weibo-prepare.php
+!/scripts/go-migration/produce-weibo-session.php
 !/scripts/go-migration/produce-weibo-target.php
 !/scripts/go-migration/produce.php
 !/scripts/go-migration/produce.py
@@ -442,6 +443,8 @@
 !/backend/internal/platform/douyin/testdata/
 !/backend/internal/platform/douyin/video.go
 /backend/internal/platform/weibo/*
+!/backend/internal/platform/weibo/session_protocol.go
+!/backend/internal/platform/weibo/session_protocol_test.go
 !/backend/internal/platform/weibo/target.go
 !/backend/internal/platform/weibo/target_oracle_test.go
 !/backend/internal/platform/weibo/target_test.go
@@ -508,4 +511,6 @@
 !/backend/internal/platform/douyin/testdata/php-integer-boundaries.json
 !/backend/internal/platform/douyin/testdata/produce_integer.py
 /backend/internal/platform/weibo/testdata/*
+!/backend/internal/platform/weibo/testdata/php-session-baseline.json.gz
 !/backend/internal/platform/weibo/testdata/php-target-baseline.json
+!/backend/internal/platform/weibo/testdata/session-inputs.json.gz
