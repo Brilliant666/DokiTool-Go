@@ -149,6 +149,18 @@ jobs:
           cmp backend/internal/platform/weibo/testdata/php-formatter-baseline.json "$RUNNER_TEMP/weibo-formatter-baseline.json"
           cp "$RUNNER_TEMP/weibo-formatter-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-formatter-baseline.json"
 
+      - name: Generate independent frozen PHP Weibo status and TV request-flow oracle
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-resolve.php > "$RUNNER_TEMP/weibo-resolve-baseline.json"
+          printf 'WEIBO_RESOLVE_BASE64_BEGIN\n'
+          base64 -w0 "$RUNNER_TEMP/weibo-resolve-baseline.json"
+          printf '\nWEIBO_RESOLVE_BASE64_END\n'
+
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
