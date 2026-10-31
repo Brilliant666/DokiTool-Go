@@ -28,3 +28,7 @@ PHP 源码固定在 `25beaee107f8c1a208ced9deb3c637068445e316`。这次只移植
 新增 `internal/fetch/weibo_media.go` 专用、无重定向/无代理的流式连接，仅连接 Prepare 已审查的单个公网 IP，保留域名用于 TLS SNI/CA 校验；使用 HTTP/1.1 原始头部检查拒绝重复关键字段或未知/分块长度，避免普通元信息 fetch 的 8 MiB Body 限额干扰大型媒体。`internal/media/weibo/relay.go` 加入 GET/HEAD/单 Range 路由、200/206/416、首 8 字节 ftyp 审查、最大 1GiB、有限缓冲、并发槽位与响应后禁止附加 JSON。HEAD 使用内部 GET 0-7 Probe，客户端仍收到零字节的 200 响应。Go 验证服务保持普通 API WriteTimeout 50 秒，并为媒体请求单独设置 310 秒写期限；Shutdown 容忍 310 秒排空。微博媒体使用已有 `SNAP_MEDIA_SIGNING_KEY`，无效或缺少时返回原 PHP legacy 媒体 503，不触发网络访问。
 
 有界合成 HTTP 测试覆盖媒体请求与返回格式、拒绝恶意票据/目标、无效 ftyp、上游部分内容、HEAD、416、传输截断后的“禁止追加 JSON”。这些是 Go 受控连接/流式协议测试，不是 PHP 完整 `snapWeiboMediaStream` 回调的逐字节 oracle，更不是平台在线、真实浏览器保存或可上线证明。真实微博解析、签名来源公开投影、Parse/Resolve 仍未移植，媒体回传必须等待后续联调和进一步传输条件核对。
+
+## 微博 URL 身份解析：独立 PHP oracle 冻结中
+
+从已发布 `25beaee` 的 `weiboTarget` 原产品函数新增固定输入生成器（包含 TV fid、status、parse_str 重复键与数组、主机与端口拒绝、非字符串 URL 等）。Go `internal/platform/weibo/target.go` 只识别身份，不执行任意 URL 请求。本检查点先由 CI 固定 PHP 8.3.6 生成不可变 expected；下一检查点从该次 PHP 证据入库并逐字段对拍。尚未注册微博 adapter，也不据此宣称解析链路完成。
