@@ -17,9 +17,10 @@ import (
 type guestExchange func(context.Context, string, *string, string) (unified.Object, error)
 
 type guestSession struct {
-	exchange  guestExchange
-	attempted bool
-	nonce     func() string
+	exchange    guestExchange
+	attempted   bool
+	nonce       func() string
+	lastRawJSON string
 }
 
 func newGuestSession(exchange guestExchange) *guestSession {
@@ -103,6 +104,7 @@ func (s *guestSession) startGuest(ctx context.Context, referer string) bool {
 // across both the component and the optional status request. It never silently
 // retries transport failures, second challenges or unrecognizable JSON.
 func (s *guestSession) jsonRequest(ctx context.Context, address string, post *string, referer string) unified.Object {
+	s.lastRawJSON = ""
 	first := s.request(ctx, address, post, referer)
 	if failure := legacyTransportFailure(first); failure != nil {
 		return unified.Object{"failure": failure}
@@ -128,6 +130,7 @@ func (s *guestSession) jsonRequest(ctx context.Context, address string, post *st
 		}
 	}
 	if decoded := guestJSONObject(unified.Str(first["body"])); decoded != nil {
+		s.lastRawJSON = unified.Str(first["body"])
 		return unified.Object{"json": decoded}
 	}
 	return unified.Object{"failure": unified.Object{"code": 502, "msg": "微博返回了无法识别的接口响应，请稍后重试"}}

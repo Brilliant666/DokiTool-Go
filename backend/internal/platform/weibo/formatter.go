@@ -17,8 +17,7 @@ func legacyWeiboFormatStatus(status unified.Object) unified.Object {
 	if ok, exists := status["ok"]; exists && ok != nil && !phpGuestTruthy(ok) {
 		return weiboFormatFailure(503, "微博未返回可用的正文数据，可能暂时限制访问或作品不可见")
 	}
-	media := unified.Map(unified.Map(status["page_info"])["media_info"])
-	if !weiboDefined(status, "id") && !weiboDefined(status, "idstr") && len(media) == 0 {
+	if !weiboDefined(status, "id") && !weiboDefined(status, "idstr") && !weiboDefined(unified.Map(status["page_info"]), "media_info") {
 		return weiboFormatFailure(502, "微博返回的正文数据不完整")
 	}
 	// PHP empty() also treats an empty array and the string "0" as missing.
