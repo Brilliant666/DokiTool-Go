@@ -6,14 +6,15 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/fetch"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 const (
@@ -48,7 +49,7 @@ func (p *Probe) Probe(parent context.Context, rawURL string) (unified.Object, er
 	if err := parent.Err(); err != nil {
 		return nil, err
 	}
-	if p == nil || p.executor == nil || p.allowedURL == nil {
+	if p == nil || p.executor == nil || p.allowedURL == nil || !p.allowedURL(rawURL) {
 		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(parent, Timeout)
@@ -121,12 +122,40 @@ type reader struct {
 var contentRange = regexp.MustCompile(`^bytes ([0-9]{1,10})-([0-9]{1,10})/([0-9]{1,10})$`)
 var decimal = regexp.MustCompile(`^[0-9]+$`)
 
+// Entry authorization belongs to the platform. A validated response may choose
+// another CDN, including on a later Range read. Every such request still uses
+// HTTPS and fetch.Client's public-DNS, pinned-socket and TLS checks.
+func safeTransportURL(raw string) bool {
+	if len(raw) > 8192 || !strings.HasPrefix(raw, "https://") || strings.Contains(raw, "#") {
+		return false
+	}
+	for _, r := range raw {
+		if r <= 0x20 || r == 0x7f || r == '\\' {
+			return false
+		}
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Opaque != "" || u.User != nil || (u.Port() != "" && u.Port() != "443") {
+		return false
+	}
+	host := strings.ToLower(strings.TrimRight(u.Hostname(), "."))
+	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if ip, err := netip.ParseAddr(host); err == nil {
+		return fetch.PublicIP(ip)
+	}
+	// A colon that did not parse as an IP is not a DNS hostname (for example,
+	// scoped IPv6). DNS targets are resolved and checked by the actual executor.
+	return !strings.HasPrefix(u.Host, "[") && !strings.ContainsAny(host, ":%")
+}
+
 func (r *reader) read(current *string, offset, length int64) []byte {
 	if offset < 0 || offset > maxFileBytes || length < 1 || length > MaxBytes-r.bytes {
 		return nil
 	}
 	for r.requests < MaxRequests && r.ctx.Err() == nil {
-		if !r.probe.allowedURL(*current) {
+		if !safeTransportURL(*current) {
 			return nil
 		}
 		deadline, ok := r.ctx.Deadline()
@@ -147,7 +176,7 @@ func (r *reader) read(current *string, offset, length int64) []byte {
 				"Accept":          {"video/mp4, application/octet-stream"},
 			},
 			Policy: fetch.Policy{
-				Purpose: "media-probe", AllowedURL: r.probe.allowedURL,
+				Purpose: "media-probe", AllowedURL: safeTransportURL,
 				Timeout: remaining, MaxBytes: length, MaxHeaderBytes: maxHeaderBytes,
 				StrictMediaHeaders: true,
 				FollowRedirects:    false, MaxRedirects: 0,
@@ -181,11 +210,15 @@ func (r *reader) read(current *string, offset, length int64) []byte {
 				if err != nil || u.Hostname() == "" {
 					return nil
 				}
-				next = "https://" + u.Hostname() + next
+				host := u.Hostname()
+				if strings.Contains(host, ":") {
+					host = "[" + host + "]"
+				}
+				next = "https://" + host + next
 			case strings.HasPrefix(next, "http://"):
 				next = "https://" + strings.TrimPrefix(next, "http://")
 			}
-			if !r.probe.allowedURL(next) {
+			if !safeTransportURL(next) {
 				return nil
 			}
 			*current = next
@@ -198,7 +231,7 @@ func (r *reader) read(current *string, offset, length int64) []byte {
 			return nil
 		}
 		mediaType := strings.ToLower(trimHeader(strings.SplitN(headers["content-type"], ";", 2)[0]))
-		if mediaType != "video/mp4" && mediaType != "application/octet-stream" && mediaType != "video/x-m4v" {
+		if mediaType != "video/mp4" && mediaType != "video/quicktime" && mediaType != "application/octet-stream" && mediaType != "video/x-m4v" {
 			return nil
 		}
 		actual := int64(len(response.Body))

@@ -3,7 +3,7 @@ package douyin
 import (
 	"strings"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 func pickImageURL(image object) string {

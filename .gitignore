@@ -114,6 +114,7 @@
 /backend/public/*
 !/backend/public/index.php
 /backend/testdata/*
+!/backend/testdata/php-25beaee/
 !/backend/testdata/php-baseline/
 !/backend/testdata/php-douyin/
 /backend/tests/*
@@ -140,6 +141,7 @@
 !/backend/tests/weibo-contract.php
 !/backend/tests/weibo-media-contract.php
 /docs/go-migration/*
+!/docs/go-migration/MAINTENANCE.md
 !/docs/go-migration/README.md
 !/docs/go-migration/acceptance.md
 !/docs/go-migration/frontend-checks.json
@@ -147,6 +149,7 @@
 !/docs/go-migration/mapping.md
 !/docs/go-migration/phase2-checks.json
 !/docs/go-migration/phase3-checks.json
+!/docs/go-migration/php25-checks.json
 !/docs/go-migration/rollback.md
 /docs/incidents/*
 !/docs/incidents/INC-20261031-001-download-delivery.md
@@ -213,8 +216,11 @@
 !/scripts/go-migration/check.py
 !/scripts/go-migration/produce-douyin.php
 !/scripts/go-migration/produce-douyin.py
+!/scripts/go-migration/produce-php-25beaee.php
+!/scripts/go-migration/produce-php-25beaee.py
 !/scripts/go-migration/produce.php
 !/scripts/go-migration/produce.py
+!/scripts/go-migration/verify-php-25beaee.py
 !/scripts/go-migration/verify.py
 /scripts/tests/*
 !/scripts/tests/test_upstream_updates.py
@@ -251,6 +257,7 @@
 !/backend/internal/platform/douyin/
 /backend/internal/probe/*
 !/backend/internal/probe/baseline_test.go
+!/backend/internal/probe/cdn_policy_test.go
 !/backend/internal/probe/mp4.go
 !/backend/internal/probe/mp4_test.go
 !/backend/internal/probe/probe.go
@@ -278,6 +285,11 @@
 !/backend/internal/unified/variants_test.go
 !/backend/internal/unified/work.go
 !/backend/internal/unified/work_test.go
+/backend/testdata/php-25beaee/*
+!/backend/testdata/php-25beaee/README.md
+!/backend/testdata/php-25beaee/cases.json
+!/backend/testdata/php-25beaee/differences.json
+!/backend/testdata/php-25beaee/manifest.json
 /backend/testdata/php-baseline/*
 !/backend/testdata/php-baseline/README.md
 !/backend/testdata/php-baseline/cases.json
@@ -387,6 +399,7 @@
 !/backend/internal/platform/douyin/integer_test.go
 !/backend/internal/platform/douyin/parser.go
 !/backend/internal/platform/douyin/parser_test.go
+!/backend/internal/platform/douyin/php_25beaee_test.go
 !/backend/internal/platform/douyin/request.go
 !/backend/internal/platform/douyin/testdata/
 !/backend/internal/platform/douyin/video.go

@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 func TestMeasuredMetadataAndUnknownCapabilities(t *testing.T) {

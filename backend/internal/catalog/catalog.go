@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Brilliant666/DokiTool/backend/config"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/config"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 type Catalog struct {

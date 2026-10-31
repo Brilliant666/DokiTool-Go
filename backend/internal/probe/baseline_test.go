@@ -10,8 +10,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/fetch"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 // These expected values and exact requested byte ranges come from the frozen

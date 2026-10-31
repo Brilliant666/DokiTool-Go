@@ -3,7 +3,7 @@ package probe
 import (
 	"encoding/binary"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 type box struct {

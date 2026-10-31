@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/fetch"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 const (
@@ -34,9 +34,9 @@ func allowedDetailURL(raw string) bool {
 	return err == nil && detailHost(raw) && u.Scheme == "https" && u.EscapedPath() == "/aweme/v1/aweme/detail/" && u.Fragment == ""
 }
 
-// AllowedMediaURL is the sole Douyin media-request allowlist, shared by the
-// bounded probe and live-photo redirect resolver. It does not limit returned
-// browser URLs or grant permission to fetch arbitrary metadata API hosts.
+// AllowedMediaURL authorizes initial bounded-probe entries and the live-photo
+// redirect resolver. The probe separately validates subsequent public CDN hops.
+// It does not limit browser URLs or authorize arbitrary metadata API requests.
 func AllowedMediaURL(raw string) bool {
 	if len(raw) > 8192 || strings.Contains(raw, "#") || unified.MediaURL(raw) == "" {
 		return false

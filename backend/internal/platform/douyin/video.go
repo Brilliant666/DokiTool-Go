@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 var videoFactOrder = []string{"width", "height", "fps", "hdr_type"}

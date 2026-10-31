@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/catalog"
-	"github.com/Brilliant666/DokiTool/backend/internal/fetch"
-	"github.com/Brilliant666/DokiTool/backend/internal/platform/douyin"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 // These tests exercise the real HTTP gateway and Douyin parser together. The

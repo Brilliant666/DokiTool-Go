@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 // formatData keeps the legacy shape private so the upstream extraction can be

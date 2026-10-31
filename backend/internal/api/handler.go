@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/catalog"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 type Adapter interface {

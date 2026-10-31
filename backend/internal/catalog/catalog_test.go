@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Brilliant666/DokiTool/backend/config"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/config"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 func TestCatalogUsesSingleRegistry(t *testing.T) {

@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Brilliant666/DokiTool/backend/internal/fetch"
-	"github.com/Brilliant666/DokiTool/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 type executorFunc func(context.Context, fetch.Request) (fetch.Response, error)
@@ -198,7 +198,7 @@ func TestTailMovieUsesFiniteRangesAndPreservesSignedURL(t *testing.T) {
 
 func TestSmallCompleteMediaAndMIMECompatibility(t *testing.T) {
 	data := bytes.Join([][]byte{testFTYP(), makeBox("mdat", bytes.Repeat([]byte{'x'}, 100)), makeMovie(720, 1280, "avc1", 1, 0, false)}, nil)
-	for _, mime := range []string{"video/mp4", " VIDEO/MP4 ; charset=binary", "application/octet-stream", "video/x-m4v"} {
+	for _, mime := range []string{"video/mp4", " VIDEO/MP4 ; charset=binary", "video/quicktime", "Video/QuickTime; charset=binary", "application/octet-stream", "video/x-m4v"} {
 		t.Run(mime, func(t *testing.T) {
 			calls := 0
 			executor := executorFunc(func(_ context.Context, request fetch.Request) (fetch.Response, error) {
@@ -345,7 +345,7 @@ func TestRedirectTransformationAndGlobalBudget(t *testing.T) {
 			}
 		})
 	}
-	for _, target := range []string{"https://127.0.0.1/private", "https://evil.example.test/file", "file.mp4", "?query=only", ""} {
+	for _, target := range []string{"https://127.0.0.1/private", "https://cdn.example.test/file#fragment", "file.mp4", "?query=only", ""} {
 		t.Run("reject "+target, func(t *testing.T) {
 			calls := 0
 			executor := executorFunc(func(_ context.Context, request fetch.Request) (fetch.Response, error) {
