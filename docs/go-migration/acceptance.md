@@ -151,3 +151,9 @@ python -B -X utf8 scripts/go-migration/check.py \
 - 未改现有 PHP 产品、前端、Worker、bridge、schema、生产路由与部署；微博 parse/resolve、签名改写、流式 relay、独立预算及真实平台/浏览器均 **未完成**。本阶段不得标记微博迁移通过。
 
 - CI 首次运行 [812b95e](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41220825246)：`offline-contract` 成功；PHP oracle job 因 GitHub Actions 各 step 不继承 `DOKITOOL_ORACLE_TMP` 导出变量而在新脚本启动前失败（非 PHP/Go 对拍差异）。下一提交为独立步骤显式设置固定镜像与临时挂载环境；需以重跑结果确认。
+
+## 2026-11-01：微博请求准备阶段（本轮新增）
+
+在此前单 Range/响应计划的 33 例之外，追加从冻结 `25beaee` PHP `snapWeiboMediaPrepare` 实际函数抽取的 21 例正常与异常输入。签名使用既有 PHP ticket/sign/canonical 基线，原始私钥仅为已公开的合成测试值；冻结 PHP 8.3.6 镜像的 CI 必须独立重放并与版本化 JSON 逐字节比较。Go 中覆盖方法/参数优先级、票据时效、HEAD 忽略 Range、DNS 结果逐项审查与 IPv4 优先。PHP 预期不能由 Go 输出反写。
+
+本阶段仅提交接口准备与离线测试，不代表已具备视频流式 relay、微博解析或在线验收。最终 Go/PHP CI 状态须按对应实际 Head 更新；不复用上次成功状态。

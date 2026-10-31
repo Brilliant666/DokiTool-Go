@@ -227,6 +227,7 @@
 !/scripts/go-migration/produce-php-25beaee.php
 !/scripts/go-migration/produce-php-25beaee.py
 !/scripts/go-migration/produce-weibo-media.php
+!/scripts/go-migration/produce-weibo-prepare.php
 !/scripts/go-migration/produce.php
 !/scripts/go-migration/produce.py
 !/scripts/go-migration/public_projection.py
@@ -409,6 +410,8 @@
 /backend/internal/media/weibo/*
 !/backend/internal/media/weibo/media_protocol.go
 !/backend/internal/media/weibo/media_protocol_test.go
+!/backend/internal/media/weibo/prepare.go
+!/backend/internal/media/weibo/prepare_test.go
 !/backend/internal/media/weibo/testdata/
 !/backend/internal/media/weibo/ticket.go
 !/backend/internal/media/weibo/ticket_test.go
@@ -483,6 +486,7 @@
 !/frontend/src/assets/platforms/zuiyou.png
 /backend/internal/media/weibo/testdata/*
 !/backend/internal/media/weibo/testdata/php-media-baseline.json.gz
+!/backend/internal/media/weibo/testdata/php-prepare-baseline.json
 /backend/internal/platform/bilibili/testdata/*
 !/backend/internal/platform/bilibili/testdata/README.md
 !/backend/internal/platform/bilibili/testdata/inputs.json
