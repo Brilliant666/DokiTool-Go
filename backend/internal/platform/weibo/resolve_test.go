@@ -42,7 +42,7 @@ func TestPHPWeiboFullResolveFlow(t *testing.T) {
 					body = *post
 				}
 				calls = append(calls, unified.Object{
-					"url":  noncePattern.ReplaceAllString(address, "1<nonce>"),
+					"url":  noncePattern.ReplaceAllString(address, "${1}<nonce>"),
 					"post": body, "referer": referer,
 				})
 				if index >= len(responses) {
