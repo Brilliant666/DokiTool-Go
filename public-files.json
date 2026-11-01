@@ -380,6 +380,7 @@
     "scripts/go-migration/produce-weibo-media.php",
     "scripts/go-migration/produce-weibo-network-headers.php",
     "scripts/go-migration/produce-weibo-prepare.php",
+    "scripts/go-migration/produce-weibo-public.php",
     "scripts/go-migration/produce-weibo-request.php",
     "scripts/go-migration/produce-weibo-resolve.php",
     "scripts/go-migration/produce-weibo-session.php",
