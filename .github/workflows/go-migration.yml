@@ -173,6 +173,23 @@ jobs:
           cp "$RUNNER_TEMP/weibo-public-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-public-baseline.json"
           cmp backend/internal/platform/weibo/testdata/php-public-baseline.json "$RUNNER_TEMP/weibo-public-baseline.json"
 
+      - name: Bootstrap independent signed Weibo and Toutiao PHP oracles
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          export TMPDIR="$DOKITOOL_ORACLE_TMP"
+          python3 -B scripts/go-migration/produce-weibo-signed.py --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/weibo-signed-php"
+          python3 -B scripts/go-migration/produce-toutiao.py --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/toutiao-php"
+          python3 -B scripts/go-migration/verify-toutiao.py --directory "$RUNNER_TEMP/toutiao-php" --check-git-source
+          python3 - <<'PY'
+          import base64,gzip,hashlib,json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          payload={group:{p.name:p.read_text() for p in sorted((root/group).glob('*.json'))} for group in ('weibo-signed-php','toutiao-php')}
+          raw=json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode()
+          print('MIGRATION_ORACLE_SHA256='+hashlib.sha256(raw).hexdigest())
+          print('MIGRATION_ORACLE_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
+          PY
+
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

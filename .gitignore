@@ -229,6 +229,8 @@
 !/scripts/go-migration/produce-douyin.py
 !/scripts/go-migration/produce-php-25beaee.php
 !/scripts/go-migration/produce-php-25beaee.py
+!/scripts/go-migration/produce-toutiao.php
+!/scripts/go-migration/produce-toutiao.py
 !/scripts/go-migration/produce-weibo-candidates.php
 !/scripts/go-migration/produce-weibo-formatter.php
 !/scripts/go-migration/produce-weibo-media.php
@@ -238,6 +240,8 @@
 !/scripts/go-migration/produce-weibo-request.php
 !/scripts/go-migration/produce-weibo-resolve.php
 !/scripts/go-migration/produce-weibo-session.php
+!/scripts/go-migration/produce-weibo-signed.php
+!/scripts/go-migration/produce-weibo-signed.py
 !/scripts/go-migration/produce-weibo-target.php
 !/scripts/go-migration/produce.php
 !/scripts/go-migration/produce.py
@@ -245,6 +249,7 @@
 !/scripts/go-migration/test-public-projection.py
 !/scripts/go-migration/verify-bilibili.py
 !/scripts/go-migration/verify-php-25beaee.py
+!/scripts/go-migration/verify-toutiao.py
 !/scripts/go-migration/verify.py
 /scripts/tests/*
 !/scripts/tests/test_upstream_updates.py
@@ -284,6 +289,7 @@
 /backend/internal/platform/*
 !/backend/internal/platform/bilibili/
 !/backend/internal/platform/douyin/
+!/backend/internal/platform/toutiao/
 !/backend/internal/platform/weibo/
 /backend/internal/probe/*
 !/backend/internal/probe/baseline_test.go
@@ -452,6 +458,8 @@
 !/backend/internal/platform/douyin/request.go
 !/backend/internal/platform/douyin/testdata/
 !/backend/internal/platform/douyin/video.go
+/backend/internal/platform/toutiao/*
+!/backend/internal/platform/toutiao/testdata/
 /backend/internal/platform/weibo/*
 !/backend/internal/platform/weibo/candidates.go
 !/backend/internal/platform/weibo/candidates_test.go
@@ -535,6 +543,9 @@
 !/backend/internal/platform/douyin/testdata/README.md
 !/backend/internal/platform/douyin/testdata/php-integer-boundaries.json
 !/backend/internal/platform/douyin/testdata/produce_integer.py
+/backend/internal/platform/toutiao/testdata/*
+!/backend/internal/platform/toutiao/testdata/README.md
+!/backend/internal/platform/toutiao/testdata/inputs.json
 /backend/internal/platform/weibo/testdata/*
 !/backend/internal/platform/weibo/testdata/formatter-inputs.json
 !/backend/internal/platform/weibo/testdata/php-candidates-baseline.json
@@ -548,3 +559,4 @@
 !/backend/internal/platform/weibo/testdata/request-inputs.json.gz
 !/backend/internal/platform/weibo/testdata/resolve-inputs.json
 !/backend/internal/platform/weibo/testdata/session-inputs.json.gz
+!/backend/internal/platform/weibo/testdata/signed-inputs.json
