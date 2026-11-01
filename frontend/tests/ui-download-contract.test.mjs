@@ -391,6 +391,29 @@ test('file download retries at most three matching-quality routes and synchroniz
   assert.equal(clicked.length, 1); assert.match(clicked[0].href, /^blob:/);
 });
 
+test('each ordinary download checks its declared file bytes on the route actually read', async () => {
+  const data = fixture(retryData());
+  const sources = data.items[0].variants[0].delivery.sources;
+  sources[0].size_bytes = 3;
+  sources[1].size_bytes = 4;
+  const transferred = [];
+  mockFileTransfer(async url => {
+    transferred.push(url);
+    const response = new Response(new Uint8Array([1, 2, 3, 4]), {
+      headers: { 'content-type': 'video/mp4', 'content-length': '2' },
+    });
+    Object.defineProperty(response, 'type', { value: 'cors' });
+    return response;
+  });
+  const { instance, store } = harness(data);
+  await instance.downloadMainVideo();
+  await settled(store.downloads[0]);
+  assert.deepEqual(transferred, [sources[0].url, sources[1].url]);
+  assert.equal(store.downloads[0].status, 'completed');
+  assert.equal(store.downloads[0].loaded, 4);
+  assert.equal(store.downloads[0].total, 4);
+});
+
 test('failed routes do not open popups; a deliberate browser handoff stays distinct from completion', async () => {
   const { instance, store } = harness(retryData());
   const transfers = [];
@@ -410,6 +433,21 @@ test('failed routes do not open popups; a deliberate browser handoff stays disti
   assert.match(html, /浏览器处理 1/); assert.match(html, /完成 1/); assert.match(html, /失败 1/); assert.match(html, /取消 1/);
   assert.match(html, /本站无法追踪/);
   instance.handleClearCompleted('all'); assert.equal(store.downloads.length, 0);
+});
+
+test('the resolved file format reaches the download even when the CDN offers an MP4 filename', async () => {
+  for (const [evidence, transport, suffix] of [['probe', 'browser_blob', 'mov'], ['unknown', 'browser_native', 'mp4']]) {
+    const data = fixture(base);
+    data.items[0].variants[0].metadata = { container: 'mov', extension: 'mov', mime_type: 'video/quicktime', evidence };
+    const { instance, store } = harness(data);
+    globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3, 4]), { headers: {
+      'content-type': 'video/mp4', 'content-length': '4', 'content-disposition': 'attachment; filename="upstream.mp4"',
+    } });
+    await instance.downloadMainVideo(); await settled(store.downloads[0]);
+    assert.equal(store.downloads[0].transport, transport);
+    assert.ok(store.downloads[0].filename.endsWith('.' + suffix));
+    if (evidence === 'probe') assert.equal(blobs.at(-1).type, 'video/quicktime');
+  }
 });
 
 test('eligible native attachment hands off once without Blob progress or a false completed state', async () => {

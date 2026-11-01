@@ -8,6 +8,7 @@ on:
       - codex/fix-public-media-projection
       - codex/bilibili-go-migration
       - codex/remaining-platforms-go-migration
+      - codex/xhs-page-transport
     paths:
       - backend/**
       - frontend/**
@@ -322,6 +323,35 @@ jobs:
           path: ${{ runner.temp }}/dokitool-go-checks.json
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Test the original frontend and download lifecycle
+        working-directory: frontend
+        run: npm test
+
+      - name: Start the isolated browser delivery fixtures
+        run: |
+          node scripts/test-download-browser.mjs serve "$RUNNER_TEMP/download-check" >"$RUNNER_TEMP/download-fixture.log" 2>&1 &
+          echo "DOWNLOAD_FIXTURE_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Start Chrome with an isolated profile
+        run: |
+          google-chrome --headless=new --remote-debugging-port=0 --user-data-dir="$RUNNER_TEMP/download-profile" about:blank >"$RUNNER_TEMP/download-chrome.log" 2>&1 &
+          echo "DOWNLOAD_CHROME_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Verify cross-origin streaming and browser-saved filenames
+        run: |
+          for attempt in {1..30}; do
+            if test -s "$RUNNER_TEMP/download-check/servers.json" && test -s "$RUNNER_TEMP/download-profile/DevToolsActivePort"; then break; fi
+            sleep 1
+          done
+          node scripts/test-download-browser.mjs check "$RUNNER_TEMP/download-check" "$RUNNER_TEMP/download-profile"
+
+      - name: Stop the browser fixtures
+        if: always()
+        run: |
+          for pid in "${DOWNLOAD_CHROME_PID:-}" "${DOWNLOAD_FIXTURE_PID:-}"; do
+            if test -n "$pid"; then kill "$pid" 2>/dev/null || true; fi
+          done
 
   xhs-dependency-review:
     if: github.repository == 'Brilliant666/DokiTool-Go'

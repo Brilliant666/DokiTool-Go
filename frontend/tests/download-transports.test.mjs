@@ -113,6 +113,18 @@ test('Blob receives the complete file before saving and uses the response media 
   assert.equal(revoked.length, 0, 'Blob URL remains valid immediately after browser handoff');
 });
 
+test('Blob retains its type checks for unsupported media, unsafe generic files and mismatched media roles', async () => {
+  for (const [filename, formatMime, type] of [
+    ['image.png', undefined, 'image/svg+xml'],
+    ['unsafe.exe', undefined, 'application/octet-stream'],
+    ['original.mov', 'video/quicktime', 'image/jpeg'],
+  ]) {
+    globalThis.fetch = async () => media([1, 2], { 'content-type': type });
+    await assert.rejects(blob.downloadBlob(request({ filename, formatMime }), signal(), () => {}), /媒体类型|音视频或图片/);
+    assert.equal(clicks.length, 0);
+  }
+});
+
 test('Blob accepts readable unknown-length media and resolves its size on completion', async () => {
   const updates = [];
   globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'video/mp4' } });

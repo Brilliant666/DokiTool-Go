@@ -1,4 +1,5 @@
 import type { DownloadSnapshot, SourceProbe } from "../downloads/types";
+import { confirmedFormatMime, extensionsFor } from "../downloads/file";
 import type {
   DownloadTask,
   MediaItem,
@@ -9,6 +10,7 @@ import type {
   ToastType,
 } from "../types/media";
 import { buildMediaFilename } from "../utils/videoFilename";
+import { decodedLength } from "../../public/downloads/decoded-length.js";
 import {
   getDownloadTarget,
   readyItem,
@@ -76,6 +78,7 @@ export function useMediaDownload({
       itemId?: string;
       variantId?: string;
       sources?: Source[];
+      formatMime?: string;
       selectionKey?: string;
     }
   >();
@@ -197,22 +200,8 @@ export function useMediaDownload({
     const blob = await response.blob();
     if (signal) checkAbort(signal);
     if (!blob.size) throw new Error("资源为空");
-    // Fetch decodes Content-Encoding before exposing the Blob. Content-Length
-    // describes wire bytes, while source.size_bytes describes the media file.
-    const encoding = response.headers
-      .get("content-encoding")
-      ?.trim()
-      .toLowerCase();
-    // A CORS-filtered response can expose Content-Length but hide encoding.
-    // Only compare a header length when it is known to describe decoded bytes.
-    const declaredSize =
-      encoding === "identity" || (!encoding && response.type !== "cors")
-        ? Number(response.headers.get("content-length"))
-        : 0;
-    if (
-      (declaredSize > 0 && blob.size !== declaredSize) ||
-      (expectedSize && blob.size !== expectedSize)
-    )
+    const declared = decodedLength(response);
+    if ((declared && blob.size !== declared) || (expectedSize && blob.size !== expectedSize))
       throw new Error("资源下载不完整");
     if (/text\/html|application\/json/i.test(blob.type))
       throw new Error("资源地址返回了错误页面");
@@ -383,12 +372,22 @@ export function useMediaDownload({
       0,
       3,
     );
+    const sourceSizes: Record<string, number> = {};
+    for (const source of context?.sources ?? []) {
+      if (!source.size_bytes) continue;
+      const address = sourceUrl(source, apiContext);
+      if (!routes.includes(address)) continue;
+      const key = comparableUrl(address);
+      // Two conflicting declarations for the same request give no usable bound.
+      const previous = sourceSizes[key];
+      sourceSizes[key] = previous === undefined || previous === source.size_bytes ? source.size_bytes : 0;
+    }
     let cancellationReason: string | undefined;
     try {
       const { downloadManager } = await import("../downloads/manager");
       checkAbort(controller.signal);
       const result = await downloadManager.run(
-        { id: deliveryId, url, filename, routes, startedAt, probe },
+        { id: deliveryId, url, filename, routes, sourceSizes, startedAt, probe, formatMime: context?.formatMime },
         controller.signal,
         (snapshot) => {
           if (
@@ -853,7 +852,9 @@ export function useMediaDownload({
           ? undefined
           : delivery,
       );
-      const filename = filenameFor(snapshot, extension);
+      const formatMime = target.kind === "file" ? confirmedFormatMime(target.variant.metadata) : undefined;
+      const suffixes = extensionsFor(formatMime || "");
+      const filename = filenameFor(snapshot, suffixes.length && !suffixes.includes(extension) ? suffixes[0] : extension);
       videoStore.updateDownload(id, { filename });
       if (target.kind === "file") {
         sourceContexts.set(id, {
@@ -864,6 +865,7 @@ export function useMediaDownload({
           variantId: target.variant.id,
           selectionKey: snapshot.selectionKey,
           sources: delivery.kind === "file" ? delivery.sources : [],
+          formatMime,
         });
         videoStore.updateDownload(id, { url: target.url });
         void downloadFile(target.url, filename, id, controller, startedAt);
