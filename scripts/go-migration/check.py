@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 from public_projection import DOUYIN, INTEGERS, case_index, read_json, same_json, verify_exports
+from xhs_transport import verify_transport
 
 ROOT = Path(__file__).resolve().parents[2]
 BILIBILI = ROOT / "backend/internal/platform/bilibili/testdata/php-baseline.json"
@@ -108,10 +109,12 @@ def main():
         integer_outputs = temp / "actual-go-integers.json"
         php25_outputs = temp / "actual-go-php25.json"
         bilibili_outputs = temp / "actual-go-bilibili.json"
+        xhs_transport_outputs = temp / "actual-go-xhs-transport.json"
         platform_outputs = {name: temp / f"actual-go-{name}.json" for name in PLATFORM_ORACLES}
         environment = dict(os.environ, DOKITOOL_GO_BASELINE_OUTPUT=str(outputs), DOKITOOL_GO_DOUYIN_OUTPUT=str(douyin_outputs),
                            DOKITOOL_GO_INTEGER_OUTPUT=str(integer_outputs), DOKITOOL_GO_PHP25_OUTPUT=str(php25_outputs),
-                           DOKITOOL_GO_BILIBILI_OUTPUT=str(bilibili_outputs))
+                           DOKITOOL_GO_BILIBILI_OUTPUT=str(bilibili_outputs),
+                           DOKITOOL_GO_XHS_TRANSPORT_OUTPUT=str(xhs_transport_outputs))
         environment.update({f"DOKITOOL_GO_{name.upper()}_OUTPUT": str(path) for name, path in platform_outputs.items()})
         command = [args.go, "test", "-json", "-count=1"]
         if args.race:
@@ -152,6 +155,13 @@ def main():
             if len(exported["cases"]) != platform_provenance[name]["parse_cases"]:
                 raise RuntimeError(f"Actual Go {name} provenance count mismatch")
             douyin["cases"].extend(exported["cases"])
+        # Preserve all original comparisons/outputs. Additionally validate the
+        # real TLS-backed formal HTTP exports through independent Schema/semantics.
+        transport = verify_transport(xhs_transport_outputs, PLATFORM_ORACLES["xiaohongshu"][0])
+        tls_entries = json.loads(xhs_transport_outputs.read_text(encoding="utf-8"))["responses"]
+        for entry in tls_entries:
+            actual.append(entry["payload"])
+            labels.append("chrome131/" + str((entry["fixture_id"], entry["http2"], entry["view"], entry["item_id"])))
         douyin_outputs.write_text(json.dumps(douyin, ensure_ascii=False) + "\n")
         for case in douyin["cases"]:
             actual.extend([case["normal"], case["debug"]])
@@ -180,6 +190,7 @@ def main():
             "php_toutiao_baseline": platform_provenance["toutiao"],
             "toutiao_exact_public_comparison": platform_comparisons["toutiao"],
             "intentional_public_differences": intentional_differences,
+            "xhs_page_transport": transport,
             "go": {"leaf_scenarios": leaves, "passed_test_events": len(passed), "race": args.race, "vet": True},
             "independent_responses": {"total": independent["total"], "passed": independent["passed"],
                                       "failures": [{"id": labels[entry["index"]], "reason": entry["reason"]}
@@ -194,6 +205,23 @@ def main():
                                        str(douyin_outputs), str(frontend_report)], frontend_report)
             result["frontend_go_integration"] = frontend
             result["passed"] = result["passed"] and frontend["passed"]
+            # A second unchanged frontend run substitutes actual HTTP/2 parse
+            # envelopes only after exact PHP comparison. Same case inventory;
+            # the first nine-platform run above is not replaced or skipped.
+            tls_cases = {entry["id"]: entry for entry in douyin["cases"]}
+            replaced = 0
+            for entry in tls_entries:
+                if entry["http2"] and not entry["item_id"]:
+                    tls_cases[entry["fixture_id"]][entry["view"]] = entry["payload"]
+                    replaced += 1
+            if replaced != transport["parse_envelopes_for_frontend"]:
+                raise ValueError("Missing TLS-backed frontend substitutions")
+            tls_input, tls_report = temp / "frontend-tls-input.json", temp / "frontend-tls.json"
+            tls_input.write_text(json.dumps(douyin, ensure_ascii=False) + "\n")
+            tls_frontend = reported_check([args.node, str(ROOT / "frontend/scripts/test-go-media-integration.mjs"),
+                                          str(tls_input), str(tls_report)], tls_report)
+            result["frontend_xhs_transport_integration"] = tls_frontend
+            result["passed"] = result["passed"] and tls_frontend["passed"]
         if args.report:
             args.report.parent.mkdir(parents=True, exist_ok=True)
             args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2)+"\n")

@@ -8,9 +8,11 @@
 
 [B 站实现与验收范围](bilibili.md)保留分 P、合集、单文件、分段和独立音轨的实际 PHP 行为；55 个固定 PHP 输入的 110 份 Go 公开响应已严格对拍通过。机器报告见 [bilibili-checks.json](bilibili-checks.json)，实际执行提交和 CI 链接见 [验收记录](acceptance.md)。
 
+**当前小红书专项分支**默认保留标准传输，显式启用 `serve -xhs-page-transport chrome131` 后，已在开发环境从正式 API 取得普通图集、视频、原画和 Live。原前端完整保存了一份 70,759,716 字节的 QuickTime 原画。单图保存长度不一致、MOV 落盘后缀为 `.mp4` 两项另列。构建、历史门禁和本轮证据见[专项验收](xhs-page-transport.md)与[脱敏机器报告](xhs-page-online-checks.json)。
+
 ## 当前运行方式
 
-Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**，生产代码当前只使用标准库。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
+Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**。基础解析和标准媒体传输沿用标准库；本专项另引入锁定的 `tls-client` / `fhttp` 页面传输依赖，版本及完整性以 `go.mod/go.sum` 为准。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
 
 ```sh
 cd backend
@@ -32,7 +34,7 @@ curl 'http://127.0.0.1:9082/api/platforms?schema_version=1.0'
 
 不接受公开任意 URL 代理、客户端 Cookie/传输配置或 TLS 参数。平台经 `internal/fetch.Executor` 请求上游，实际执行器统一约束目标、DNS、socket 绑定、逐跳校验、读取限额和 context。首次实现采用标准 `net/http`；替换握手/传输实现时须保留同一策略和对应测试。媒体探测及微博流式媒体各自有更严格/独立的预算，不应直接复用普通 JSON 请求预算。
 
-抖音有界 MP4 探测每次最多 1 MiB、12 个请求、6 秒，限制重定向与文件总大小，不下载整片。严格媒体请求使用标准库 HTTP/1.1 传输，并在标准解析器前观察原始头部和 trailer，防止同值重复 `Content-Length` 被合并而丢失原有拒绝证据；正文仍由 `net/http` 解码。普通页面/API 请求保留标准库 HTTP/2 协商。两条路径都将请求取消绑定到底层连接。
+抖音有界 MP4 探测每次最多 1 MiB、12 个请求、6 秒，限制重定向与文件总大小，不下载整片。严格媒体请求使用标准库 HTTP/1.1 传输，并在标准解析器前观察原始头部和 trailer，防止同值重复 `Content-Length` 被合并而丢失原有拒绝证据；正文仍由 `net/http` 解码。默认模式的普通页面/API 请求保留标准库 HTTP/2 协商；显式 Chrome131 模式只改变小红书 HTTPS 页面请求，媒体探测仍走原标准传输。所有路径都将请求取消绑定到底层连接。
 
 Go 对普通请求新增了逐跳目的域、DNS 与连接约束；Live HEAD 重定向只访问已声明媒体主机。这是已批准的出站边界收紧，与旧 PHP 接受任意重定向的行为不同，真实平台兼容性仍须在后续阶段验证。
 
@@ -100,4 +102,4 @@ Python 校验依赖仍由 `scripts/requirements-validation.txt` 声明。导出�
 
 ## 阶段顺序
 
-骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；Go 发布和目标环境切流仍另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器及小红书 4K 新传输专项保持后续范围。
+骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；Go 发布和目标环境切流仍另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器仍在范围外；小红书新增页面传输已在独立 PR #5 获得实施授权，不追溯改变原迁移排除项，真实原画的专项结果见上文，生产切流仍需独立验收。

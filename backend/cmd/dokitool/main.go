@@ -81,6 +81,7 @@ func run(args []string) error {
 	}
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	listen := flags.String("listen", "127.0.0.1:9082", "loopback verification listener; production remains PHP")
+	xhsTransport := flags.String("xhs-page-transport", "standard", "XHS HTTPS pages only: standard or chrome131 (opt-in verification)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -93,6 +94,10 @@ func run(args []string) error {
 	if err != nil || numberErr != nil || number < 1024 || number > 65535 || ip == nil || !ip.IsLoopback() {
 		return fmt.Errorf("listen must use an explicit loopback IP and port 1024–65535")
 	}
+	xhsExecutor, err := newXHSExecutor(*xhsTransport)
+	if err != nil {
+		return err
+	}
 	executor := fetch.New()
 	adapters := map[string]api.Adapter{
 		"douyin":      douyin.New(executor, probe.New(executor, douyin.AllowedMediaURL)),
@@ -103,7 +108,7 @@ func run(args []string) error {
 		"pipixia":     pipixia.New(executor),
 		"pipigx":      pipigx.New(executor),
 		"zuiyou":      zuiyou.New(executor),
-		"xiaohongshu": xiaohongshu.New(executor),
+		"xiaohongshu": xiaohongshu.New(xhsExecutor),
 	}
 	handler, err := api.New(c, adapters, time.Now, weiboplatform.PreparePublic(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
 	if err != nil {
@@ -128,6 +133,17 @@ func run(args []string) error {
 		shutdown, cancel := context.WithTimeout(context.Background(), 310*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdown)
+	}
+}
+
+func newXHSExecutor(mode string) (fetch.Executor, error) {
+	switch mode {
+	case "standard":
+		return fetch.New(), nil
+	case "chrome131":
+		return fetch.NewXiaohongshuPages(), nil
+	default:
+		return nil, fmt.Errorf("xhs-page-transport must be standard or chrome131")
 	}
 }
 
