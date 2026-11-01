@@ -240,6 +240,16 @@ func (m *MediaRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			mediaError(w, r.Method, 502, "微博视频传输未完成，请重试或重新解析")
 			return
 		}
+	} else {
+		// PHP commits media headers only once the first chunk is available.
+		// These ranges cannot carry a complete ftyp signature, but still need
+		// a byte before a successful 206 can be published. An empty/erroring
+		// upstream body must remain a 502 JSON error before media is committed.
+		prefix = make([]byte, 1)
+		if _, err := io.ReadFull(response.Body, prefix); err != nil {
+			mediaError(w, r.Method, 502, "微博视频传输未完成，请重试或重新解析")
+			return
+		}
 	}
 	if r.Method == http.MethodHead {
 		match := partialSyntax.FindStringSubmatch(headers.Get("Content-Range"))

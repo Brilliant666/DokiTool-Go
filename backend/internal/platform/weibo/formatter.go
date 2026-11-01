@@ -28,6 +28,18 @@ func legacyWeiboFormatStatus(status unified.Object) unified.Object {
 }
 
 func legacyWeiboFormatComponent(component, status unified.Object, urlKeys []string) unified.Object {
+	if failure := legacyWeiboComponentFailure(component); failure != nil {
+		return failure
+	}
+	video := unified.Map(unified.Map(component["data"])["Component_Play_Playinfo"])
+	return legacyWeiboVideoResult(video, status, urlKeys)
+}
+
+// Check the PHP business-error and component-shape branches before examining
+// source ordering. An error response can carry scalar data or excessive source
+// fields; neither may replace the platform's original failure with a parser
+// error, nor trigger optional status requests.
+func legacyWeiboComponentFailure(component unified.Object) unified.Object {
 	code, numeric := unified.Numeric(component["code"])
 	if !numeric || code != 100000 {
 		// In the original PHP this comparison uses loose numeric equality.
@@ -39,7 +51,7 @@ func legacyWeiboFormatComponent(component, status unified.Object, urlKeys []stri
 	if len(video) == 0 {
 		return weiboFormatFailure(502, "微博返回的作品数据不完整")
 	}
-	return legacyWeiboVideoResult(video, status, urlKeys)
+	return nil
 }
 
 func weiboFormatFailure(code int, message string) unified.Object {

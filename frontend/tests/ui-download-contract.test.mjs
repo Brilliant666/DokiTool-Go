@@ -1694,3 +1694,62 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
     assert.equal(resolveUrl.searchParams.get('debug'), mode === 'debug' ? '1' : null);
   });
 }
+
+// Test-only extension. The validator, selection and download composables remain
+// the existing PHP frontend product, and the envelopes come from Go's real
+// signed HTTP boundary (which is independently compared to frozen PHP).
+if (process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE) {
+  for (const scenario of ['expired-renewal', 'applied-refresh']) for (const explicit of [false, true]) {
+    test(`Go Weibo integration: ${scenario} preserves ${explicit ? 'explicit' : 'default'} signed download identity`, async t => {
+      const pair = JSON.parse(await readFile(process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE, 'utf8'));
+      const before = mediaContract.validateMediaEnvelope(pair.before);
+      const after = mediaContract.validateMediaEnvelope(pair.after);
+      const original = before.items.find(item => item.id === before.default_item_id);
+      const fresh = after.items.find(item => item.id === original.id);
+      const chosen = original.variants.find(variant => explicit ? variant.metadata?.height === 1080 : variant.id === original.default.variant_id);
+      assert.ok(chosen, 'fixture contains a complete alternate quality');
+      assert.equal(chosen.delivery.kind, 'file');
+      const source = chosen.delivery.sources[0];
+      const renewed = fresh.variants.find(variant => variant.id === chosen.id)?.delivery.sources.find(candidate => candidate.id === source.id);
+      assert.ok(renewed, 'renewal preserves the selected representation and source identity');
+      assert.notEqual(renewed.url, source.url, 'signed ticket really changes');
+      assert.equal(source.access, 'relay');
+      assert.match(renewed.url, /^\/api\/media\/weibo\?ticket=/);
+      const sourceURL = value => mediaContract.sourceUrl(value, { apiOrigin: configuration.apiConfig.baseUrl });
+      const renewedURL = sourceURL(renewed);
+      if (explicit) assert.notEqual(chosen.id, fresh.default.variant_id, 'explicit 1080p must not silently switch to server default 4K');
+      t.mock.method(Date, 'now', () => scenario === 'expired-renewal' ? Date.parse(source.expires_at) + 1000 : Date.parse(renewed.expires_at) - 1000);
+      assert.ok(Date.parse(renewed.expires_at) > Date.now());
+      const mediaFetch = globalThis.fetch, resolveRequests = [];
+      globalThis.fetch = async (url, options) => {
+        const target = new URL(url, 'https://snap.dokitool.com');
+        if (target.pathname === '/api/resolve') {
+          resolveRequests.push(target);
+          assert.equal(target.searchParams.get('item_id'), original.id);
+          assert.equal(target.searchParams.get('schema_version'), '1.0');
+          assert.equal(target.searchParams.get('url'), before.source_url);
+          assert.equal(target.searchParams.get('debug'), null);
+          return Response.json(pair.after);
+        }
+        return mediaFetch(url, options);
+      };
+      let resolver;
+      const { instance, store, selection } = harness(before, (item, signal) => resolver.resolveItem(item, signal));
+      resolver = parser.useVideoParser({ videoStore: store, locale: ref('zh-CN'), showToast() {} });
+      if (explicit) selection.choose({ variant_id: chosen.id, source_id: source.id });
+      const selectedBefore = JSON.parse(JSON.stringify(selection.currentSelection.value));
+      if (scenario === 'applied-refresh') store.replaceItem(fresh);
+      const domainBefore = JSON.stringify(store.resultData);
+      await instance.downloadMainVideo();
+      await settled(store.downloads[0]);
+      assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
+      assert.equal(resolveRequests.length, scenario === 'expired-renewal' ? 1 : 0);
+      assert.ok(fetched.length > 0 && fetched.every(url => url === renewedURL), 'every media request uses the same renewed signed source');
+      assert.deepEqual(selection.currentSelection.value, selectedBefore);
+      assert.equal(JSON.stringify(store.resultData), domainBefore, 'download renewal leaves the displayed response and explicit selection intact');
+      store.replaceItem(fresh);
+      assert.equal(selection.currentTarget.value.url, renewedURL);
+      assert.deepEqual(selection.currentSelection.value, selectedBefore);
+    });
+  }
+}

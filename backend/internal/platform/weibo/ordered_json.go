@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 )
 
 // weiboURLKeysFromRaw reads source-key order from bounded upstream JSON,
@@ -37,19 +38,28 @@ func weiboURLKeysFromRaw(raw []byte, path ...string) ([]string, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	start, err := decoder.Token()
-	if err != nil || start != json.Delim('{') {
-		return nil, fmt.Errorf("weibo urls must be a JSON object: %v", err)
+	if err != nil || (start != json.Delim('{') && start != json.Delim('[')) {
+		return nil, fmt.Errorf("weibo urls must be a JSON object or array: %v", err)
+	}
+	object := start == json.Delim('{')
+	endDelim := json.Delim(']')
+	if object {
+		endDelim = json.Delim('}')
 	}
 	keys := make([]string, 0)
 	seen := make(map[string]bool)
 	for decoder.More() {
-		token, err := decoder.Token()
-		if err != nil {
-			return nil, err
-		}
-		key, ok := token.(string)
-		if !ok {
-			return nil, fmt.Errorf("weibo JSON property key must be a string")
+		key := strconv.Itoa(len(keys))
+		if object {
+			token, err := decoder.Token()
+			if err != nil {
+				return nil, err
+			}
+			var ok bool
+			key, ok = token.(string)
+			if !ok {
+				return nil, fmt.Errorf("weibo JSON property key must be a string")
+			}
 		}
 		var ignored json.RawMessage
 		if err := decoder.Decode(&ignored); err != nil {
@@ -64,7 +74,7 @@ func weiboURLKeysFromRaw(raw []byte, path ...string) ([]string, error) {
 		}
 	}
 	end, err := decoder.Token()
-	if err != nil || end != json.Delim('}') {
+	if err != nil || end != endDelim {
 		return nil, fmt.Errorf("unterminated weibo URL object: %v", err)
 	}
 	var trailing any
@@ -84,13 +94,21 @@ func weiboRawObject(raw json.RawMessage) (map[string]json.RawMessage, bool, erro
 		if err := json.Unmarshal(value, &list); err != nil {
 			return nil, false, err
 		}
-		if len(list) == 0 {
-			return nil, true, nil
+		object := make(map[string]json.RawMessage, len(list))
+		for index, child := range list {
+			object[strconv.Itoa(index)] = child
 		}
-		return nil, false, fmt.Errorf("nonempty array cannot replace ordered weibo object")
+		return object, len(list) == 0, nil
 	}
 	if value[0] != '{' {
-		return nil, false, fmt.Errorf("weibo JSON must be an object")
+		// Valid scalar/missing fields carry no source keys in PHP. They are
+		// interpreted by the formatter's business-error/media checks; only
+		// malformed JSON is an extraction error.
+		var scalar json.RawMessage
+		if err := json.Unmarshal(value, &scalar); err != nil {
+			return nil, false, err
+		}
+		return nil, true, nil
 	}
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(value, &object); err != nil {

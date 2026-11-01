@@ -2,6 +2,7 @@ package weibo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -28,10 +29,10 @@ func (p *Parser) Parse(parent context.Context, input string, now int64) (unified
 	}
 	ctx, cancel := context.WithTimeout(parent, 35*time.Second)
 	defer cancel()
-	return parseWithSession(ctx, newNetworkGuestSession(p.executor), target, input, now)
+	return parseWithSession(parent, ctx, newNetworkGuestSession(p.executor), target, input, now)
 }
 
-func parseWithSession(ctx context.Context, session *guestSession, target *Target, input string, now int64) (unified.Object, error) {
+func parseWithSession(parent, ctx context.Context, session *guestSession, target *Target, input string, now int64) (unified.Object, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -39,7 +40,14 @@ func parseWithSession(ctx context.Context, session *guestSession, target *Target
 	if err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
+	// A TV component may already be playable when the optional status request
+	// exhausts the parser's own budget. PHP keeps that component. A caller's
+	// cancellation/deadline still wins, and a timed-out mandatory request must
+	// not become a success just because the optional path tolerates failures.
+	if err := parent.Err(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil && (!errors.Is(err, context.DeadlineExceeded) || !unified.Equal(legacy["code"], 200)) {
 		return nil, err
 	}
 	return adaptLegacy(legacy, input, now), nil

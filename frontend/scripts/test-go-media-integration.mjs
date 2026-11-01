@@ -17,7 +17,9 @@ const php = JSON.parse(await readFile(new URL("../../backend/testdata/php-douyin
 const integerPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/douyin/testdata/php-integer-boundaries.json", import.meta.url), "utf8"));
 const currentPhp = JSON.parse(await readFile(new URL("../../backend/testdata/php-25beaee/cases.json", import.meta.url), "utf8"));
 const bilibiliPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/bilibili/testdata/php-baseline.json", import.meta.url), "utf8"));
-const phpCases = new Map([...php.cases, ...integerPhp.cases, ...currentPhp.cases, ...bilibiliPhp.cases].map(entry => [entry.id, entry.expected]));
+const weiboPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/weibo/testdata/php-signed-baseline.json", import.meta.url), "utf8"));
+const toutiaoPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/toutiao/testdata/php-baseline.json", import.meta.url), "utf8"));
+const phpCases = new Map([...php.cases, ...integerPhp.cases, ...currentPhp.cases, ...bilibiliPhp.cases, ...weiboPhp.cases, ...toutiaoPhp.cases].map(entry => [entry.id, entry.expected]));
 let accepted = 0, rejected = 0;
 const failures = [];
 const vite = await createServer({
@@ -61,25 +63,32 @@ try {
     return cases.get(id).normal;
   };
   const path = join(temporary, "renewal.json");
+  const weiboPath = join(temporary, "weibo-renewal.json");
+  await writeFile(weiboPath, JSON.stringify({
+    before: before("weibo/renewal/before/parse"), after: before("weibo/renewal/after/resolve"),
+  }));
   await writeFile(path, JSON.stringify({
     before: before("renewal/play/before"), after: before("renewal/play/after"),
     cases: { cdn: { before: before("renewal/cdn/before"), after: before("renewal/cdn/after") } },
   }));
   const result = spawnSync(process.execPath, [
     "--test", "--test-reporter=tap", "--test-concurrency=1",
-    "--test-name-pattern=^PR8 integration: actual (play-endpoint|cdn) adapter renewal preserves",
+    "--test-name-pattern=^(PR8 integration: actual (play-endpoint|cdn) adapter renewal preserves|Go Weibo integration:)",
     "tests/ui-download-contract.test.mjs",
   ], {
     cwd: root, encoding: "utf8", maxBuffer: 8 * 1024 * 1024,
-    env: { ...process.env, DOKITOOL_MEDIA_INTEGRATION: "1", DOKITOOL_RENEWAL_FIXTURE: path },
+    env: { ...process.env, DOKITOOL_MEDIA_INTEGRATION: "1", DOKITOOL_RENEWAL_FIXTURE: path, DOKITOOL_WEIBO_RENEWAL_FIXTURE: weiboPath },
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Existing frontend renewal regressions failed\n${result.stdout}\n${result.stderr}`);
   const passes = [...result.stdout.matchAll(/^ok \d+ - PR8 integration: actual (?:play-endpoint|cdn) adapter renewal preserves (?:explicit|default) download identity\s*$/gm)];
   assert.equal(passes.length, 4, "All four existing renewal tests must execute and pass");
+  const weiboPasses = [...result.stdout.matchAll(/^ok \d+ - Go Weibo integration: (?:expired-renewal|applied-refresh) preserves (?:explicit|default) signed download identity\s*$/gm)];
+  assert.equal(weiboPasses.length, 4, "All four signed Weibo selection/renewal tests must execute and pass");
   const outcome = {
     passed: failures.length === 0, responses: accepted + rejected + failures.length, valid_successes: accepted,
     expected_errors: rejected, unchanged_renewal_tests: passes.length,
+    weibo_signed_renewal_tests: weiboPasses.length,
     rejected_successes: failures.length, failures,
     evidence: "Actual Go envelopes consumed by unchanged frontend validator, selection and download composables; mocked transfer bytes, no browser/file-save claim",
   };

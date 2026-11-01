@@ -101,9 +101,9 @@ func TestWeiboURLKeysFromRawDocument(t *testing.T) {
 	if err != nil || len(keys) != 2 || keys[0] != "SD" || keys[1] != "HD" {
 		t.Fatalf("PHP source insertion order lost on duplicate keys: keys=%#v err=%v", keys, err)
 	}
-	for _, raw := range [][]byte{[]byte("{"), []byte("{\"urls\":[\"one\"]}"), []byte("{\"urls\":true}")} {
+	for _, raw := range [][]byte{[]byte("{"), []byte("{\"urls\":[\"one\"}"), []byte("{\"urls\":true} trailing")} {
 		if _, err := weiboURLKeysFromRaw(raw, "urls"); err == nil {
-			t.Fatalf("malformed or unsupported ordered source must fail: %s", raw)
+			t.Fatalf("malformed ordered source must fail: %s", raw)
 		}
 	}
 }

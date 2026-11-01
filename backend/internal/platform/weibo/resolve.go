@@ -39,12 +39,15 @@ func (s *guestSession) resolveLegacy(ctx context.Context, target *Target) (unifi
 	if failure := unified.Map(component["failure"]); failure != nil {
 		return failure, nil
 	}
+	body := unified.Map(component["json"])
+	if failure := legacyWeiboComponentFailure(body); failure != nil {
+		return failure, nil
+	}
 	rawComponent := s.lastRawJSON
 	keys, err := weiboURLKeysFromRaw([]byte(rawComponent), "data", "Component_Play_Playinfo", "urls")
 	if err != nil {
 		return nil, fmt.Errorf("invalid ordered Weibo TV source: %w", err)
 	}
-	body := unified.Map(component["json"])
 	result := legacyWeiboFormatComponent(body, nil, keys)
 	if !unified.Equal(result["code"], 200) {
 		return result, nil

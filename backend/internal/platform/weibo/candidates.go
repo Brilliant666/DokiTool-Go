@@ -32,10 +32,10 @@ func legacyWeiboCount(input any) (int64, bool) {
 	if !valid || number < 0 || math.IsNaN(number) || math.IsInf(number, 0) {
 		return 0, false
 	}
-	if number >= math.MaxInt64 {
-		return math.MaxInt64, true
-	}
-	return int64(number), true
+	// PHP checks the floating-point value, but casts the original input. Going
+	// through number here would round exact integer tokens/strings above 2^53
+	// and erase the distinct overflow rules for strings and actual floats.
+	return unified.PHPInt(input)
 }
 
 func legacyMediaURL(input any) string {
@@ -156,6 +156,15 @@ func legacyWeiboCandidates(videoInfo, status unified.Object, urlKeys []string) [
 		add(legacyWeiboCandidate(info["url"], unified.Str(label), info), true)
 	}
 	urls := unified.Map(videoInfo["urls"])
+	// PHP json_decode(..., true) treats a JSON list as an array too; foreach
+	// supplies its decimal index as the label. Preserve that candidate source
+	// form instead of silently dropping it at the Go object boundary.
+	if list := unified.Slice(videoInfo["urls"]); list != nil {
+		urls = make(unified.Object, len(list))
+		for index, value := range list {
+			urls[strconv.Itoa(index)] = value
+		}
+	}
 	for _, key := range urlKeys {
 		add(legacyWeiboCandidate(urls[key], key, nil), false)
 	}

@@ -173,7 +173,7 @@ jobs:
           cp "$RUNNER_TEMP/weibo-public-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-public-baseline.json"
           cmp backend/internal/platform/weibo/testdata/php-public-baseline.json "$RUNNER_TEMP/weibo-public-baseline.json"
 
-      - name: Bootstrap independent signed Weibo and Toutiao PHP oracles
+      - name: Reproduce frozen signed Weibo and Toutiao PHP oracles
         run: |
           export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
           export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
@@ -181,17 +181,16 @@ jobs:
           python3 -B scripts/go-migration/produce-weibo-signed.py --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/weibo-signed-php"
           python3 -B scripts/go-migration/produce-toutiao.py --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/toutiao-php"
           python3 -B scripts/go-migration/verify-toutiao.py --directory "$RUNNER_TEMP/toutiao-php" --check-git-source
+          python3 -B scripts/go-migration/verify-weibo-signed.py --directory "$RUNNER_TEMP/weibo-signed-php" --check-git-source
+          cmp backend/internal/platform/weibo/testdata/php-signed-baseline.json "$RUNNER_TEMP/weibo-signed-php/php-signed-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/signed-manifest.json "$RUNNER_TEMP/weibo-signed-php/signed-manifest.json"
+          cmp backend/internal/platform/toutiao/testdata/php-baseline.json "$RUNNER_TEMP/toutiao-php/php-baseline.json"
+          cmp backend/internal/platform/toutiao/testdata/manifest.json "$RUNNER_TEMP/toutiao-php/manifest.json"
           "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-count-boundaries.php > "$RUNNER_TEMP/weibo-count-boundaries.json"
-          "$RUNNER_TEMP/dokitool-fixed-php" -r 'echo "BASE64_BOUNDARY=", json_encode(["vt" => base64_decode("aHR0cHM6Ly9leGFtcGxlLmNvbS94Lm1wNA==" . chr(11), true), "ff" => base64_decode("aHR0cHM6Ly9leGFtcGxlLmNvbS94Lm1wNA==" . chr(12), true)]), "\n";'
-          python3 - <<'PY'
-          import base64,gzip,hashlib,json,os,pathlib
-          root=pathlib.Path(os.environ['RUNNER_TEMP'])
-          payload={group:{p.name:p.read_text() for p in sorted((root/group).glob('*.json'))} for group in ('weibo-signed-php','toutiao-php')}
-          payload['weibo-count-php']={'php-count-boundaries.json':(root/'weibo-count-boundaries.json').read_text()}
-          raw=json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode()
-          print('MIGRATION_ORACLE_SHA256='+hashlib.sha256(raw).hexdigest())
-          print('MIGRATION_ORACLE_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
-          PY
+          cmp backend/internal/platform/weibo/testdata/php-count-boundaries.json "$RUNNER_TEMP/weibo-count-boundaries.json"
+          "$RUNNER_TEMP/dokitool-fixed-php" -r 'foreach ([chr(11), chr(12)] as $suffix) { if (base64_decode("aHR0cHM6Ly9leGFtcGxlLmNvbS94Lm1wNA==" . $suffix, true) !== false) { exit(1); } }'
+          cp -r "$RUNNER_TEMP/weibo-signed-php" "$RUNNER_TEMP/toutiao-php" "$RUNNER_TEMP/bilibili-php/"
+          cp "$RUNNER_TEMP/weibo-count-boundaries.json" "$RUNNER_TEMP/bilibili-php/"
 
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -228,7 +227,7 @@ jobs:
 
       - name: Verify Go source formatting
         run: |
-          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/platform/weibo backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
+          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/platform/weibo backend/internal/platform/toutiao backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             # Show exact formatter repairs for review, without modifying the index.
@@ -261,6 +260,10 @@ jobs:
       - name: Verify real Weibo HTTP and PHP public parity with focused diagnostics
         working-directory: backend
         run: go test -race -count=1 -v ./internal/api ./internal/platform/weibo -run 'TestWeibo|TestFrozenPHPWeiboPublicAdapter'
+
+      - name: Verify Toutiao parser and real HTTP parity with focused diagnostics
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/api ./internal/platform/toutiao -run 'TestToutiao|TestPHPToutiao'
 
       - name: Run the complete offline migration gate
         run: |
