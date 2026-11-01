@@ -137,6 +137,9 @@ func (p *Parser) fetchDetail(ctx context.Context, id string) (object, string, er
 	if stringValue(detail["aweme_id"]) != id {
 		return nil, "详情接口返回的作品 ID 不匹配", nil
 	}
+	if err := normalizeAudioURLLists(response.Body, detail); err != nil {
+		return nil, "详情接口音轨来源格式无效", nil
+	}
 	return detail, "", nil
 }
 

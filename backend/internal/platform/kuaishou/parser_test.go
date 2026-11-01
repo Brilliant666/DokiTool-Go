@@ -61,6 +61,47 @@ func TestUntrustedEffectiveURLCannotStartPage(t *testing.T) {
 	}
 }
 
+func TestShortShareCanReachOfficialMobilePhotoPage(t *testing.T) {
+	const share = "https://v.kuaishou.com/test"
+	const page = "https://sample.m.chenzhongtech.com/fw/photo/ksExample?first=a%2Fb&first=c"
+	const html = `<script>window.INIT_STATE = {"tusjoh-a":{"photo":{"photoType":"VIDEO","mainMvUrls":[{"url":"https://media.example.test/kuaishou.mp4"}]}}};</script>`
+	calls := 0
+	parser := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+		calls++
+		if request.Method == http.MethodHead {
+			if request.URL != share || !request.Policy.AllowedURL(page) {
+				return fetch.Response{}, fetch.ErrPolicy
+			}
+			for _, unsafe := range []string{
+				"http://sample.m.chenzhongtech.com/fw/photo/id",
+				"https://sample.m.chenzhongtech.com:444/fw/photo/id",
+				"https://user@sample.m.chenzhongtech.com/fw/photo/id",
+				"https://sample.m.chenzhongtech.com.example.org/fw/photo/id",
+				"https://sample.m.chenzhongtech.com/private/path",
+				"https://sample.m.chenzhongtech.com/fw/photo/%2e%2e",
+				"https://sample.m.chenzhongtech.com/fw/photo/id#fragment",
+			} {
+				if request.Policy.AllowedURL(unsafe) {
+					t.Fatal("mobile page policy admitted a non-work destination")
+				}
+			}
+			return fetch.Response{StatusCode: 200, URL: page, History: []string{page}}, nil
+		}
+		if request.Method != http.MethodGet || request.URL != page || !request.Policy.AllowedURL(page) {
+			t.Fatal("page GET did not preserve the approved redirect and query")
+		}
+		return fetch.Response{StatusCode: 200, URL: page, Body: []byte(html)}, nil
+	}))
+	payload, err := parser.Parse(context.Background(), share, 1793361600)
+	if err != nil || payload["code"] != "OK" || calls != 2 {
+		t.Fatalf("mobile work was not parsed: calls=%d code=%v err=%v", calls, payload["code"], err)
+	}
+	payload, err = parser.Parse(context.Background(), page, 1793361600)
+	if err != nil || payload["code"] != "INVALID_INPUT" || calls != 2 {
+		t.Fatal("mobile landing page became a directly accepted input")
+	}
+}
+
 func TestParseKeepsHEADAndGETRequestBoundaries(t *testing.T) {
 	const target = "https://www.kuaishou.com/short-video/test"
 	calls := 0

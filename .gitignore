@@ -485,6 +485,7 @@
 !/backend/internal/platform/bilibili/request.go
 !/backend/internal/platform/bilibili/testdata/
 /backend/internal/platform/douyin/*
+!/backend/internal/platform/douyin/audio_urls.go
 !/backend/internal/platform/douyin/baseline_test.go
 !/backend/internal/platform/douyin/formatter.go
 !/backend/internal/platform/douyin/helpers.go

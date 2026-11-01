@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
@@ -20,7 +22,23 @@ func New(executor fetch.Executor) *Parser { return &Parser{executor: executor} }
 
 const userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1 Edg/122.0.0.0"
 
-var allowedURL = fetch.AllowHosts(".kuaishou.com")
+var allowedInput = fetch.AllowHosts(".kuaishou.com")
+var mobilePageHost = fetch.AllowHosts(".m.chenzhongtech.com")
+var mobilePhotoPath = regexp.MustCompile(`^/fw/photo/[A-Za-z0-9_-]+/?$`)
+
+// A kuaishou.com short share can lead to this mobile work page. Only the
+// redirect/GET path may use it; it is not another public parser entry.
+func allowedPageURL(raw string) bool {
+	if allowedInput(raw) {
+		return true
+	}
+	if !mobilePageHost(raw) || strings.Contains(raw, "#") {
+		return false
+	}
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https" && mobilePhotoPath.MatchString(u.EscapedPath())
+}
+
 var contentPaths = []struct {
 	kind    string
 	pattern *regexp.Regexp
@@ -46,7 +64,7 @@ func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Obje
 	if err := parent.Err(); err != nil {
 		return nil, err
 	}
-	if !allowedURL(input) {
+	if !allowedInput(input) {
 		return failure(400, "请输入对应平台的有效分享链接"), nil
 	}
 	if p == nil || p.executor == nil {
@@ -87,7 +105,7 @@ func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Obje
 }
 
 func (p *Parser) request(ctx context.Context, target, method string) (fetch.Response, error) {
-	if !allowedURL(target) {
+	if !allowedPageURL(target) {
 		return fetch.Response{}, fetch.ErrPolicy
 	}
 	headers := http.Header{"User-Agent": {userAgent}, "Accept": {"*/*"}}
@@ -111,7 +129,7 @@ func (p *Parser) request(ctx context.Context, target, method string) (fetch.Resp
 		}
 	}
 	request := fetch.Request{URL: target, Method: method, Header: headers,
-		Policy: fetch.Policy{Purpose: "kuaishou-page", AllowedURL: allowedURL, Timeout: 20 * time.Second,
+		Policy: fetch.Policy{Purpose: "kuaishou-page", AllowedURL: allowedPageURL, Timeout: 20 * time.Second,
 			MaxBytes: 8 << 20, FollowRedirects: true, AutoReferer: method == http.MethodGet, MaxRedirects: 5}}
 	if method == http.MethodHead {
 		request.Policy.Purpose = "kuaishou-share"
@@ -120,11 +138,11 @@ func (p *Parser) request(ctx context.Context, target, method string) (fetch.Resp
 	if err != nil {
 		return fetch.Response{}, err
 	}
-	if !allowedURL(result.URL) || int64(len(result.Body)) > request.Policy.MaxBytes {
+	if !allowedPageURL(result.URL) || int64(len(result.Body)) > request.Policy.MaxBytes {
 		return fetch.Response{}, fetch.ErrPolicy
 	}
 	for _, hop := range result.History {
-		if !allowedURL(hop) {
+		if !allowedPageURL(hop) {
 			return fetch.Response{}, fetch.ErrPolicy
 		}
 	}
