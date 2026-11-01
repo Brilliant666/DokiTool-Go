@@ -342,6 +342,7 @@ jobs:
             ${{ runner.temp }}/dokitool-git-replacement-probe/report.json
             ${{ runner.temp }}/dokitool-git-replacement-probe/baseline.log
             ${{ runner.temp }}/dokitool-git-replacement-probe/replacement.log
+            ${{ runner.temp }}/dokitool-git-replacement-probe/dirty-cached-index.log
           if-no-files-found: warn
           retention-days: 7
 

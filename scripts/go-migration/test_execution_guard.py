@@ -8,6 +8,8 @@ import sys
 import tempfile
 import time
 import unittest
+import threading
+from unittest import mock
 
 SCRIPT = Path(__file__).with_name("execution_guard.py")
 SPEC = importlib.util.spec_from_file_location("guard", SCRIPT)
@@ -92,6 +94,132 @@ class OwnershipTests(unittest.TestCase):
             with self.subTest(owner=owner, seconds=seconds), self.assertRaises(guard.OwnershipError):
                 guard.acquire(self.state, owner, "worktree", seconds)
         self.assertFalse((self.state / guard.LOCK).exists())
+
+
+    def test_duplicate_release_preserves_successor(self):
+        first = self.claim()
+        entered, resume = threading.Event(), threading.Event()
+        original = guard.owned
+        result = {}
+        def delayed(*args, **kwargs):
+            record = original(*args, **kwargs)
+            if threading.current_thread().name == "late-release":
+                entered.set()
+                if not resume.wait(10):
+                    raise RuntimeError("test barrier timed out")
+            return record
+        def late():
+            try:
+                result["late"] = guard.release(self.state, "first", first["nonce"], HEAD, "late")
+            except Exception as exc:
+                result["error"] = str(exc)
+        with mock.patch.object(guard, "owned", side_effect=delayed):
+            thread = threading.Thread(target=late, name="late-release"); thread.start()
+            successor = None
+            try:
+                self.assertTrue(entered.wait(5))
+                try:
+                    guard.release(self.state, "first", first["nonce"], HEAD, "duplicate")
+                    result["duplicate_accepted"] = True
+                except guard.OwnershipError:
+                    result["duplicate_accepted"] = False
+                try:
+                    successor = guard.acquire(self.state, "second", "fixture")
+                except guard.OwnershipError:
+                    pass
+            finally:
+                resume.set(); thread.join(10)
+            self.assertFalse(thread.is_alive())
+        if successor is None:
+            successor = guard.acquire(self.state, "second", "fixture")
+        self.assertEqual(guard.owned(self.state, "second", successor["nonce"]), successor)
+        self.assertFalse(result["duplicate_accepted"])
+        self.assertNotIn("error", result)
+        before = (self.state / guard.RECEIPT).read_bytes()
+        with self.assertRaises(guard.OwnershipError):
+            guard.release(self.state, "first", first["nonce"], HEAD, "stale retry")
+        self.assertEqual((self.state / guard.RECEIPT).read_bytes(), before)
+
+    def test_lifecycle_busy_refuses_mutations_without_writes(self):
+        first = self.claim()
+        gate = self.state / "dokitool-chat-execution.lifecycle.lock"; gate.mkdir()
+        before = (self.state / guard.RECEIPT).read_bytes()
+        try:
+            for operation in (lambda: guard.acquire(self.state, "second", "fixture"),
+                              lambda: guard.release(self.state, "first", first["nonce"], HEAD, "")):
+                with self.assertRaises(guard.OwnershipError):
+                    operation()
+            self.assertEqual((self.state / guard.RECEIPT).read_bytes(), before)
+            self.assertEqual(guard.owned(self.state, "first", first["nonce"]), first)
+        finally:
+            gate.rmdir()
+
+    def test_failed_release_keeps_owner_and_cleans_lifecycle(self):
+        first = self.claim()
+        with mock.patch.object(guard, "write", side_effect=OSError("synthetic write failure")):
+            with self.assertRaises(OSError):
+                guard.release(self.state, "first", first["nonce"], HEAD, "")
+        self.assertEqual(guard.owned(self.state, "first", first["nonce"]), first)
+        self.assertFalse((self.state / "dokitool-chat-execution.lifecycle.lock").exists())
+        guard.release(self.state, "first", first["nonce"], HEAD, "retry")
+
+    def test_acquire_cannot_enter_before_release_cleanup_finishes(self):
+        first = self.claim(); original = Path.rmdir; results = []
+        def after_remove(path):
+            value = original(path)
+            if path == self.state / guard.LOCK:
+                try:
+                    results.append(guard.acquire(self.state, "second", "fixture"))
+                except guard.OwnershipError:
+                    results.append("refused")
+            return value
+        with mock.patch.object(Path, "rmdir", after_remove):
+            guard.release(self.state, "first", first["nonce"], HEAD, "")
+        self.assertEqual(results, ["refused"])
+        second = guard.acquire(self.state, "second", "fixture")
+        self.assertEqual(guard.owned(self.state, "second", second["nonce"]), second)
+
+
+    def test_duplicate_release_across_real_processes(self):
+        first = self.claim()
+        child = r'''import importlib.util,pathlib,sys,time
+p,state,nonce=sys.argv[1:]; state=pathlib.Path(state)
+spec=importlib.util.spec_from_file_location("g",p); g=importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+original=g.owned
+def delayed(*args,**kwargs):
+ record=original(*args,**kwargs); (state/"release-checked").touch(); deadline=time.monotonic()+15
+ while not (state/"release-resume").exists():
+  if time.monotonic()>deadline: raise RuntimeError("barrier expired")
+  time.sleep(0.01)
+ return record
+g.owned=delayed
+g.release(state,"first",nonce,"a"*40,"child release")
+'''
+        process = subprocess.Popen([sys.executable, "-c", child, str(SCRIPT), str(self.state), first["nonce"]],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            deadline = time.monotonic() + 10
+            while not (self.state / "release-checked").exists():
+                self.assertIsNone(process.poll())
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.01)
+            for args in (["release", "--owner", "first", "--nonce", first["nonce"], "--head", HEAD],
+                         ["acquire", "--owner", "second", "--worktree", "fixture"]):
+                result = subprocess.run([sys.executable, str(SCRIPT), *args, "--state-dir", str(self.state)],
+                                        capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn(b"lifecycle", result.stdout)
+        finally:
+            (self.state / "release-resume").touch()
+            try:
+                out, err = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.communicate(timeout=5); raise
+        self.assertEqual(process.returncode, 0, err)
+        second = guard.acquire(self.state, "second", "fixture")
+        with self.assertRaises(guard.OwnershipError):
+            guard.release(self.state, "first", first["nonce"], HEAD, "late retry")
+        self.assertEqual(guard.owned(self.state, "second", second["nonce"]), second)
 
     def test_simultaneous_processes_have_exactly_one_winner(self):
         child = '''import importlib.util,pathlib,sys,time,json

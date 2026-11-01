@@ -258,6 +258,52 @@ class SourceIsolationTests(unittest.TestCase):
         target, _ = self.snapshot()
         self.assertEqual((target / "backend/data.bin").read_bytes(), b"\x00\xfffixture\r\n")
 
+
+    def test_replacement_cached_index_is_not_clean(self):
+        original, replacement, _ = self.replacement_tree()
+        self.git("replace", original, replacement)
+        (self.root / "backend/data.bin").write_bytes(b"REPLACED_EMBED")
+        self.git("read-tree", "HEAD")
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertNotIn(self.git("--no-replace-objects", "rev-parse", f"{self.head}:backend/data.bin").strip(),
+                         self.git("--no-replace-objects", "ls-files", "--stage", "backend/data.bin"))
+        with self.assertRaisesRegex(preflight.PreflightError, "uncommitted"):
+            preflight.git_identity(self.root, allow_dirty=False)
+        self.assertEqual(preflight.git_identity(self.root, allow_dirty=True), (self.head, False))
+        target, _ = self.snapshot()
+        self.assertEqual((target / "backend/data.bin").read_bytes(), b"\x00\xfffixture\r\n")
+
+    def test_custom_cached_index_dirty_even_after_replacement_removed(self):
+        original, replacement, _ = self.replacement_tree(); ns = "refs/cached-index-fixture/"
+        self.git("update-ref", ns + original, replacement)
+        with mock.patch.dict(os.environ, {"GIT_REPLACE_REF_BASE": ns}):
+            os.environ.pop("GIT_NO_REPLACE_OBJECTS", None)
+            (self.root / "backend/data.bin").write_bytes(b"REPLACED_EMBED")
+            self.git("read-tree", "HEAD")
+            self.assertEqual(self.git("status", "--porcelain"), "")
+            self.git("update-ref", "-d", ns + original)
+            with self.assertRaisesRegex(preflight.PreflightError, "uncommitted"):
+                preflight.git_identity(self.root, allow_dirty=False)
+            self.assertEqual(preflight.git_identity(self.root, allow_dirty=True), (self.head, False))
+
+    def test_index_entries_checked_independently_of_status(self):
+        old_checked = preflight.checked
+        def hide_status(argv, **kwargs):
+            return "" if "status" in argv else old_checked(argv, **kwargs)
+        blob = self.git("rev-parse", f"{self.head}:backend/data.bin").strip()
+        operations = [
+            ("deletion", lambda: self.git("rm", "--cached", "backend/data.bin")),
+            ("mode", lambda: self.git("update-index", "--chmod=+x", "backend/data.bin")),
+            ("unmerged", lambda: self.git("update-index", "--index-info", input=
+                "0 " + "0" * 40 + "\tbackend/data.bin\n100644 " + blob + " 2\tbackend/data.bin\n")),
+        ]
+        for label, mutate in operations:
+            with self.subTest(kind=label):
+                self.git("read-tree", self.head); mutate()
+                with mock.patch.object(preflight, "checked", side_effect=hide_status):
+                    with self.assertRaisesRegex(preflight.PreflightError, "uncommitted"):
+                        preflight.git_identity(self.root, allow_dirty=False)
+
     def test_every_provenance_git_call_disables_replacement(self):
         real_run = subprocess.run
         with mock.patch.object(preflight.subprocess, "run", wraps=real_run) as run:

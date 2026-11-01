@@ -293,6 +293,8 @@
     "docs/go-migration/frontend-checks.json",
     "docs/go-migration/git-replacement-checks.json",
     "docs/go-migration/known-issues.md",
+    "docs/go-migration/lifecycle-index-checks.json",
+    "docs/go-migration/lifecycle-index-hardening.md",
     "docs/go-migration/mapping.md",
     "docs/go-migration/nine-platform-checks.json",
     "docs/go-migration/phase2-checks.json",

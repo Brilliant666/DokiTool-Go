@@ -1,5 +1,9 @@
 # Go 迁移验收记录
 
+## 2026-11-02 JST：dot第二次复验与两项边界修复
+
+人工报告确认17ae147的原replacement来源污染已修复，但release生命周期和严格clean仍FAIL（CHAT_ACK6561169369）。本轮以共享短临界区串行化整个领取/释放，以原始HEAD树逐项对照index，保留旧失败与新反例。Windows开发互斥14/14、预检31 PASS/1 POSIX-only SKIP；完整旧Head探针独立严格拒绝断言失败且候选仍来自原HEAD。新Head完整CI/严格探针需另核，详细范围见 [生命周期与index](lifecycle-index-hardening.md) 和 [开发回执](lifecycle-index-checks.json)。未改产品后端、前端、PHP基线和安全停止项，不放行整体迁移。
+
 ## 2026-11-02 JST：串行交接与原子占用
 
 原小时运行已确认结束并暂时暂停新触发；两批未提交改动的 14 个文件完整保存，旧工作树不动。以新的 serial-review 工作树选择性整合 Git replacement，单独提交 d996541；回滚工具仍原样保留待审，没有混合提交。已纠正旧记录中 PID 289296 的归属：它属于其他生图项目，不是 DokiTool 写入者，未作改动。

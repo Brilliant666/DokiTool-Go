@@ -66,6 +66,38 @@ def git_command(root: Path, *arguments: str) -> list[str]:
     return ["git", "--no-replace-objects", "-C", str(root), *arguments]
 
 
+def index_matches_head(root: Path, head: str) -> bool:
+    """Compare actual stage-0 entries, without trusting index cache-tree hints.
+
+    An index populated under a replacement view can disagree with raw HEAD
+    while no-replace status still reports equality. Do not rely on that result. Read NUL-framed raw tree and index records; do not reset, refresh
+    or rewrite the caller's index. Paths remain bytes, including tabs/newlines.
+    """
+    def records(*arguments: str) -> list[bytes]:
+        result = subprocess.run(git_command(root, *arguments),
+                                stdin=subprocess.DEVNULL, capture_output=True,
+                                timeout=30, check=False)
+        if result.returncode or (result.stdout and not result.stdout.endswith(b"\0")):
+            raise PreflightError("could not compare raw HEAD and index entries")
+        return [row for row in result.stdout.split(b"\0") if row]
+
+    committed = {}
+    for row in records("ls-tree", "-r", "-z", "--full-tree", head):
+        metadata, name = row.split(b"\t", 1)
+        mode, kind, oid = metadata.split()
+        if kind not in {b"blob", b"commit"} or not name or name in committed:
+            raise PreflightError("invalid pinned source tree entry")
+        committed[name] = (mode, oid)
+    indexed = {}
+    for row in records("ls-files", "--stage", "-z"):
+        metadata, name = row.split(b"\t", 1)
+        mode, oid, stage = metadata.split()
+        if stage != b"0" or not name or name in indexed:
+            return False
+        indexed[name] = (mode, oid)
+    return indexed == committed
+
+
 def git_identity(root: Path, *, allow_dirty: bool) -> tuple[str, bool]:
     repository = Path(checked(git_command(root, "rev-parse", "--show-toplevel"))).resolve()
     if repository != root.resolve():
@@ -82,7 +114,7 @@ def git_identity(root: Path, *, allow_dirty: bool) -> tuple[str, bool]:
                     "scripts/go-migration/preflight_release.py"),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
     ).returncode == 0
-    clean = not bool(status) and registered
+    clean = not bool(status) and registered and index_matches_head(root, head)
     if not clean and not allow_dirty:
         raise PreflightError("working tree or preflight recipe is uncommitted; use --allow-dirty for development-only checks")
     return head, clean

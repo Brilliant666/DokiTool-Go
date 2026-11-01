@@ -1,5 +1,9 @@
 # Go 发布候选：完全隔离的构建与回滚前置核验
 
+## 最新补强：严格clean不再仅依赖status
+
+第二份dot报告确认17ae147的候选来源已修复，但replacement视图曾写入index后，status即使禁replacement也可能为空，clean仍会误判。新版直接比较原始HEAD树与index的全部路径/mode/对象ID/stage，保留工作区检查及dirty开发标记；不重写实际index。候选原本仍来自HEAD，不混淆这两种结论。新增严格完整clone探针要求dirty-cached-index退出1且无候选/manifest，具体反例和边界见 [生命周期与index修复](lifecycle-index-hardening.md)。
+
 ## 2026-11-01 UTC / 11-02 JST：dot 反例与 Git replacement 修复
 
 维护者人工转交 dot 对 `b44a21a890b6f634ba3e35c6e9625508a6c3a063` 的独立报告，ZIP SHA-256 `4b7d5739e6600bbd389f6338f0dbf399cd5d3c18c2067cd7172de503bbdd8bcc`，18 份载荷摘要全部核验；接收评论 `6560540222` 是 CHAT_ACK，不是新派单。该报告证明 **b44a21a 的来源完整性仍不通过**，同时独立确认 Linux 0755 与落盘 CLI 执行通过；dot 本轮没有执行 Windows、平台或浏览器测试。不能再用下方历史 CI/开发记录将 b44a21a 的来源完整性标为通过。

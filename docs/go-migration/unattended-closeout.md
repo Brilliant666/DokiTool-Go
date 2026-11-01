@@ -1,5 +1,9 @@
 # 无人值守接续：Go 迁移收尾
 
+## 最新接续：第二份dot报告与生命周期/index修复
+
+已人工接收17ae147报告，CHAT_ACK6561169369；原replacement污染候选PASS_CONTROLLED，迟到release和clean误判FAIL，不能用旧全绿关闭新增缺陷。本轮在serial-review修复并验证，最终Head/CI/CHAT_READY以PR最新记录为准。所有领取和释放必须使用新版execution_guard的共享lifecycle短临界区，两个锁目录已存在或异常遗留都不能自动抢占；旧版本客户端必须退出。预检增加原始HEAD/index完整条目对照，严格完整探针新增dirty-cached-index应拒绝场景。详见 [修复与证据边界](lifecycle-index-hardening.md)。不重做原replacement修复；父variant、真实平台、回滚及原安全停止事项不变。
+
 ## 当前接续入口：串行集成（2026-11-02 JST）
 
 两条旧执行均已结束，用户已批准串行交接；旧混合工作树 `.local/identity-refresh-fix/review` 逐文件保存、保持原样，不再作为新写入入口。当前工作树为 `.local/identity-refresh-fix/serial-review`，本地分支 `chat/serial-closeout-20261101`，正常快进推送到同一 PR #8 的远端 `codex/identity-refresh-fix`。不得 reset 旧工作树或将它的混合改动直接提交。

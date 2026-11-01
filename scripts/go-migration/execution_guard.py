@@ -9,6 +9,7 @@ terminal run, process/worktree attribution and preservation of the old receipt.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -16,6 +17,7 @@ from pathlib import Path
 import uuid
 
 LOCK = "dokitool-chat-execution.lock"
+LIFECYCLE = "dokitool-chat-execution.lifecycle.lock"
 RECEIPT = "dokitool-chat-execution.json"
 
 
@@ -50,7 +52,34 @@ def write(path: Path, value: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
+@contextmanager
+def lifecycle(state: Path):
+    """Serialize whole ownership transitions, not just their initial checks.
+
+    Busy callers fail closed; no waiting, stealing or deleting a stale gate.
+    A crash can leave this short-lived gate and requires reviewed recovery.
+    All mutating clients must use this version; old clients are not fenced.
+    """
+    state.mkdir(parents=True, exist_ok=True)
+    gate = state / LIFECYCLE
+    try:
+        gate.mkdir()
+    except FileExistsError as exc:
+        raise OwnershipError("ownership lifecycle is busy or stale; no state change permitted") from exc
+    try:
+        yield
+    finally:
+        # Only the invocation whose mkdir succeeded reaches this cleanup.
+        # Another cooperative acquire/release cannot enter before it finishes.
+        gate.rmdir()
+
+
 def acquire(state: Path, owner: str, worktree: str, seconds: int = 3600) -> dict:
+    with lifecycle(state):
+        return _acquire_locked(state, owner, worktree, seconds)
+
+
+def _acquire_locked(state: Path, owner: str, worktree: str, seconds: int = 3600) -> dict:
     if not owner.strip() or not worktree.strip() or not 60 <= seconds <= 14400:
         raise OwnershipError("owner/worktree required; lease must be 60..14400 seconds")
     state.mkdir(parents=True, exist_ok=True)
@@ -99,6 +128,11 @@ def owned(state: Path, owner: str, nonce: str, *, unexpired: bool = True) -> dic
 
 
 def release(state: Path, owner: str, nonce: str, head: str, next_work: str) -> dict:
+    with lifecycle(state):
+        return _release_locked(state, owner, nonce, head, next_work)
+
+
+def _release_locked(state: Path, owner: str, nonce: str, head: str, next_work: str) -> dict:
     record = owned(state, owner, nonce, unexpired=False)
     if len(head) != 40 or any(c not in "0123456789abcdef" for c in head):
         raise OwnershipError("release requires the actual full Git SHA")

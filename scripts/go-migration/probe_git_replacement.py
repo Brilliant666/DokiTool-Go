@@ -114,6 +114,30 @@ def main() -> int:
               and replacement["catalog_exit"] == baseline["catalog_exit"] == 0
               and not replacement["catalog_contains_marker"]
               and not baseline["catalog_contains_marker"])
+    source_passed = passed
+    dirty = None
+    index_rejected = None
+    if not args.recipe:
+        # Exact dot scenario: populate the clone index through the replacement
+        # view, then present matching changed worktree bytes. Raw status can
+        # incorrectly stay clean despite different explicit object entries.
+        git(clone, "read-tree", "HEAD", raw=False)
+        (clone / path).write_bytes(changed)
+        index = git(clone, "ls-files", "--stage", "-z", "--", path)
+        expected = b"100644 " + new_blob + b" 0\t" + path.encode() + b"\0"
+        if index != expected or git(clone, "show", f"{head}:{path}") != original:
+            raise RuntimeError("dirty-index experiment prerequisites failed")
+        dirty = run("dirty-cached-index")
+        dirty["raw_status_empty"] = not bool(git(clone, "status", "--porcelain"))
+        dirty["head_blob"] = original_blob.decode("ascii")
+        dirty["index_blob"] = new_blob.decode("ascii")
+        dirty["expected_exit"] = 1
+        index_rejected = (dirty["exit_code"] == 1
+                          and b"uncommitted" in (output / "dirty-cached-index.log").read_bytes()
+                          and not (output / "dirty-cached-index" / "preflight-manifest.json").exists()
+                          and not (output / "dirty-cached-index" / native_name).exists())
+        passed = source_passed and index_rejected
+        print("STRICT_CACHED_INDEX_REJECTED", index_rejected, flush=True)
     report = {
         "schema": "dokitool-preflight-git-replacement-probe-v1",
         "tested_source_commit": head, "recipe_override": bool(args.recipe), "recipe_sha256": recipe_hash,
@@ -122,13 +146,14 @@ def main() -> int:
         "original_tree": original_tree.decode("ascii"), "replacement_tree": replacement_tree.decode("ascii"),
         "original_embed_sha256": sha256(original), "replacement_embed_sha256": sha256(changed),
         "baseline": baseline, "replacement": replacement,
-        "source_integrity_requirement_passed": passed,
+        "source_integrity_requirement_passed": source_passed,
+        "strict_index_requirement_passed": index_rejected, "dirty_cached_index": dirty,
         "limits": ["Local clone only; no source branch/ref mutation", "No platform/browser/production validation",
                    "Recipe override is development-only, not final committed preflight" if args.recipe
                    else "Recipe and backend from the specified committed source"],
     }
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print("SOURCE_INTEGRITY_REQUIREMENT", passed, flush=True)
+    print("SOURCE_INTEGRITY_REQUIREMENT", source_passed, flush=True)
     return 0 if passed else 1
 
 
