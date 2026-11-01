@@ -23,7 +23,8 @@ func PreparePublic(key string) func(context.Context, string, unified.Object, int
 		}
 		result := unified.Clone(payload)
 		recognized := 0
-		for _, rawItem := range unified.Slice(unified.Map(result["data"])["items"]) {
+		items := unified.Slice(unified.Map(result["data"])["items"])
+		for index, rawItem := range items {
 			item := unified.Map(rawItem)
 			for _, rawVariant := range unified.Slice(item["variants"]) {
 				variant := unified.Map(rawVariant)
@@ -32,6 +33,10 @@ func PreparePublic(key string) func(context.Context, string, unified.Object, int
 				}
 				signDeliverySources(unified.Map(variant["delivery"]), key, now, &recognized)
 			}
+			// The original PHP public boundary reselects defaults after signing.
+			// Without this, the intermediate envelope references stale direct URLs
+			// and fails the unchanged HTTP gateway validation before PublicView.
+			items[index] = unified.SelectDefault(item, now)
 		}
 		if recognized == 0 {
 			return unified.ContractError("UPSTREAM_INVALID_RESPONSE", "微博暂未提供本站支持的视频源，请稍后重试", true), nil

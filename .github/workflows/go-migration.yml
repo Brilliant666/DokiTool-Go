@@ -238,6 +238,10 @@ jobs:
         working-directory: backend
         run: go test -race -count=1 -v ./internal/platform/weibo
 
+      - name: Verify real Weibo HTTP and PHP public parity with focused diagnostics
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/api ./internal/platform/weibo -run 'TestWeibo|TestFrozenPHPWeiboPublicAdapter'
+
       - name: Run the complete offline migration gate
         run: |
           "$RUNNER_TEMP/dokitool-validation/bin/python" -B -X utf8 scripts/go-migration/check.py \
