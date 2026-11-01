@@ -163,6 +163,7 @@
 !/docs/go-migration/phase2-checks.json
 !/docs/go-migration/phase3-checks.json
 !/docs/go-migration/php25-checks.json
+!/docs/go-migration/pipixia-representation-checks.json
 !/docs/go-migration/preflight-integrity-checks.json
 !/docs/go-migration/refresh-recovery-ci.json
 !/docs/go-migration/refresh-recovery-local-checks.json
@@ -210,6 +211,7 @@
 !/frontend/scripts/prerender.mjs
 !/frontend/scripts/test-go-media-integration.mjs
 !/frontend/scripts/test-media-integration.mjs
+!/frontend/scripts/test-pipixia-representation.mjs
 /frontend/src/*
 !/frontend/src/App.vue
 !/frontend/src/assets/
@@ -551,6 +553,8 @@
 !/backend/internal/platform/pipixia/formatter.go
 !/backend/internal/platform/pipixia/parser.go
 !/backend/internal/platform/pipixia/php.go
+!/backend/internal/platform/pipixia/representation_identity.go
+!/backend/internal/platform/pipixia/representation_identity_test.go
 !/backend/internal/platform/pipixia/testdata/
 !/backend/internal/platform/pipixia/wire.go
 /backend/internal/platform/toutiao/*

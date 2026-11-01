@@ -313,6 +313,12 @@ jobs:
             --race --frontend --check-php-source \
             --report "$RUNNER_TEMP/dokitool-go-checks.json"
 
+      - name: Verify Pipixia representation changes through the original frontend
+        run: |
+          export DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT="$RUNNER_TEMP/pipixia-representation.json"
+          (cd backend && go test -count=1 ./internal/platform/pipixia -run TestPipixiaRepresentation)
+          node frontend/scripts/test-pipixia-representation.mjs "$DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT"
+
       - name: Build the Go executable
         working-directory: backend
         run: go build -o "$RUNNER_TEMP/dokitool-go" ./cmd/dokitool

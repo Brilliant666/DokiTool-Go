@@ -1,0 +1,118 @@
+{
+  "scope": "Pipixia same TOS object/raw-query mirror membership, not complete cross-request renewal",
+  "development_base_sha": "bf6b3623773f4da494c73a2b7e9e2a1d0625eb68",
+  "public_sample": "https://h5.pipix.com/ppx/item/7385813877985909043",
+  "new_public_page_observations": [
+    {
+      "at_utc": "2026-11-01T18:03:04.230123+00:00",
+      "status": 200,
+      "bytes": 149230,
+      "page_sha256": "8772eb9108e177eb192ae5391491e310fe16b8a4d3575864a56b162654543521",
+      "item_present": true,
+      "item_id": "7385813877985909043"
+    },
+    {
+      "at_utc": "2026-11-01T18:03:04.898218+00:00",
+      "status": 200,
+      "bytes": 149167,
+      "page_sha256": "83c201852c66733f045184b3f815eecd1a3275b1eead2b249aa955a4a1a6bbd7",
+      "item_present": true,
+      "item_id": "7385813877985909043"
+    }
+  ],
+  "observed_media": {
+    "width": 960,
+    "height": 720,
+    "codec_type": 1,
+    "hosts": [
+      "v3-cdn-tos.ppxvod.com",
+      "v26-cdn-tos.ppxvod.com"
+    ],
+    "same_tos_object_path": true,
+    "uri_equals_video_id": true,
+    "file_hash": null,
+    "changed_raw_query_keys": [
+      "ft",
+      "dy_q",
+      "l"
+    ]
+  },
+  "bounded_media_observations": [
+    {
+      "snapshot": 0,
+      "status": 206,
+      "bytes_read": 4096,
+      "content_range": "bytes 0-4095/933138",
+      "content_type": "video/mp4",
+      "prefix_sha256": "cc2483a6a8f1d2e33914176154c09ab01f20141d667fdd7691ed07e9c29edd02",
+      "ftyp": true
+    },
+    {
+      "snapshot": 1,
+      "status": 206,
+      "bytes_read": 4096,
+      "content_range": "bytes 0-4095/933138",
+      "content_type": "video/mp4",
+      "prefix_sha256": "cc2483a6a8f1d2e33914176154c09ab01f20141d667fdd7691ed07e9c29edd02",
+      "ftyp": true
+    }
+  ],
+  "media_evidence_limit": "Two 4096-byte prefixes and declared total length agree; not a full-file hash or complete download.",
+  "toutiao": {
+    "new_public_samples": [
+      "https://www.toutiao.com/video/7613611314560369152/",
+      "https://www.toutiao.com/video/7501991960077500979/"
+    ],
+    "http_status": 200,
+    "render_data_present": false,
+    "challenge_marker_present": true,
+    "page_bytes": 72914,
+    "page_sha256": "9b56a6acdcb27eb620b5ee1ad870ad67964c70131b6fc31e8bd946b39c1e309e",
+    "result": "access verification page, not parser regression or identity proof; no challenge bypass"
+  },
+  "implemented": {
+    "platform": "pipixia",
+    "identity": "Every rendition URL must agree on recognized TOS object path and the complete original query; known CDN hosts/signing path prefix are transport details.",
+    "query_removed": [],
+    "source_identity_changed": false,
+    "original_url_bytes_changed": false,
+    "fallback": "Unknown or conflicting object/query keeps original source-set behavior."
+  },
+  "development_checks": {
+    "before_exit": 1,
+    "before_failed_leaf_cases": [
+      "add-backup",
+      "remove-unselected-backup",
+      "signature-only-parent"
+    ],
+    "after_exit": 0,
+    "frontend_actual_go_resolve_and_selection": {
+      "cases": 4,
+      "passed": 4,
+      "http_transport": "substituted actual Go envelopes",
+      "media_transfer": false
+    },
+    "go_all_packages": true,
+    "go_vet": true,
+    "full_frontend": {
+      "tests": 358,
+      "pass": 358,
+      "fail": 0
+    }
+  },
+  "logs_sha256": {
+    "representation-before.log": "d513ef6f8fa1da5cbd12b55baf3ae5ace2b77df40f43b47daf7ad8a2c10294ea",
+    "representation-after.log": "2b429e97a43518d4b825eca41e07c40f9061902da842fbea931e96485d3564e4",
+    "go-all.log": "7fac0ed1a73d809efc21bbb8b0a51a8b2e6db3c5115303db295a9cf776348243",
+    "go-vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "frontend-representation.log": "f431806c5afe1fdd03830c06ebaf648be882569828980b0ea65842561485c002",
+    "frontend-all.log": "b11dccd14e24911e9444e46b02fbd5af3869b65d9e0bde9c1933e0b67815410b"
+  },
+  "remaining": [
+    "Changing ft/dy_q/l still changes the conservative parent identity; do not claim the two fresh responses have stable variant/source IDs.",
+    "Explicit source disappearance still rejects; never use a new default.",
+    "Toutiao identity unchanged; fresh public samples returned an access verification page.",
+    "No new browser save, complete media download, production deployment or rollback."
+  ],
+  "final_sha_ci": "Read the exact submitted Head and Actions; these are pre-commit development results."
+}
