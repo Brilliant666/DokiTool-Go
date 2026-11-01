@@ -1,5 +1,68 @@
 # Go 迁移验收记录
 
+## 2026-11-02 JST：皮皮虾真实跨请求 CDN 凭据刷新与显式选源
+
+公开同一作品的两次完整 933138 B MP4 获取，btag 与 ft/dy_q/l 变化但 SHA-256 完全一致。因此仅对识别出的 TOS 对象与这四个已观测传输字段实现精确身份续签；保留其他 query 原始字节、CDN host 区分与用户原先显式来源，已消失的 host 或不同文件/内容仍拒绝。受控 Go parse/resolve 均 HTTP200/OK，父 variant 与幸存 v26 来源 ID 跨请求稳定，URL 实际刷新；Go 全包、vet、前端 358 项与 7 组实际 Go 输出选源消费通过。同一来源确实消失时不借新 default。只为单一样本提供实际全文件相同性证据，不扩展为所有上游参数语义或生产/浏览器交付完成。详情见 [精简验证记录](pipixia-transport-renewal-checks.json)。
+
+
+## 2026-11-02 JST：回到产品主线——皮皮虾同文件备源变化
+
+本轮不扩展锁、来源预检或发布审计工具。新增皮皮虾局部产品修复：同一上游版本的所有已识别 ppxvod/TOS 地址，只有对象路径和**完整原始 query** 一致时，使用共同对象作为父版本身份；备源增删、重排及签名前缀变化不再令父 ID 跟着集合变化。不同文件、不同 query、未知地址或不一致的来源仍保留原区分。URL 字节、source ID、服务端 default 算法与前端产品均不改；原显式来源消失仍失败，不借新 default。
+
+依据为本轮新取的公开皮皮虾页面两份：同一作品、相同对象键，CDN 顺序和签名前缀变化；两次有界 Range 各读4096字节，均206、总长933138、首段哈希相同。这不是完整文件哈希。`uri` 等于 video_id，未当作独立转码身份；`ft/dy_q/l` 的变化未擅自删除，因此**尚未解决真实刷新时全部父/source ID 漂移**。头条两个公开样本为访问验证页，本轮不绕过、不伪称获得表示证据。
+
+先红后绿：旧代码在增加备源、删除未选备源和签名前缀变化三项失败；修后新产品回归、全包Go test/vet通过。4组实际Go输出通过原前端 `resolveItem` 与选源逻辑：两组保留明确选择，两组在原来源/文件消失时拒绝，即使响应有新default。只替代HTTP响应，不冒称浏览器落盘。冻结PHP输入/期望/生产器/哈希及原10项差异未改。当前提交CI须按准确SHA核验；采集时间、哈希、开发日志及未完成项见 [简短机器回执](pipixia-representation-checks.json)。
+
+## 2026-11-02 JST：dot 对 5157fac 两项局部目标独立受控通过
+
+维护者人工转交 run `20b49cb0-d619-11f1-8350-b952c3b22b3d`，准确 tested_sha 为 `5157face5e84e095fa2c14c628f32a51e510b4df`，对应 CHAT_READY `6561334846`。上传 ZIP SHA-256 `50d02184dd515f6e4e28e923a367ab459f5f54ddb2da4eb3ac60ed263257dd53` 与13份载荷逐项核验通过；已阅读报告、脚本、日志及独立复核，CHAT_ACK `6561629992`。本次只接收证据，不重复执行 dot 同目标测试。机器摘要与原附件各载荷哈希见 [独立验收回执](dot-lifecycle-index-acceptance.json)。
+
+接受 `PASS_CONTROLLED_SCOPED`：迟到重复释放不破坏继任所有权；10个真实CLI争抢为1个退出0、9个退出2。replacement写入实验index且status为空时，严格预检退出1、不产出成功manifest；allow-dirty退出0但明确git_clean:false，266个原始blob构建的候选不含合成标记。mode、缺失路径、额外TAB/换行路径和冲突stage的负面对照均拒绝。两个局部缺陷在该SHA完成独立受控复验；没有新的确定缺陷，同SHA同目标不再派测。
+
+故障清理支持安全拒绝，不等于自动恢复：marker删除故障可留下idle回执与长期锁，新领取及再次释放都被拒绝，仍需核对归属后审查恢复。额外特殊路径的拒绝不能外推为所有已跟踪特殊路径的正向兼容。
+
+本次dot环境为Linux x86_64、Python3.12.14、Git2.52.0、Go1.27.3；Windows、完整CI、真实平台/浏览器、PHP生产及完整回滚均未执行，不能借用开发记录冒称本次dot覆盖。父variant身份及其他未完成项不关闭，安全停止边界不解除。监听保持不变，人工转交不代表自动回传已打通。当前归档变更仅为文档/脱敏回执/公开清单，不修改产品或测试。
+
+## 2026-11-02 JST：dot第二次复验与两项边界修复
+
+人工报告确认17ae147的原replacement来源污染已修复，但release生命周期和严格clean仍FAIL（CHAT_ACK6561169369）。本轮以共享短临界区串行化整个领取/释放，以原始HEAD树逐项对照index，保留旧失败与新反例。Windows开发互斥14/14、预检31 PASS/1 POSIX-only SKIP；完整旧Head探针独立严格拒绝断言失败且候选仍来自原HEAD。新Head完整CI/严格探针需另核，详细范围见 [生命周期与index](lifecycle-index-hardening.md) 和 [开发回执](lifecycle-index-checks.json)。未改产品后端、前端、PHP基线和安全停止项，不放行整体迁移。
+
+## 2026-11-02 JST：串行交接与原子占用
+
+原小时运行已确认结束并暂时暂停新触发；两批未提交改动的 14 个文件完整保存，旧工作树不动。以新的 serial-review 工作树选择性整合 Git replacement，单独提交 d996541；回滚工具仍原样保留待审，没有混合提交。已纠正旧记录中 PID 289296 的归属：它属于其他生图项目，不是 DokiTool 写入者，未作改动。
+
+新增 execution_guard.py 原子目录占用与 owner/nonce 检查，不再把先读后写 JSON 当成互斥。九项测试含六个真实进程同时竞争、只允许一个成功，Windows 和隔离 Linux 的开发运行均 9/9；原预检 Windows 28 PASS / 1 POSIX-only SKIP。来源、日志摘要和过渡失败见 [串行机器回执](serial-integration-checks.json)，使用方式见 [串行协议](serial-execution.md)。这些是开发结果，最终提交的严格 Windows 对照和 Linux 完整 CI 须另行核对。未改 backend、frontend、旧 PHP 基线或停止项目，父 variant、真实验收与完整回滚不因此关闭。
+
+## 2026-11-01 UTC / 11-02 JST：人工接收 dot 报告，关闭 Git replacement 读取路径
+
+收到并核验 dot 对 `b44a21a` 的独立报告（ZIP 与 18 项载荷哈希一致，CHAT_ACK `6560540222`）：来源完整性 FAIL，Linux 落盘执行 PASS，dot 未测 Windows。该反例推翻 b44a21a 的来源完整性放行含义，不推翻其 CI 确实成功或 Linux 权限确实修复的事实。详细根因与边界见 [发布预检](release-preflight.md)。
+
+Chat 在独立 Windows clone 实际复现旧预检误报 clean，合成嵌入资源改变最终候选。随后统一七处 Git 来源调用强制 `--no-replace-objects`，增加七项反例与完整构建对照脚本。有效修前单测为 29 项中 21 PASS、6 FAIL、1 ERROR、1 SKIP；修后为 28 PASS、1 POSIX-only SKIP。开发完整对照在 baseline/replacement 下均实际构建、执行 9 项本地 HTTP、2 项拒绝配置及发布 CLI，修后哈希一致且无替换标记；两份开发回执明确 git_clean:false，源码基线仍为 b44a21a，不冒充最终提交。
+
+原始失败、开发摘要及附件核验见 [git-replacement-checks.json](git-replacement-checks.json)。CI 增加相同完整反例及报告留存，原 Go/PHP/Schema/消费/浏览器门禁不删减；最终准确 SHA 的严格 Windows 和 Linux CI 须以实际运行结果为准。本轮未修改 backend、frontend、固定 PHP 输入/期望/生产器/哈希及停止的断言/计数维护。父 variant 身份与真实平台、完整回滚仍未关闭；保持 Draft，未合并、未部署。
+
+## 2026-11-01　接续修复：发布候选来源与落盘权限
+
+在 `ce56768` 的独立审查中复现了被忽略 Go 文件参与工作目录构建，以及 Linux copyfile 发布后执行位丢失；反例和边界见 [发布预检](release-preflight.md)。本轮将后端构建改为固定 HEAD 的逐 blob 校验快照，隔离工作区/构建覆盖参数，保留只读模块与依赖校验；发布保留 mode 并实际执行落盘后的 version/catalog。没有改后端产品身份或原 PHP 基线。
+
+新增 16 项单测，本机 22 项中 21 PASS / 1 POSIX-only SKIP；开发模式实际编译和 loopback 9 路由、2 拒绝配置、落盘 CLI 通过，266 个后端文件逐项校验，Linux 交叉产物仅 build-only。中间两次拒绝及开发 `git_clean:false` 保留于 [机器回执](preflight-integrity-checks.json)。最终干净 Head 的 CI 与本机回执需独立核对，不能用这里的开发运行替代。父 variant 身份、动态 PHP 额外入口及真实线上待验均未因此关闭。
+
+## 2026-11-01　隔离 Go 候选预检与父版本身份审查
+
+本轮未改变解析器或统一身份算法。针对头条/皮皮虾已确认的“备用来源集合影响父 variant ID”检查了两平台 formatter、FileVariants 和公开冻结输入：当前父身份由来源集合或其哈希派生；已有元数据/槽位名不足以证明存在独立、永久且能区分不同媒体编码的表示标识。因此**仍未修复，不跨 variant 猜配，不更新固定 PHP 期望**。审查和未完成反例见 [隔离发布预检](release-preflight.md)。
+
+新增仅在开发机/CI 运行的 Go 构建和本地 HTTP 预检脚本及 6 项单元测试。首轮 Windows Go 1.27.3 在旧 Head ac0d1e7 源码树上编译，并真实启动 loopback 服务：九平台目录、9 个 HTTP 路由、两个不安全启动配置的拒绝均通过；另交叉构建 Linux amd64。Windows 二进制 SHA-256 为 4fe3008f97f166c0a3b16a2225d7ccd0d114d2811083fbc6188254046829a154，Linux 交叉构建物 SHA-256 为 2f27cc77dce69fb25b25f8863e8f35ddf0219856f183d5dfd129cbd62d8f2332。Linux **仅编译、未在 Linux 运行**。脚本修正后，因新脚本尚未提交，二次运行正确标注 git_clean:false；必须提交后对最终 Head 重新执行且核验对应 CI，不能拿旧构建冒充新构建。
+
+已将此独立预检接入 offline-contract CI，保留短期脱敏 manifest；其最终执行结果必须依据实际 Actions。真实九平台回归、跨浏览器落盘、PHP→Go→PHP 回滚、生产配置及服务集成均没有因这次本机烟测而放行。未部署、未合并、未触碰公开 PHP。
+
+## 2026-11-01　PR #8 跨入口刷新恢复补强
+
+dot 对 `7a44c02` 的 27 项独立受控检查已通过接收核验（PR #8 评论 `6558863745`），不包含真实浏览器落盘或平台在线。其额外观察“刷新时再次点主下载另建旧链接失败任务”已转为本轮修复：按同页作品/版本/来源的明确 ID，在确认旧 Worker、resolve 和传输阶段共享占用检查。不同来源/版本/作品或新的解析结果不由此合并；无 ID 历史不猜测身份。
+
+新增测试先在原产品上得到 12 项中 5 项失败、7 项通过；修后扩展为 17/17，前端完整 358/358（包含该 17 项），类型/构建/SSG 4/4/预算通过。实际使用 Pinia、选择和下载协调器，仅传输与 Worker 确认使用替身；不是新一轮真实下载。准确最终 SHA 和 CI 以 PR 的本次运行记录为准，不沿用 `7a44c02` 的 CI。机器摘要见 [cross-entry-recovery-checks.json](cross-entry-recovery-checks.json)。
+
+父版本身份与备源集合耦合仍未修复，动态 PHP 额外入口的两条断言适配失败及维护停止边界仍保留。本轮恢复原小时开发任务、从当前仓库接续，状态与未完成项见 [无人值守接续](unattended-closeout.md)。未合并、未部署、不改变生产或系统网络。
+
 ## 2026-11-01　小红书 PR #5 专项复验
 
 在修后构建 `c3be6503c7ea14ce14aa1a03d317b72815e436ec` 的正式接口中，普通四图、普通视频、自带音轨的 2160×3840 原画及 6 组 Live 均取得可识别资源，parse 与所请求 item 的 resolve 通过。初测的 standard 视频只取得 720p，chrome131 同时取得原画。真实 Edge 从原前端按默认来源完整保存原画一次，70,759,716 字节，全片解码通过。四图均显示，首图保存因长度不一致失败。MOV 原画实际落盘为 `.mp4`。这项专项复验保留了下方 PR #4 当时的失败观察。详见[专项验收](xhs-page-transport.md)和[脱敏机器报告](xhs-page-online-checks.json)。

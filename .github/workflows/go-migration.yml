@@ -10,6 +10,7 @@ on:
       - codex/remaining-platforms-go-migration
       - codex/xhs-page-transport
       - codex/download-delivery-closeout
+      - codex/renewal-selection-stability
     paths:
       - backend/**
       - frontend/**
@@ -312,9 +313,53 @@ jobs:
             --race --frontend --check-php-source \
             --report "$RUNNER_TEMP/dokitool-go-checks.json"
 
+      - name: Verify Pipixia representation changes through the original frontend
+        run: |
+          export DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT="$RUNNER_TEMP/pipixia-representation.json"
+          (cd backend && go test -count=1 ./internal/platform/pipixia -run TestPipixiaRepresentation)
+          node frontend/scripts/test-pipixia-representation.mjs "$DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT"
+
       - name: Build the Go executable
         working-directory: backend
         run: go build -o "$RUNNER_TEMP/dokitool-go" ./cmd/dokitool
+
+      - name: Verify isolated Go candidate and fail-closed startup
+        run: |
+          python3 -B scripts/go-migration/test_preflight_release.py
+          python3 -B scripts/go-migration/test_execution_guard.py
+          python3 -B scripts/go-migration/preflight_release.py \
+            --go "$(command -v go)" \
+            --output-dir "$RUNNER_TEMP/dokitool-release-preflight"
+
+      - name: Prove Git replacements cannot change the candidate
+        run: |
+          python3 -B scripts/go-migration/probe_git_replacement.py \
+            --source "$GITHUB_WORKSPACE" \
+            --ref "$(git --no-replace-objects rev-parse HEAD)" \
+            --go "$(command -v go)" \
+            --output-dir "$RUNNER_TEMP/dokitool-git-replacement-probe"
+
+      - name: Retain the Git replacement counterexample report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: go-git-replacement-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/dokitool-git-replacement-probe/report.json
+            ${{ runner.temp }}/dokitool-git-replacement-probe/baseline.log
+            ${{ runner.temp }}/dokitool-git-replacement-probe/replacement.log
+            ${{ runner.temp }}/dokitool-git-replacement-probe/dirty-cached-index.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Retain the isolated Go preflight manifest
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: go-preflight-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/dokitool-release-preflight/preflight-manifest.json
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Retain the migration report
         if: always()

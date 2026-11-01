@@ -1,0 +1,176 @@
+{
+  "schema": "dokitool-preflight-integrity-development-v1",
+  "checked_at_utc": "2026-11-01T15:55:28.487251+00:00",
+  "source_base_commit": "ce56768f45c9e65cafe07c415d1de49ca6720763",
+  "scope": "Release preflight only; no platform or identity product changes",
+  "unit_tests": {
+    "total": 22,
+    "passed": 21,
+    "skipped": 1,
+    "failed": 0,
+    "skip_reason": "POSIX executable check requires Linux"
+  },
+  "commands": [
+    {
+      "name": "final-development-unit",
+      "exit_code": 0,
+      "seconds": 11.95,
+      "log_sha256": "874964f1eb013472d6791989058b148d995a9dbdc3358db0a0b538f21fe6343f"
+    },
+    {
+      "name": "final-development-preflight",
+      "exit_code": 0,
+      "seconds": 7.34,
+      "log_sha256": "98824cc61bc8d779dbcb33016c76e35a6c3d4784cef41c24c2dce47c7cf6d513"
+    }
+  ],
+  "development_manifest": {
+    "schema": "dokitool-go-offline-release-preflight-v1",
+    "checked_at_utc": "2026-11-01T15:55:27.875733+00:00",
+    "commit": "ce56768f45c9e65cafe07c415d1de49ca6720763",
+    "git_clean": false,
+    "source_provenance": {
+      "kind": "verified-git-head-snapshot",
+      "commit": "ce56768f45c9e65cafe07c415d1de49ca6720763",
+      "backend_tree": "c8563488efc17b4ccc456daff5a24ff6317d501e",
+      "verified_files": 266
+    },
+    "build_environment": {
+      "GOENV": "off",
+      "GOWORK": "off",
+      "GOFLAGS": "",
+      "GOTOOLCHAIN": "local",
+      "GO111MODULE": "on",
+      "CGO_ENABLED": "0"
+    },
+    "go_version": "go version go1.27.3 windows/amd64",
+    "native_host": {
+      "system": "Windows",
+      "machine": "AMD64"
+    },
+    "platforms": [
+      "bilibili",
+      "douyin",
+      "kuaishou",
+      "pipigx",
+      "pipixia",
+      "toutiao",
+      "weibo",
+      "xiaohongshu",
+      "zuiyou"
+    ],
+    "native_cli_version": "ce56768f45c9e65cafe07c415d1de49ca6720763",
+    "native_http": {
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/api/platforms?schema_version=1.0",
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "path": "/api/platforms",
+          "status": 409
+        },
+        {
+          "method": "GET",
+          "path": "/api/platforms?schema_version=2.0",
+          "status": 409
+        },
+        {
+          "method": "POST",
+          "path": "/api/platforms?schema_version=1.0",
+          "status": 405
+        },
+        {
+          "method": "GET",
+          "path": "/api/parse?schema_version=1.0",
+          "status": 400
+        },
+        {
+          "method": "GET",
+          "path": "/api/resolve?schema_version=1.0",
+          "status": 400
+        },
+        {
+          "method": "GET",
+          "path": "/api/douyin",
+          "status": 410
+        },
+        {
+          "method": "GET",
+          "path": "/backend/api/douyin/douyin.php",
+          "status": 404
+        },
+        {
+          "method": "GET",
+          "path": "/api/%70arse?schema_version=1.0",
+          "status": 404
+        }
+      ],
+      "loopback_only": true
+    },
+    "refused_configs": [
+      "public bind",
+      "unknown XHS mode"
+    ],
+    "artifacts": [
+      {
+        "file": "dokitool-go.exe",
+        "bytes": 21117952,
+        "sha256": "de5a3d673078f8595e22afb656af05291607dbcf9588baccd0426506df7619ce",
+        "native_smoke_tested": true
+      },
+      {
+        "file": "dokitool-go-linux-amd64",
+        "bytes": 20911693,
+        "sha256": "fbb76b3e995fcfdf1ef5cbcd03d25b2c58a8b3e3dbb4d27f0890a15b4e46e9ca",
+        "native_smoke_tested": false
+      }
+    ],
+    "production_approved": false,
+    "limits": [
+      "No real platform request, browser save, DNS check, media fetch or production traffic",
+      "No PHP or Caddy/FPM rollback rehearsal",
+      "Linux cross-build is not Linux runtime verification"
+    ],
+    "staged_native_cli_verified": true
+  },
+  "preserved_intermediate_runs": [
+    {
+      "name": "development-preflight",
+      "exit_code": 1,
+      "sha256": "93eee14acd5d9bf82ac88e236145b44ca59a20a1d13d85f6f8eaff674ff41318",
+      "tail": "PRECHECK_FAILED: archive bytes differ from the committed Git blob"
+    },
+    {
+      "name": "development-preflight-v2",
+      "exit_code": 1,
+      "sha256": "32eb5b6f8d2202a83354b72545084fe966df3e3646fefb932e65edb1e78e7ac9",
+      "tail": "PRECHECK_FAILED: staged artifact permissions do not match the tested binary"
+    },
+    {
+      "name": "development-preflight-v3",
+      "exit_code": 0,
+      "sha256": "dbab3d4635b49dcdb827606a80ab9f64eebc56a6053c5cac3a6b83bd2dd4810a",
+      "tail": "development-only success; not final committed candidate"
+    }
+  ],
+  "original_findings": {
+    "source_provenance": "Observed changed binary with same clean HEAD in isolated minimal Git/Go fixture; original product workspace unchanged",
+    "linux_permissions": "Independent Linux staging sequence changed mode 0755 to 0644; errno13; shell fixture not full product",
+    "review_comment_id": 6560148006
+  },
+  "recipe_files_sha256": {
+    "scripts/go-migration/preflight_release.py": "cd5b4950829361a4c8c5dfcc0d6abe19795db3cfcf36812aa08a19a9d820c2bf",
+    "scripts/go-migration/test_preflight_release.py": "5659ea63990649b352cb7fd9624952d6c07bf5ae8e1706ce6e1b9789d607d51c"
+  },
+  "final_ci": "Not asserted by this development receipt; verify exact final head via PR and Actions",
+  "limits": [
+    "No real platform requests or browser save",
+    "Parent variant identity unchanged",
+    "Blocked dynamic PHP assertion/count maintenance not touched",
+    "Windows cross-build is not Linux runtime evidence",
+    "No production deployment or merge"
+  ]
+}

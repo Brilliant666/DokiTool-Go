@@ -1,0 +1,67 @@
+{
+  "schema": "dokitool-serial-integration-development-v1",
+  "checked_at_utc": "2026-11-01T16:43:53.257173+00:00",
+  "tested_worktree_base_commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+  "recipe_was_uncommitted_at_test": true,
+  "replacement_commit": "d99654121ec3fe05ecd1100e745a444f2f19f4d4",
+  "windows_tests": {
+    "replacement-unit": {
+      "exit_code": 0,
+      "seconds": 15.42,
+      "log_sha256": "023c1c09163914aec280143d1b3cf9ff9ccfc688b97eca0d4a1b4b3e7fe818a2",
+      "tests_executed": 29,
+      "skipped": 1
+    },
+    "guard-unit": {
+      "exit_code": 0,
+      "seconds": 0.44,
+      "log_sha256": "cb3c2a3dc8fc4d88a48d8f87c1f9b55acd74755badf90553d341cba1b1cd4e86",
+      "tests_executed": 9,
+      "skipped": 0
+    }
+  },
+  "guard_source_sha256": {
+    "execution_guard.py": "584404380a908a3a872de17de76afcccc25939bea6fc6e8e7423a08572b03949",
+    "test_execution_guard.py": "80252226fc7dc20063a1efa16bb9a99e5ff8e8a5c7e674bfa4dccf9b1f25fc4c"
+  },
+  "isolated_linux_guard_tests": {
+    "executed": 9,
+    "passed": 9,
+    "same_source_hashes_verified": true,
+    "not_final_ci": true
+  },
+  "preserved_worktree_files": {
+    ".github/workflows/go-migration.yml": "dcffdb793a3e790c086a7a552a895e8fc80c281b8052abb1907cc13ed9fcaa01",
+    ".gitignore": "65f77d9adbc1a624f2145e5fd0b1e463c30e788d430cb35212d64e6586143b29",
+    "docs/go-migration/acceptance.md": "ad8ca1a76677c859f77c3bd4341acf5fb30ac1908b1300011a4dcb4d90bf9648",
+    "docs/go-migration/release-preflight.md": "3947c10ec28b764497ba35c5e36c318ad0c2ee3ebd3e37867f278390a3bd0888",
+    "docs/go-migration/unattended-closeout.md": "5f90acd29609112f45c9096188a8a1a6a3d85ba158b6f507e29574790aacaf16",
+    "public-files.json": "bbf9396e3c7216350e71dc5334565fda444cd666c97b2b6a80b4770e77172e97",
+    "scripts/go-migration/preflight_release.py": "36a501d3c53e352b9de8983c62acbd03c248c492702b2dcf4615df2d6393970a",
+    "scripts/go-migration/test_preflight_release.py": "1ed21a09383994367add1f7f186a609a245ba95cc9ec3622ba7a4b754050ccc2",
+    "docs/go-migration/git-replacement-checks.json": "5c68cfef64c41daf0357c9be33d0f29bdb01fee1a349be5b992557f922132db0",
+    "docs/go-migration/rollback-audit-checks.json": "da4a2ec92e2d51b0294add20c2321cd570c9af4c80f10b421c7c6a527ab57502",
+    "docs/go-migration/rollback-audit.md": "90611727eb5ff3de2686648af0f4e3f36117715f5bc439194596d4e62c61569d",
+    "scripts/go-migration/audit_rollback_bundle.py": "8d6a95866e5c1506b45bf767b02039082754aa476bd02651052ecaaedabfa170",
+    "scripts/go-migration/probe_git_replacement.py": "63ed8a7e17164033b821c05d8c20b7541129302b7e74dd45a4d666647615b1fe",
+    "scripts/go-migration/test_audit_rollback_bundle.py": "e42cf5b6de31bdc65fc7fe628911bba3f6037e5fe42f67dd17e962325efbdc81"
+  },
+  "serial_ownership": {
+    "mode": "exclusive-directory-create",
+    "shared_scope": "root .local across all worktrees",
+    "previous_run": "621294b1-ca18-8330-a652-cf1448a6a13e",
+    "previous_run_completed_utc": "2026-11-01T16:32:10.626809Z",
+    "auto_task_temporarily_paused": true,
+    "process_attribution_correction": "PID 289296 was an unrelated image preview, not a DokiTool writer"
+  },
+  "intermediate_failure": {
+    "kind": "PowerShell NativeCommandError on unittest stderr",
+    "classified_as": "shell-wrapper failure; actual test result remeasured with subprocess capture",
+    "not_product_test_failure": true
+  },
+  "limits": [
+    "Development evidence, not final-commit CI",
+    "Original rollback audit preserved separately and not integrated",
+    "No real platform/browser/production/roundtrip rollback approval"
+  ]
+}

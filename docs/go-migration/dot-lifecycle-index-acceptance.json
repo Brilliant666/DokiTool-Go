@@ -1,0 +1,95 @@
+{
+  "schema": "dokitool-dot-scoped-acceptance-v1",
+  "tested_sha": "5157face5e84e095fa2c14c628f32a51e510b4df",
+  "dot_run_id": "20b49cb0-d619-11f1-8350-b952c3b22b3d",
+  "handoff_comment_id": 6561334846,
+  "ack_comment_id": 6561629992,
+  "received_via": "maintainer_manual_attachment",
+  "automatic_backchannel_verified": false,
+  "result": "PASS_CONTROLLED_SCOPED",
+  "targets": [
+    "late_duplicate_release_successor_ownership",
+    "strict_original_head_index_comparison"
+  ],
+  "archive_sha256": "50d02184dd515f6e4e28e923a367ab459f5f54ddb2da4eb3ac60ed263257dd53",
+  "payloads_verified": 13,
+  "payload_sha256": {
+    "RESULT.md": "3a8eecf9909f68fa232600ac075824dd99afc8413d7f1074f22888c8bb9f0bbc",
+    "environment.json": "5abb7cdb3df3712061cde36462f8f64625fbe19538a72b24d980bc52022262fd",
+    "logs/allow-dirty-masked.log": "908091085176ac59fd7f1118a26074c32e3aab8ed1f34432b6747fb7d67e2177",
+    "logs/cleanup-fault.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "logs/cleanup-fault.log": "fea7eee2693582061a31d9540658e4e94c907b25f032977c49cbb87f39575858",
+    "logs/independent.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "logs/independent.log": "ac21ddef2e62249f3f8d598e228d943ad1e360b7bcfd368d40e9b7e22dab457d",
+    "logs/strict-masked.log": "11cdaf31fc25f1726552e5e2407c2b1f149925df001afc80dd6fafc120be3886",
+    "observations.json": "1b80da634fe02c3d02b8f43c4a46987f4c82241637aad656ee15998038fda3bc",
+    "report.json": "3d454e741c49520feb0dd8a4dd48b005cade98afb97d53b0d4eb030515a67126",
+    "scripts/cleanup_fault.py": "156ae3db62730bfd81dc111eca5abc71b77d5686280f2d6d3afc334d0cc9a497",
+    "scripts/independent.py": "9e466db3564613b6b666ee2ee116ee58a10b72374df6fa6d5e3c8ff190e3d51f",
+    "source-review.md": "53130830198999e31bfa70c582bbf67b3754fc97d449bbe4f3a007728d56868e"
+  },
+  "chat_acceptance_method": "Verified uploaded ZIP and all SHA256SUMS payloads; reviewed reports, logs, scripts and independent review; did not rerun tests",
+  "dot_environment": {
+    "os": "Linux x86_64",
+    "python": "3.12.14",
+    "git": "2.52.0",
+    "go": "1.27.3"
+  },
+  "observed_results": {
+    "late_release_successor_preserved": true,
+    "real_cli_contention": {
+      "processes": 10,
+      "exit_0": 1,
+      "exit_2": 9
+    },
+    "strict_preflight": {
+      "exit_code": 1,
+      "expected_refusal": true,
+      "success_manifest_created": false
+    },
+    "allow_dirty_preflight": {
+      "exit_code": 0,
+      "git_clean": false,
+      "original_git_blobs_verified": 266,
+      "catalog_contains_injected_marker": false,
+      "candidate_sha256": "a682253a67853d40bc70b094905a5ebf47cd290264e6ee959748d7b0403e0416"
+    },
+    "index_negative_controls": [
+      "mode_only",
+      "missing_path",
+      "extra_tab_newline_path",
+      "unmerged_stages"
+    ],
+    "independent_probe_exit_code": 0,
+    "cleanup_fault_probe_exit_code": 0,
+    "cleanup_fault_result": "PASS_FAIL_CLOSED_REQUIRES_REVIEWED_RECOVERY",
+    "automatic_crash_recovery_verified": false,
+    "new_confirmed_defects_reported": 0
+  },
+  "not_run_by_dot": [
+    "Windows",
+    "real_platforms",
+    "browser_media_delivery",
+    "full_CI",
+    "PHP_production",
+    "production_rollback",
+    "SIGKILL_recovery",
+    "noncooperative_clients"
+  ],
+  "scope_limits": [
+    "Special-character extra index path refusal is not general tracked-path compatibility proof",
+    "Ownership check is a point-in-time observation, not fencing of an entire write batch",
+    "Residual ownership or lifecycle locks require reviewed recovery; never auto-steal",
+    "Not a Git/toolchain/cache or arbitrary-host security certification"
+  ],
+  "same_target_retest_requested": false,
+  "overall_migration_approved": false,
+  "production_approved": false,
+  "remaining_work": [
+    "Toutiao/Pipixia parent variant identity",
+    "real platform and browser acceptance",
+    "preserved rollback-audit review",
+    "actual old PHP release bundle and isolated roundtrip rollback"
+  ],
+  "safety_stops_unchanged": true
+}

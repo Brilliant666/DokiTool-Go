@@ -246,6 +246,23 @@ user has manually folded it; that preference is stored locally when available.
 After all tasks end, the panel folds after five seconds without pointer hover or
 keyboard focus. Automatic folding does not overwrite the manual preference.
 
+### Explicit link refresh
+
+Owned, settled single-file failures can offer **刷新链接并重试** in the details.
+Unlike ordinary retry, this user action calls the original item's resolver once,
+even when the old URL has no expiry timestamp. It retains the pinned item,
+variant and source IDs; a missing selection fails rather than borrowing a new
+default. The existing 30-second preparation deadline, cancellation and Worker
+acknowledgement protect the old/new attempt boundary. This does not diagnose all
+403 responses as expired and never starts an automatic refresh loop.
+
+Only in-memory tasks with an identified file source and resolver are eligible.
+Restored URL-only history, archives, Live pairs, active/unknown, completed or
+cancelled tasks do not gain a guessed recovery path. Fresh source size/format
+metadata replaces the prior attempt's data; this is a fresh download, not a byte
+resume. Existing transport fallback among the same variant's sources is unchanged.
+See [implementation evidence and remaining identity limitation](go-migration/refresh-recovery.md).
+
 ## Deployment
 
 Publish the entire `frontend/dist/downloads/` directory along with its frontend build. The module Worker imports its task store, decoded-length and media-format helpers from that directory.

@@ -1,0 +1,80 @@
+{
+  "scope": "Pipixia cross-request TOS CDN credential renewal, precise surviving CDN source; no production/browser transfer",
+  "base_sha": "857ab8b8ffdb4c9c9def495ef06d73dd3870cd8f",
+  "sample_public_item": "https://h5.pipix.com/ppx/item/7385813877985909043",
+  "changed_query_keys_observed": [
+    "btag",
+    "dy_q",
+    "ft",
+    "l"
+  ],
+  "media_full_file_evidence": {
+    "same_host": "v26-cdn-tos.ppxvod.com",
+    "http_status": [
+      200,
+      200
+    ],
+    "body_bytes_each": 933138,
+    "sha256_each": "4701dce406dd2de6d7b25c7d82d1cd2f2f3fbeb173a19d7a29f343acb50242db",
+    "two_complete_mp4_equal": true,
+    "btag_differed": true,
+    "scope_limit": "Only one observed same-object pair, not a claim about all upstream encodings."
+  },
+  "identity_behavior": {
+    "only_known_tos_hosts_and_object_paths": true,
+    "ft_dy_q_l_renewal_all_three_present_unique_nonempty": true,
+    "btag_optional_validated_fourteen_hex": true,
+    "all_other_raw_query_segments_preserved": true,
+    "new_full_url_kept_unmodified": true,
+    "per_host_explicit_source_identity": true,
+    "missing_host_or_changed_object_or_unknown_query_fails_exact_selection": true,
+    "service_default_unchanged": true
+  },
+  "local_real_go_http": {
+    "parse_status": 200,
+    "resolve_status": 200,
+    "code": "OK",
+    "variant_stable": true,
+    "item_stable": true,
+    "shared_hosts": 1,
+    "mirror_results": {
+      "v26-cdn-tos.ppxvod.com": {
+        "source_id_preserved": true,
+        "url_renewed": true,
+        "changed_keys": [
+          "dy_q",
+          "ft",
+          "l"
+        ],
+        "object_path_same": true
+      }
+    },
+    "limitation": "A CDN host absent on renewed response remains unavailable to an old explicit selection"
+  },
+  "tests": {
+    "go_red_before_change": true,
+    "new_btag_red_before_fix": true,
+    "go_pipixia_focused": "PASS",
+    "actual_go_frontend_consumer": "7/7 PASS",
+    "complete_go_packages": "PASS",
+    "go_vet": "PASS",
+    "frontend_full": "358/358 PASS",
+    "frontend_typecheck": "PASS"
+  },
+  "local_logs_sha256": {
+    "btag-red.log": "4a7c6a0bf05dd172e48ef40e8dea7e024820583bdffb89a726e91da74e85cdb8",
+    "transport-go.log": "3ec9aa3db6dff1331ba410f06757e5cbf467f6c9d12df94bb9da480fd4ca4fb1",
+    "transport-frontend.log": "8b74475e88110bfa484ed311f907af9e5f1ad549427d0623847808171b91a2c1",
+    "transport-go-all.log": "1dfd355c38e55271932eee77c2eb9dddb5b9eab12e68d87fab88ecc7de0cfc6b",
+    "transport-go-vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "transport-frontend-all.log": "f5ec017cef764332133821003918a930a2107282e56d65e1e3330fa8961a0435",
+    "transport-frontend-typecheck.log": "b8797598f8c3080b9971f744f7e80aec5da8a8b09e586af09366816fb4affced"
+  },
+  "limits": [
+    "No offline PHP oracle modifications",
+    "No full browser download test",
+    "No production deployment",
+    "Mixed/unknown variants not equated by URL or resolution",
+    "Independent dot retest not yet performed"
+  ]
+}

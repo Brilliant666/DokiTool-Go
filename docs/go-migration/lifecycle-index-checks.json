@@ -1,0 +1,87 @@
+{
+  "schema": "dokitool-lifecycle-index-development-v1",
+  "checked_at_utc": "2026-11-01T17:17:07.976888+00:00",
+  "source_base_commit": "17ae147618051797a1757720fd5f6064c4575e39",
+  "scope": "Preflight clean declaration and cooperative ownership lifecycle only",
+  "dot_report": {
+    "tested_sha": "17ae147618051797a1757720fd5f6064c4575e39",
+    "run": "c33b00f0-d614-11f1-81f1-26e1b4df8de4",
+    "zip_sha256": "a9d34ac1a977dba5c38fe3a9e768f86a9ec73586347369e890c6d45d5c98c044",
+    "payloads_verified": 29,
+    "result_sha256": "55994c9e917bc1bf3b94d3dffa2f44dd0233880f62ef7c9a1825828af7c9200b",
+    "ack_comment_id": 6561169369,
+    "original_candidate_pollution": "PASS_CONTROLLED",
+    "late_release": "FAIL",
+    "strict_clean": "FAIL"
+  },
+  "before": {
+    "test_execution_guard.py": {
+      "exit_code": 1,
+      "seconds": 0.52,
+      "log_sha256": "fa82953c3d87a78c67ff881975e1bf02d30185c779914fef9da904a2c4589a72"
+    },
+    "test_preflight_release.py": {
+      "exit_code": 1,
+      "seconds": 19.45,
+      "log_sha256": "74f67e10991128673dc93d941c840ccf339447a4142a0eb2eda2bbfcfd4f4fd2"
+    }
+  },
+  "after_initial": {
+    "test_execution_guard.py": {
+      "exit_code": 0,
+      "seconds": 0.61,
+      "log_sha256": "7d60ba757b867979b39230c28b061af212cc2e4c60a2fc9fd30883d31a596bc6"
+    },
+    "test_preflight_release.py": {
+      "exit_code": 0,
+      "seconds": 21.25,
+      "log_sha256": "bb7ae6d8f511f09223f696723cb63d955e6f0a73fd548994cb84bd155dc2d0d5"
+    }
+  },
+  "expanded": {
+    "expanded-guard": {
+      "exit_code": 0,
+      "seconds": 0.91,
+      "log_sha256": "fb297d5b309b570fde0df9eece2ded826524c96446359d21bf3e608efce32aa5"
+    },
+    "old-head-full-index-probe": {
+      "exit_code": 1,
+      "seconds": 16.89,
+      "log_sha256": "0b9f9bca30ef9912b2ae19e4e3f1392e396b5ff4993b6a27075ccdd03e1c08b6"
+    }
+  },
+  "windows_development_tests": {
+    "guard": {
+      "ran": 14,
+      "passed": 14,
+      "failed": 0
+    },
+    "preflight": {
+      "ran": 32,
+      "passed": 31,
+      "skipped": 1,
+      "failed": 0,
+      "skip": "POSIX mode check requires Linux"
+    }
+  },
+  "old_full_probe": {
+    "source_commit": "17ae147618051797a1757720fd5f6064c4575e39",
+    "recipe_override": false,
+    "source_integrity_requirement_passed": true,
+    "strict_index_requirement_passed": false,
+    "raw_status_empty": true,
+    "index_blob": "726b4a8aa741630b8dc958486a096588c827b075",
+    "head_blob": "05f849862fbf1eb3940b1029a154cb0d145434d3",
+    "dirty_preflight_exit": 0,
+    "dirty_git_clean": true,
+    "candidate_equals_original": true,
+    "binary_sha256": "b799460070af160daa34625e6c6109a0865c8e92e36c3709199c32f2f4664343",
+    "report_sha256": "03e9be4d54667e1489d48ac625bae196ce68e91f4d6a51258625fd9a07ea052e"
+  },
+  "limits": [
+    "These are uncommitted development checks, not final-SHA CI or dot retest",
+    "No real platform, browser, media download, production or rollback rehearsal",
+    "Only disposable test locks and indexes were modified for counterexamples; real ownership held serially",
+    "One unavailable container DNS attempt was not a product test; no network settings changed"
+  ]
+}
