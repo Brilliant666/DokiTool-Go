@@ -1,0 +1,95 @@
+{
+  "tested_product_commit": "4ac17fffa81fb4266bd2c9f9a18635383c49afce",
+  "scope": "Explicit bounded file refresh implemented; source-set parent identity remains unresolved",
+  "workflow_run": 41310896493,
+  "workflow_url": "https://github.com/Brilliant666/DokiTool-Go/actions/runs/41310896493",
+  "jobs": [
+    {
+      "name": "bilibili-php-oracle",
+      "id": 124860839243,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "offline-contract",
+      "id": 124860839507,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "xhs-dependency-review",
+      "id": 124860839584,
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "artifact": {
+    "id": 13085406920,
+    "name": "go-migration-4ac17fffa81fb4266bd2c9f9a18635383c49afce",
+    "report_sha256": "db179285b818557e72397f91a16a7bc825a9be4b1dd298c3e78f65af501aea19",
+    "byte_identical_existing_report": "docs/go-migration/renewal-selection-checks.json",
+    "note": "New run independently executed; identical bytes are not evidence of a different runtime. Existing report has no separate counter for the four new explicit-refresh cases."
+  },
+  "ci_results": {
+    "go_leaf_scenarios": 4117,
+    "race": true,
+    "vet": true,
+    "gofmt": true,
+    "build": true,
+    "fixed_php_replay": true,
+    "independent_responses": 1230,
+    "frontend_responses_each_pass": 918,
+    "frontend_passes": 2,
+    "frontend_tests": 341,
+    "controlled_chromium_downloads": 17,
+    "private_platform_requests": false
+  },
+  "new_refresh_cases": {
+    "actual_go_local_passed": 4,
+    "ci_selection_includes_cases": true,
+    "distinct_ci_machine_counter": false,
+    "counter_edit": "blocked; stopped without bypass"
+  },
+  "topology_replication": {
+    "commit": "4ac17fffa81fb4266bd2c9f9a18635383c49afce",
+    "observation_exit_code": 0,
+    "retention_requirement_passed": false,
+    "observations": [
+      {
+        "case": "pipixia_add_backup",
+        "variant_equal": false,
+        "original_source_still_present": true
+      },
+      {
+        "case": "pipixia_backup_signature_only",
+        "variant_equal": false,
+        "original_source_still_present": true
+      },
+      {
+        "case": "pipixia_reorder",
+        "variant_equal": true,
+        "original_source_still_present": true
+      },
+      {
+        "case": "toutiao_add_backup",
+        "variant_equal": false,
+        "original_source_still_present": true
+      },
+      {
+        "case": "toutiao_backup_signature_only",
+        "variant_equal": false,
+        "original_source_still_present": true
+      },
+      {
+        "case": "toutiao_reorder",
+        "variant_equal": true,
+        "original_source_still_present": true
+      }
+    ]
+  },
+  "limits": [
+    "No real platform or original-browser online acceptance in this run",
+    "No fix for four source-set identity perturbations",
+    "Two test-maintenance edits remain paused; extra dynamic-PHP CDN fixture consumer is not yet passing; old frozen oracle unchanged"
+  ]
+}

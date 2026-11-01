@@ -158,6 +158,7 @@
 !/docs/go-migration/phase2-checks.json
 !/docs/go-migration/phase3-checks.json
 !/docs/go-migration/php25-checks.json
+!/docs/go-migration/refresh-recovery-ci.json
 !/docs/go-migration/refresh-recovery-local-checks.json
 !/docs/go-migration/refresh-recovery.md
 !/docs/go-migration/remaining-platforms-implementation.md
