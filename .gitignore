@@ -232,6 +232,7 @@
 !/scripts/go-migration/produce-toutiao.php
 !/scripts/go-migration/produce-toutiao.py
 !/scripts/go-migration/produce-weibo-candidates.php
+!/scripts/go-migration/produce-weibo-count-boundaries.php
 !/scripts/go-migration/produce-weibo-formatter.php
 !/scripts/go-migration/produce-weibo-media.php
 !/scripts/go-migration/produce-weibo-network-headers.php
@@ -547,6 +548,7 @@
 !/backend/internal/platform/toutiao/testdata/README.md
 !/backend/internal/platform/toutiao/testdata/inputs.json
 /backend/internal/platform/weibo/testdata/*
+!/backend/internal/platform/weibo/testdata/count-boundary-inputs.json
 !/backend/internal/platform/weibo/testdata/formatter-inputs.json
 !/backend/internal/platform/weibo/testdata/php-candidates-baseline.json
 !/backend/internal/platform/weibo/testdata/php-formatter-baseline.json
