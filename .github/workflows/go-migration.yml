@@ -320,6 +320,7 @@ jobs:
       - name: Verify isolated Go candidate and fail-closed startup
         run: |
           python3 -B scripts/go-migration/test_preflight_release.py
+          python3 -B scripts/go-migration/test_execution_guard.py
           python3 -B scripts/go-migration/preflight_release.py \
             --go "$(command -v go)" \
             --output-dir "$RUNNER_TEMP/dokitool-release-preflight"

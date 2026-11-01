@@ -1,5 +1,15 @@
 # 无人值守接续：Go 迁移收尾
 
+## 当前接续入口：串行集成（2026-11-02 JST）
+
+两条旧执行均已结束，用户已批准串行交接；旧混合工作树 `.local/identity-refresh-fix/review` 逐文件保存、保持原样，不再作为新写入入口。当前工作树为 `.local/identity-refresh-fix/serial-review`，本地分支 `chat/serial-closeout-20261101`，正常快进推送到同一 PR #8 的远端 `codex/identity-refresh-fix`。不得 reset 旧工作树或将它的混合改动直接提交。
+
+Git replacement 修复已单独形成 `d99654121ec3fe05ecd1100e745a444f2f19f4d4`；小时任务的回滚审查代码仍单独保留待审，未混入该提交。接续时读取实际最新 Head/CI/评论，不重做已完成修复，也不把旧 b44a21a 的全绿当来源完整性通过。
+
+本轮已暂时暂停原小时任务的新触发。以后每轮必须使用 `scripts/go-migration/execution_guard.py`，以根目录 `.local` 为共享 state-dir，原子领取目录锁；JSON 仅作回执。每批写入及提交/推送前核对 owner+nonce+期限，结束由本人 release 写准确 HEAD/下一项。锁存在、过期或旧 active 都不自动抢占。具体协议、命令和进程归属纠正见 [serial-execution.md](serial-execution.md)。本轮完成最终验证后才可恢复同一任务，不更改其他监听。
+
+原父 variant 身份、真实平台/浏览器与完整回滚仍未关闭；历史私有材料、动态 PHP 断言和独立计数维护的停止边界不变。下方旧入口及小时任务状态是历史记录，以本节及任务接口最新结果为准。
+
 ## 最新授权与入口（2026-11-01）
 
 维护者要求由项目 Chat 继续实际开发并在无人值守情况下推进，不再由维护者逐项转交开发任务。原 `DokiTool Go 全平台迁移` 小时任务已恢复并更新目标，不重做已完成的七平台迁移。当前接续 PR #8 / `codex/identity-refresh-fix`，起点 `7a44c02fdc19fa85e7b959d9146e5e9ae322b188`；使用实际最新 Head，不按旧检查点重置。

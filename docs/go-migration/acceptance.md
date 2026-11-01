@@ -1,5 +1,11 @@
 # Go 迁移验收记录
 
+## 2026-11-02 JST：串行交接与原子占用
+
+原小时运行已确认结束并暂时暂停新触发；两批未提交改动的 14 个文件完整保存，旧工作树不动。以新的 serial-review 工作树选择性整合 Git replacement，单独提交 d996541；回滚工具仍原样保留待审，没有混合提交。已纠正旧记录中 PID 289296 的归属：它属于其他生图项目，不是 DokiTool 写入者，未作改动。
+
+新增 execution_guard.py 原子目录占用与 owner/nonce 检查，不再把先读后写 JSON 当成互斥。九项测试含六个真实进程同时竞争、只允许一个成功，Windows 和隔离 Linux 的开发运行均 9/9；原预检 Windows 28 PASS / 1 POSIX-only SKIP。来源、日志摘要和过渡失败见 [串行机器回执](serial-integration-checks.json)，使用方式见 [串行协议](serial-execution.md)。这些是开发结果，最终提交的严格 Windows 对照和 Linux 完整 CI 须另行核对。未改 backend、frontend、旧 PHP 基线或停止项目，父 variant、真实验收与完整回滚不因此关闭。
+
 ## 2026-11-01 UTC / 11-02 JST：人工接收 dot 报告，关闭 Git replacement 读取路径
 
 收到并核验 dot 对 `b44a21a` 的独立报告（ZIP 与 18 项载荷哈希一致，CHAT_ACK `6560540222`）：来源完整性 FAIL，Linux 落盘执行 PASS，dot 未测 Windows。该反例推翻 b44a21a 的来源完整性放行含义，不推翻其 CI 确实成功或 Linux 权限确实修复的事实。详细根因与边界见 [发布预检](release-preflight.md)。

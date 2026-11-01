@@ -170,6 +170,8 @@
 !/docs/go-migration/renewal-selection-checks.json
 !/docs/go-migration/renewal-selection-stability.md
 !/docs/go-migration/rollback.md
+!/docs/go-migration/serial-execution.md
+!/docs/go-migration/serial-integration-checks.json
 !/docs/go-migration/takeover-toutiao-weibo-checks.json
 !/docs/go-migration/toutiao.md
 !/docs/go-migration/unattended-closeout.md
@@ -244,6 +246,7 @@
 !/ops/examples/snap.caddy
 /scripts/go-migration/*
 !/scripts/go-migration/check.py
+!/scripts/go-migration/execution_guard.py
 !/scripts/go-migration/preflight_release.py
 !/scripts/go-migration/probe_git_replacement.py
 !/scripts/go-migration/produce-bilibili.php
@@ -282,6 +285,7 @@
 !/scripts/go-migration/produce.py
 !/scripts/go-migration/public_projection.py
 !/scripts/go-migration/test-public-projection.py
+!/scripts/go-migration/test_execution_guard.py
 !/scripts/go-migration/test_preflight_release.py
 !/scripts/go-migration/verify-bilibili.py
 !/scripts/go-migration/verify-kuaishou.py
