@@ -6,6 +6,10 @@
 
 公共合同修复 PR #2 与第二个平台 B 站 PR #3 已形成可接续检查点。维护者已授权持续完成剩余七平台的实现、审查和验证，范围与进度见 [remaining-platforms.md](remaining-platforms.md)。公开开发不包含合并与生产部署授权，DASH/合流执行器和小红书 4K 新传输方案继续在本次范围之外。
 
+## 2026-11-01 独立小红书页面传输授权
+
+维护者提供 Grok bot 实测汇总后明确要求继续实施。新增专项使用 `codex/xhs-page-transport` / Draft PR #5，接续 PR #4，不改变原迁移任务的历史排除范围。只接小红书/rednote 页面传输，保留已有解析和媒体交付合同；不合并、不部署、不改公开 PHP/生产。实现、安全边界与证据限制见 [xhs-page-transport.md](xhs-page-transport.md)。
+
 ## 仓库和分支边界
 
 | 位置 | 职责 |

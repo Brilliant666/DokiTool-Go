@@ -25,6 +25,7 @@
 !/backend/config/
 !/backend/docs/
 !/backend/go.mod
+!/backend/go.sum
 !/backend/internal/
 !/backend/lib/
 !/backend/public/
@@ -164,6 +165,7 @@
 !/docs/go-migration/weibo-formatter-resolve-checks.json
 !/docs/go-migration/weibo-product-checks.json
 !/docs/go-migration/weibo.md
+!/docs/go-migration/xhs-page-transport.md
 /docs/incidents/*
 !/docs/incidents/INC-20261031-001-download-delivery.md
 /docs/research/*
@@ -274,6 +276,7 @@
 !/scripts/go-migration/verify-xiaohongshu.py
 !/scripts/go-migration/verify-zuiyou.py
 !/scripts/go-migration/verify.py
+!/scripts/go-migration/xhs_transport.py
 /scripts/tests/*
 !/scripts/tests/test_upstream_updates.py
 /backend/api/bilibili/*
@@ -290,6 +293,7 @@
 !/backend/api/xiaohongshu/xhsjx.php
 /backend/cmd/dokitool/*
 !/backend/cmd/dokitool/main.go
+!/backend/cmd/dokitool/main_test.go
 /backend/internal/api/*
 !/backend/internal/api/bilibili_test.go
 !/backend/internal/api/douyin_test.go
@@ -316,6 +320,9 @@
 !/backend/internal/fetch/redirect_body_test.go
 !/backend/internal/fetch/weibo_media.go
 !/backend/internal/fetch/weibo_media_test.go
+!/backend/internal/fetch/xhs_pages.go
+!/backend/internal/fetch/xhs_pages_test.go
+!/backend/internal/fetch/xhs_product_test.go
 /backend/internal/media/*
 !/backend/internal/media/weibo/
 /backend/internal/platform/*
