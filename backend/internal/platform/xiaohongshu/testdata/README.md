@@ -45,3 +45,17 @@ python3 -B scripts/go-migration/verify-xiaohongshu.py --check-git-source
 The workflow recreates the fixture under the pinned PHP container with networking
 disabled, compares both frozen files byte for byte, and then exercises Go and
 the original frontend validator independently.
+
+## Separate PHP output-boundary observations
+
+`php-wire-baseline.json` is a separately frozen group of 10 inputs and 20 public
+responses. The original PHP parser receives literal HTML through its supported
+page callback, then runs its real formatter, JSON flags2097472 output and shared
+adapter. It covers integral doubles, negative zero, numeric strings, large
+integers, empty image values, Live association and numeric-key image order.
+The 37 original transport/probe cases above are unchanged. Both Go outputs and
+all 20 public responses enter the full contract/frontend gate.
+
+```sh
+python3 -B scripts/go-migration/verify-xiaohongshu-wire.py --check-git-source
+```

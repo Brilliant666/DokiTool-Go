@@ -95,14 +95,14 @@ func run(args []string) error {
 	}
 	executor := fetch.New()
 	adapters := map[string]api.Adapter{
-		"douyin":   douyin.New(executor, probe.New(executor, douyin.AllowedMediaURL)),
-		"bilibili": bilibili.New(executor),
-		"weibo":    weiboplatform.New(executor),
-		"toutiao":  toutiao.New(executor),
-		"kuaishou": kuaishou.New(executor),
-		"pipixia": pipixia.New(executor),
-		"pipigx": pipigx.New(executor),
-		"zuiyou": zuiyou.New(executor),
+		"douyin":      douyin.New(executor, probe.New(executor, douyin.AllowedMediaURL)),
+		"bilibili":    bilibili.New(executor),
+		"weibo":       weiboplatform.New(executor),
+		"toutiao":     toutiao.New(executor),
+		"kuaishou":    kuaishou.New(executor),
+		"pipixia":     pipixia.New(executor),
+		"pipigx":      pipigx.New(executor),
+		"zuiyou":      zuiyou.New(executor),
 		"xiaohongshu": xiaohongshu.New(executor),
 	}
 	handler, err := api.New(c, adapters, time.Now, weiboplatform.PreparePublic(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))

@@ -48,7 +48,9 @@ func (f *pipigxHTTPFixtureTape) Do(ctx context.Context, request fetch.Request) (
 	wantHeaders["accept"] = "*/*"
 	headers := unified.Object{}
 	for key, values := range request.Header {
-        if strings.EqualFold(key,"User-Agent")&&len(values)==1&&values[0]=="" {continue}
+		if strings.EqualFold(key, "User-Agent") && len(values) == 1 && values[0] == "" {
+			continue
+		}
 		headers[strings.ToLower(key)] = strings.Join(values, ", ")
 	}
 	pipigxHTTPSameJSON(f.t, unified.Object{
@@ -79,7 +81,9 @@ func (f *pipigxHTTPFixtureTape) Do(ctx context.Context, request fetch.Request) (
 	}
 	f.next++
 	if message := unified.Str(wantResponse["error"]); message != "" {
-        if unified.Equal(wantResponse["errno"],28) {return fetch.Response{},context.DeadlineExceeded}
+		if unified.Equal(wantResponse["errno"], 28) {
+			return fetch.Response{}, context.DeadlineExceeded
+		}
 		return fetch.Response{}, errors.New(message)
 	}
 	status, ok := unified.Numeric(wantResponse["status"])
@@ -160,7 +164,7 @@ func pipigxFixtureHTTP(t *testing.T, fixture unified.Object, path string) unifie
 	t.Helper()
 	input, expected := unified.Map(fixture["input"]), unified.Map(fixture["expected"])
 	tape := &pipigxHTTPFixtureTape{t: t, responses: unified.Slice(input["http_responses"]), requests: unified.Slice(expected["http_requests"])}
-	clockCalls:=0
+	clockCalls := 0
 	now, ok := unified.Numeric(input["now"])
 	if !ok || now != 1793361600 {
 		t.Fatal("unexpected fixed public clock")
@@ -192,8 +196,8 @@ func pipigxFixtureHTTP(t *testing.T, fixture unified.Object, path string) unifie
 	return unified.Object{"status": w.Code, "payload": payload}
 }
 
-func pipigxHTTPExpected(fixture unified.Object,view string) unified.Object {
- return unified.Clone(unified.Map(unified.Map(fixture["expected"])[view]))
+func pipigxHTTPExpected(fixture unified.Object, view string) unified.Object {
+	return unified.Clone(unified.Map(unified.Map(fixture["expected"])[view]))
 }
 
 func pipigxHTTPExpectedStatus(t *testing.T, payload unified.Object) int {

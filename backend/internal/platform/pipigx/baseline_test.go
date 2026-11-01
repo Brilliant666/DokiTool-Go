@@ -49,7 +49,9 @@ func (f *oracleExecutor) Do(ctx context.Context, request fetch.Request) (fetch.R
 	}
 	headers := unified.Object{}
 	for key, values := range request.Header {
-        if strings.EqualFold(key, "User-Agent") && len(values)==1 && values[0]=="" {continue}
+		if strings.EqualFold(key, "User-Agent") && len(values) == 1 && values[0] == "" {
+			continue
+		}
 		headers[strings.ToLower(key)] = strings.Join(values, ", ")
 	}
 	f.requests = append(f.requests, unified.Object{"method": request.Method, "url": request.URL, "headers": headers,
@@ -63,7 +65,10 @@ func (f *oracleExecutor) Do(ctx context.Context, request fetch.Request) (fetch.R
 		f.t.Fatalf("request %d got %s %s; want %#v", f.position, request.Method, request.URL, want)
 	}
 	if message := unified.Str(want["error"]); message != "" {
-		if unified.Equal(want["errno"], 28) { return fetch.Response{}, context.DeadlineExceeded }; return fetch.Response{}, errors.New(message)
+		if unified.Equal(want["errno"], 28) {
+			return fetch.Response{}, context.DeadlineExceeded
+		}
+		return fetch.Response{}, errors.New(message)
 	}
 	status, _ := unified.Numeric(want["status"])
 	response := fetch.Response{StatusCode: int(status), Header: http.Header{}, Body: []byte(unified.Str(want["body"])), URL: request.URL}
@@ -211,9 +216,11 @@ func TestPHPPipigxBaseline(t *testing.T) {
 					t.Fatal(err)
 				}
 				oracleEqual(t, legacy, expected["parser_response"])
-	            wire, err := legacyWire(legacy)
-            if err != nil { t.Fatal(err) }
-			oracleEqual(t, wire, expected["legacy_response"])
+				wire, err := legacyWire(legacy)
+				if err != nil {
+					t.Fatal(err)
+				}
+				oracleEqual(t, wire, expected["legacy_response"])
 				oracleRequests(t, legacyExecutor, *legacyCalls, expected)
 			})
 		})

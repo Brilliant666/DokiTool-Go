@@ -61,8 +61,10 @@ func (f *pipixiaHTTPFixtureTape) Do(ctx context.Context, request fetch.Request) 
 	}
 	// Request authorization remains independent of the public media URLs.
 	// Share and page requests must also stay pinned to their exact target.
-    wantPurpose, wantLimit := "pipixia-share", int64(2<<20)
-    if strings.HasPrefix(request.URL,"https://h5.pipix.com/ppx/item/") { wantPurpose="pipixia-page" }
+	wantPurpose, wantLimit := "pipixia-share", int64(2<<20)
+	if strings.HasPrefix(request.URL, "https://h5.pipix.com/ppx/item/") {
+		wantPurpose = "pipixia-page"
+	}
 	policy := request.Policy
 	if policy.Purpose != wantPurpose || policy.MaxBytes != wantLimit || policy.FollowRedirects || policy.AllowedURL == nil || !policy.AllowedURL(request.URL) {
 		f.t.Fatalf("missing or violated %s request policy", wantPurpose)
@@ -77,7 +79,9 @@ func (f *pipixiaHTTPFixtureTape) Do(ctx context.Context, request fetch.Request) 
 	}
 	f.next++
 	if message := unified.Str(wantResponse["error"]); message != "" {
-        if unified.Equal(wantResponse["errno"],28) {return fetch.Response{},context.DeadlineExceeded}
+		if unified.Equal(wantResponse["errno"], 28) {
+			return fetch.Response{}, context.DeadlineExceeded
+		}
 		return fetch.Response{}, errors.New(message)
 	}
 	status, ok := unified.Numeric(wantResponse["status"])

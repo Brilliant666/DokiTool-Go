@@ -236,7 +236,7 @@ func (p *Parser) formatNote(ctx context.Context, note *jsonNode) (unified.Object
 	}
 	result := unified.Object{"type": kind, "title": first(note.field("title").val(), ""), "desc": first(note.field("desc").val(), ""),
 		"author": unified.Object{"name": first(note.field("user", "nickname").val(), note.field("user", "nickName").val(), ""), "id": first(note.field("user", "userId").val(), ""), "avatar": first(note.field("user", "avatar").val(), "")},
-		"cover": processImageURL(cover), "images": unified.Array{}, "live_photo": unified.Array{}, "video_candidates": candidates}
+		"cover":  processImageURL(cover), "images": unified.Array{}, "live_photo": unified.Array{}, "video_candidates": candidates}
 	if id := note.field("noteId").val(); id != nil {
 		result["id"] = text(id)
 	}

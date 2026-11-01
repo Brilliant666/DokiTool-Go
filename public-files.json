@@ -177,6 +177,7 @@
     "backend/internal/platform/xiaohongshu/testdata/inputs.json",
     "backend/internal/platform/xiaohongshu/testdata/manifest.json",
     "backend/internal/platform/xiaohongshu/testdata/php-baseline.json",
+    "backend/internal/platform/xiaohongshu/testdata/php-wire-baseline.json",
     "backend/internal/platform/xiaohongshu/wire.go",
     "backend/internal/platform/xiaohongshu/wire_test.go",
     "backend/internal/platform/zuiyou/baseline_test.go",

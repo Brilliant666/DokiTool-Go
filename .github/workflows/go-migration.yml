@@ -205,7 +205,7 @@ jobs:
             cp -r "$RUNNER_TEMP/$platform-php" "$RUNNER_TEMP/bilibili-php/"
           done
 
-      - name: Bootstrap independent Xiaohongshu JSON output boundary
+      - name: Reproduce independent Xiaohongshu JSON output boundary
         run: |
           export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
           export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
@@ -213,12 +213,7 @@ jobs:
           git archive 25beaee107f8c1a208ced9deb3c637068445e316 | tar -x -C "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source"
           "$RUNNER_TEMP/dokitool-fixed-php" -d 'disable_functions=time,curl_exec,curl_multi_exec,dns_get_record,fsockopen,pfsockopen,stream_socket_client' -d allow_url_fopen=0 scripts/go-migration/produce-xiaohongshu-wire.php "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source" > "$RUNNER_TEMP/php-wire-baseline.json"
           python3 -B scripts/go-migration/verify-xiaohongshu-wire.py --directory "$RUNNER_TEMP" --check-git-source
-          python3 - <<'PYWIRE'
-          import base64,gzip,hashlib,os,pathlib
-          raw=(pathlib.Path(os.environ['RUNNER_TEMP'])/'php-wire-baseline.json').read_bytes()
-          print('XHS_WIRE_ORACLE_SHA256='+hashlib.sha256(raw).hexdigest())
-          print('XHS_WIRE_ORACLE_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
-          PYWIRE
+          cmp backend/internal/platform/xiaohongshu/testdata/php-wire-baseline.json "$RUNNER_TEMP/php-wire-baseline.json"
           cp "$RUNNER_TEMP/php-wire-baseline.json" "$RUNNER_TEMP/bilibili-php/"
 
       - name: Retain the PHP oracle and provenance
@@ -259,15 +254,10 @@ jobs:
           unformatted="$(gofmt -l backend/internal/platform backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
-            # Review-only export of gofmt output; no index/worktree mutation.
-            python3 - <<'PYFORMAT'
-          import base64,gzip,hashlib,json,subprocess
-          names=subprocess.check_output(['gofmt','-l','backend/internal/platform','backend/internal/media/weibo','backend/internal/fetch','backend/internal/api','backend/cmd/dokitool/main.go'],text=True).splitlines()
-          files={name:subprocess.check_output(['gofmt',name],text=True) for name in names}
-          raw=json.dumps(files,ensure_ascii=False,separators=(',',':')).encode()
-          print('GOFMT_REVIEW_SHA256='+hashlib.sha256(raw).hexdigest())
-          print('GOFMT_REVIEW_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
-          PYFORMAT
+            # Show exact formatter repairs without modifying the index.
+            while IFS= read -r filename; do
+              gofmt -d "$filename"
+            done <<< "$unformatted"
             exit 1
           fi
 

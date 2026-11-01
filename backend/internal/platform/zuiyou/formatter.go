@@ -72,7 +72,7 @@ func formatResponse(root *jsonNode) unified.Object {
 	data := unified.Object{
 		"type": "video", "author": defined(member.child("name").valueOf(), ""),
 		"avatar": unified.MediaURL(member.child("avatar_urls", "origin", "urls", "0").valueOf()),
-		"title": defined(post.child("content").valueOf(), ""), "cover": unified.MediaURL(cover),
+		"title":  defined(post.child("content").valueOf(), ""), "cover": unified.MediaURL(cover),
 		"url": primary, "private_videos": private,
 	}
 	if primary == "" {

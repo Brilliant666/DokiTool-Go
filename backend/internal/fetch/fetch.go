@@ -39,7 +39,7 @@ type Policy struct {
 	// ReadRedirectBody retains bounded bodies only when redirects are not
 	// followed. It never authorizes a Location, and HEAD never reads a body.
 	ReadRedirectBody bool
-	MaxRedirects       int
+	MaxRedirects     int
 }
 
 type Request struct {

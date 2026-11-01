@@ -670,6 +670,7 @@
 !/backend/internal/platform/xiaohongshu/testdata/inputs.json
 !/backend/internal/platform/xiaohongshu/testdata/manifest.json
 !/backend/internal/platform/xiaohongshu/testdata/php-baseline.json
+!/backend/internal/platform/xiaohongshu/testdata/php-wire-baseline.json
 /backend/internal/platform/zuiyou/testdata/*
 !/backend/internal/platform/zuiyou/testdata/README.md
 !/backend/internal/platform/zuiyou/testdata/inputs.json
