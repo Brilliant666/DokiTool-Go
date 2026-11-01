@@ -257,7 +257,12 @@ func (p *Parser) formatNote(ctx context.Context, note *jsonNode) (unified.Object
 	}
 	if kind != "video" {
 		for _, image := range images {
-			address := processImageURL(first(image.field("url").val(), image.field("urlDefault").val(), image.field("urlPre").val(), ""))
+			address := declaredRendition(image)
+			if address == "" {
+				address = processImageURL(first(image.field("url").val(), image.field("urlDefault").val(), image.field("urlPre").val(), ""))
+			} else if image == initial {
+				result["cover"] = address
+			}
 			if address == "" {
 				continue
 			}
@@ -272,6 +277,24 @@ func (p *Parser) formatNote(ctx context.Context, note *jsonNode) (unified.Object
 		result["type"] = "live"
 	}
 	return result, nil
+}
+
+// With an explicitly empty primary URL, rednote supplies deliverable CDN
+// renditions. Rewriting their host or path can discard the actual image.
+func declaredRendition(image *jsonNode) string {
+	if image.field("url").val() != "" {
+		return ""
+	}
+	for _, field := range []string{"urlDefault", "urlPre"} {
+		address := unified.MediaURL(image.field(field).val())
+		if len(address) >= len("http://") && strings.EqualFold(address[:len("http://")], "http://") {
+			return "https://" + address[len("http://"):]
+		}
+		if address != "" {
+			return address
+		}
+	}
+	return ""
 }
 
 var imageOSSSG = regexp.MustCompile(`/oss-sg/([a-zA-Z0-9_]+)/([a-zA-Z0-9]+)!`)

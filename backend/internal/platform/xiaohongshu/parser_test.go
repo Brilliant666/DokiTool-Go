@@ -92,3 +92,57 @@ func TestXiaohongshuMalformedConcatenatedImageCannotRecurse(t *testing.T) {
 		t.Fatalf("malformed concatenated URL was retained: %q", got)
 	}
 }
+
+// Rednote can explicitly return url:"" alongside usable rendition URLs.
+// Keep those endpoints and their query bytes in image-list order, including
+// the still half of a Live Photo; do not infer motion from image count.
+func TestEmptyImageURLRetainsDeclaredRenditions(t *testing.T) {
+	const first = "https://cdn.example/notes_pre_post/one!original?sig=a%2Bb&k=x+y"
+	const second = "https://cdn.example/notes_pre_post/two!preview?sig=z"
+	const motion = "https://media.example/motion.mp4"
+	for _, live := range []bool{false, true} {
+		stream := ""
+		if live {
+			stream = `,"stream":{"h264":[{"masterUrl":"` + motion + `"}]}`
+		}
+		html := `<script>window.__INITIAL_STATE__={"note":{"noteDetailMap":{"sample":{"note":{"noteId":"sample","type":"normal","imageList":[` +
+			`{"url":"","urlDefault":"http://cdn.example/notes_pre_post/one!original?sig=a%2Bb&k=x+y","urlPre":"` + second + `"` + stream + `},` +
+			`{"url":"","urlDefault":"","urlPre":"` + second + `"}]}}}}};</script>`
+		executor := requestFunc(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+			return fetch.Response{StatusCode: 200, URL: req.URL, Body: []byte(html)}, nil
+		})
+		work, err := New(executor).Parse(context.Background(), "https://www.xiaohongshu.com/explore/sample", 1793361600)
+		if err != nil || work["code"] != "OK" {
+			t.Fatalf("live=%t: expected media, got %v (%v)", live, work["code"], err)
+		}
+		data := unified.Map(work["data"])
+		items := unified.Slice(data["items"])
+		if len(items) != 2 || unified.Map(data["cover"])["url"] != first {
+			t.Fatalf("live=%t: wrong cover or number of images", live)
+		}
+		for n, want := range []string{first, second} {
+			item := unified.Map(items[n])
+			variant := unified.Map(unified.Slice(item["variants"])[0])
+			delivery := unified.Map(variant["delivery"])
+			if live && n == 0 {
+				if item["type"] != "live_photo" || delivery["kind"] != "pair" {
+					t.Fatal("missing Live Photo pair")
+				}
+				resources := unified.Slice(delivery["resources"])
+				if len(resources) != 2 {
+					t.Fatal("missing still or motion")
+				}
+				motionFile := unified.Map(unified.Map(resources[1])["delivery"])
+				if src := unified.Map(unified.Slice(motionFile["sources"])[0]); src["url"] != motion {
+					t.Fatal("motion no longer belongs to the original still")
+				}
+				delivery = unified.Map(unified.Map(resources[0])["delivery"])
+			} else if item["type"] != "image" {
+				t.Fatalf("unexpected item type %v", item["type"])
+			}
+			if source := unified.Map(unified.Slice(delivery["sources"])[0]); source["url"] != want {
+				t.Fatalf("live=%t: image %d lost its declared source", live, n)
+			}
+		}
+	}
+}
