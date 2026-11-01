@@ -153,6 +153,7 @@
 !/docs/go-migration/cross-entry-recovery-checks.json
 !/docs/go-migration/download-delivery-closeout.md
 !/docs/go-migration/frontend-checks.json
+!/docs/go-migration/git-replacement-checks.json
 !/docs/go-migration/known-issues.md
 !/docs/go-migration/mapping.md
 !/docs/go-migration/nine-platform-checks.json
@@ -244,6 +245,7 @@
 /scripts/go-migration/*
 !/scripts/go-migration/check.py
 !/scripts/go-migration/preflight_release.py
+!/scripts/go-migration/probe_git_replacement.py
 !/scripts/go-migration/produce-bilibili.php
 !/scripts/go-migration/produce-bilibili.py
 !/scripts/go-migration/produce-douyin.php

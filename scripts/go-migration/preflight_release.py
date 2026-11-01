@@ -55,20 +55,31 @@ def checked(argv: list[str], *, cwd: Path | None = None,
     return result.stdout.strip()
 
 
+def git_command(root: Path, *arguments: str) -> list[str]:
+    """Use the same original object view for every provenance operation.
+
+    Replacement trees can name different, individually valid blobs without
+    changing HEAD or ordinary status. Force the command-level policy, including
+    custom GIT_REPLACE_REF_BASE namespaces; never rely on caller environment or
+    delete the user's replacement refs. This is not a sandbox for Git itself.
+    """
+    return ["git", "--no-replace-objects", "-C", str(root), *arguments]
+
+
 def git_identity(root: Path, *, allow_dirty: bool) -> tuple[str, bool]:
-    repository = Path(checked(["git", "-C", str(root), "rev-parse", "--show-toplevel"])).resolve()
+    repository = Path(checked(git_command(root, "rev-parse", "--show-toplevel"))).resolve()
     if repository != root.resolve():
         raise PreflightError("repository root mismatch")
-    head = checked(["git", "-C", str(root), "rev-parse", "HEAD"])
+    head = checked(git_command(root, "rev-parse", "HEAD"))
     if len(head) != 40 or any(ch not in "0123456789abcdef" for ch in head):
         raise PreflightError("invalid source commit SHA")
-    status = checked(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=normal"])
+    status = checked(git_command(root, "status", "--porcelain", "--untracked-files=normal"))
     # The repository ignores all files until explicitly allowed by its
     # inventory. An ignored, untracked preflight script is not a committed
     # release recipe, even when git status reports clean.
     registered = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "--error-unmatch",
-         "scripts/go-migration/preflight_release.py"],
+        git_command(root, "ls-files", "--error-unmatch",
+                    "scripts/go-migration/preflight_release.py"),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
     ).returncode == 0
     clean = not bool(status) and registered
@@ -99,7 +110,7 @@ def snapshot_backend(root: Path, head: str, destination: Path) -> dict:
     Symlinks and submodules are rejected rather than followed outside the tree.
     """
     listing = subprocess.run(
-        ["git", "-C", str(root), "ls-tree", "-r", "-z", head, "--", "backend"],
+        git_command(root, "ls-tree", "-r", "-z", head, "--", "backend"),
         stdin=subprocess.DEVNULL, capture_output=True, timeout=30, check=False,
     )
     if listing.returncode:
@@ -124,7 +135,7 @@ def snapshot_backend(root: Path, head: str, destination: Path) -> dict:
     destination.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryFile() as bundle:
         objects = subprocess.run(
-            ["git", "-C", str(root), "cat-file", "--batch"],
+            git_command(root, "cat-file", "--batch"),
             input="".join(oid + "\n" for _, oid in entries.values()).encode("ascii"),
             stdout=bundle, stderr=subprocess.PIPE, timeout=60, check=False,
         )
@@ -156,7 +167,7 @@ def snapshot_backend(root: Path, head: str, destination: Path) -> dict:
         if bundle.read(1):
             raise PreflightError("unexpected trailing Git object output")
     return {"kind": "verified-git-head-snapshot", "commit": head,
-            "backend_tree": checked(["git", "-C", str(root), "rev-parse", f"{head}:backend"]),
+            "backend_tree": checked(git_command(root, "rev-parse", f"{head}:backend")),
             "verified_files": len(entries)}
 
 

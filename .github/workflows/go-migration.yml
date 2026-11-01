@@ -324,6 +324,26 @@ jobs:
             --go "$(command -v go)" \
             --output-dir "$RUNNER_TEMP/dokitool-release-preflight"
 
+      - name: Prove Git replacements cannot change the candidate
+        run: |
+          python3 -B scripts/go-migration/probe_git_replacement.py \
+            --source "$GITHUB_WORKSPACE" \
+            --ref "$(git --no-replace-objects rev-parse HEAD)" \
+            --go "$(command -v go)" \
+            --output-dir "$RUNNER_TEMP/dokitool-git-replacement-probe"
+
+      - name: Retain the Git replacement counterexample report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: go-git-replacement-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/dokitool-git-replacement-probe/report.json
+            ${{ runner.temp }}/dokitool-git-replacement-probe/baseline.log
+            ${{ runner.temp }}/dokitool-git-replacement-probe/replacement.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Retain the isolated Go preflight manifest
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

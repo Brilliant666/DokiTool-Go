@@ -1,5 +1,13 @@
 # Go 迁移验收记录
 
+## 2026-11-01 UTC / 11-02 JST：人工接收 dot 报告，关闭 Git replacement 读取路径
+
+收到并核验 dot 对 `b44a21a` 的独立报告（ZIP 与 18 项载荷哈希一致，CHAT_ACK `6560540222`）：来源完整性 FAIL，Linux 落盘执行 PASS，dot 未测 Windows。该反例推翻 b44a21a 的来源完整性放行含义，不推翻其 CI 确实成功或 Linux 权限确实修复的事实。详细根因与边界见 [发布预检](release-preflight.md)。
+
+Chat 在独立 Windows clone 实际复现旧预检误报 clean，合成嵌入资源改变最终候选。随后统一七处 Git 来源调用强制 `--no-replace-objects`，增加七项反例与完整构建对照脚本。有效修前单测为 29 项中 21 PASS、6 FAIL、1 ERROR、1 SKIP；修后为 28 PASS、1 POSIX-only SKIP。开发完整对照在 baseline/replacement 下均实际构建、执行 9 项本地 HTTP、2 项拒绝配置及发布 CLI，修后哈希一致且无替换标记；两份开发回执明确 git_clean:false，源码基线仍为 b44a21a，不冒充最终提交。
+
+原始失败、开发摘要及附件核验见 [git-replacement-checks.json](git-replacement-checks.json)。CI 增加相同完整反例及报告留存，原 Go/PHP/Schema/消费/浏览器门禁不删减；最终准确 SHA 的严格 Windows 和 Linux CI 须以实际运行结果为准。本轮未修改 backend、frontend、固定 PHP 输入/期望/生产器/哈希及停止的断言/计数维护。父 variant 身份与真实平台、完整回滚仍未关闭；保持 Draft，未合并、未部署。
+
 ## 2026-11-01　接续修复：发布候选来源与落盘权限
 
 在 `ce56768` 的独立审查中复现了被忽略 Go 文件参与工作目录构建，以及 Linux copyfile 发布后执行位丢失；反例和边界见 [发布预检](release-preflight.md)。本轮将后端构建改为固定 HEAD 的逐 blob 校验快照，隔离工作区/构建覆盖参数，保留只读模块与依赖校验；发布保留 mode 并实际执行落盘后的 version/catalog。没有改后端产品身份或原 PHP 基线。

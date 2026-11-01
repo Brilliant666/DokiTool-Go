@@ -92,11 +92,14 @@ class SourceIsolationTests(unittest.TestCase):
         self.head = self.git("rev-parse", "HEAD").strip()
 
     def git(self, *args, input=None):
+        # Git plumbing consumes exact bytes. Text-mode stdin on Windows would
+        # turn mktree record separators into CRLF and append CR to filenames.
+        data = input.encode("utf-8") if isinstance(input, str) else input
         result = subprocess.run(
-            ["git", "-C", str(self.root), *args], input=input,
-            capture_output=True, encoding="utf-8", check=True, timeout=20,
+            ["git", "-C", str(self.root), *args], input=data,
+            capture_output=True, check=True, timeout=20,
         )
-        return result.stdout
+        return result.stdout.decode("utf-8")
 
     def commit(self):
         self.git("-c", "user.name=Preflight Fixture", "-c", "user.email=fixture@example.invalid",
@@ -175,6 +178,98 @@ class SourceIsolationTests(unittest.TestCase):
         self.head = self.git("rev-parse", "HEAD").strip()
         with self.assertRaisesRegex(preflight.PreflightError, "checksum"):
             self.snapshot()
+
+    def replacement_tree(self, tree_path="backend", name="data.bin"):
+        # Only write synthetic objects in this test's disposable repository.
+        original = self.git("rev-parse", f"{self.head}:{tree_path}").strip()
+        old_blob = self.git("rev-parse", f"{self.head}:{tree_path}/{name}").strip()
+        blob = self.git("hash-object", "-w", "--stdin", input="REPLACED_EMBED").strip()
+        listing = self.git("ls-tree", original)
+        self.assertIn(old_blob, listing)
+        replacement = self.git("mktree", input=listing.replace(old_blob, blob)).strip()
+        return original, replacement, blob
+
+    def test_tree_replacement_cannot_change_clean_snapshot(self):
+        original, replacement, _ = self.replacement_tree()
+        self.git("replace", original, replacement)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertEqual(self.git("show", f"{self.head}:backend/data.bin"), "REPLACED_EMBED")
+        self.assertEqual(preflight.git_identity(self.root, allow_dirty=False), (self.head, True))
+        target, report = self.snapshot()
+        self.assertEqual((target / "backend/data.bin").read_bytes(), b"\x00\xfffixture\r\n")
+        self.assertEqual(report["backend_tree"], original)
+
+    def test_nested_tree_replacement_cannot_change_embed(self):
+        path = self.root / "backend/config/platforms.json"
+        path.parent.mkdir()
+        path.write_bytes(b'{"fixture":"original"}\n')
+        self.git("add", "-f", "backend/config/platforms.json")
+        self.commit(); self.head = self.git("rev-parse", "HEAD").strip()
+        original, replacement, _ = self.replacement_tree("backend/config", "platforms.json")
+        self.git("replace", original, replacement)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertEqual(self.git("show", f"{self.head}:backend/config/platforms.json"), "REPLACED_EMBED")
+        target, _ = self.snapshot()
+        self.assertEqual((target / "backend/config/platforms.json").read_bytes(), path.read_bytes())
+
+    def test_custom_replacement_namespace_cannot_change_snapshot(self):
+        original, replacement, _ = self.replacement_tree()
+        namespace = "refs/preflight-fixture-replacements/"
+        self.git("update-ref", namespace + original, replacement)
+        with mock.patch.dict(os.environ, {"GIT_REPLACE_REF_BASE": namespace}):
+            os.environ.pop("GIT_NO_REPLACE_OBJECTS", None)
+            self.assertEqual(self.git("show", f"{self.head}:backend/data.bin"), "REPLACED_EMBED")
+            self.assertEqual(preflight.git_identity(self.root, allow_dirty=False), (self.head, True))
+            target, _ = self.snapshot()
+        self.assertEqual((target / "backend/data.bin").read_bytes(), b"\x00\xfffixture\r\n")
+
+    def test_commit_replacement_cannot_change_pinned_source(self):
+        original, replacement, _ = self.replacement_tree()
+        root_listing = self.git("ls-tree", f"{self.head}^{{tree}}")
+        root_tree = self.git("mktree", input=root_listing.replace(original, replacement)).strip()
+        commit = self.git("-c", "user.name=Preflight Fixture", "-c", "user.email=fixture@example.invalid",
+                          "-c", "commit.gpgsign=false", "commit-tree", root_tree,
+                          "-m", "synthetic replacement, not a branch commit").strip()
+        self.git("replace", self.head, commit)
+        self.assertEqual(self.git("rev-parse", "HEAD").strip(), self.head)
+        self.assertEqual(self.git("show", f"{self.head}:backend/data.bin"), "REPLACED_EMBED")
+        target, report = self.snapshot()
+        self.assertEqual((target / "backend/data.bin").read_bytes(), b"\x00\xfffixture\r\n")
+        self.assertEqual(report["backend_tree"], original)
+
+    def test_blob_replacement_still_reads_original_bytes(self):
+        original = self.git("rev-parse", f"{self.head}:backend/data.bin").strip()
+        replacement = self.git("hash-object", "-w", "--stdin", input="REPLACED_EMBED").strip()
+        self.git("replace", original, replacement)
+        self.assertEqual(self.git("show", f"{self.head}:backend/data.bin"), "REPLACED_EMBED")
+        target, _ = self.snapshot()
+        self.assertEqual((target / "backend/data.bin").read_bytes(), b"\x00\xfffixture\r\n")
+
+    def test_replacement_cannot_hide_staged_and_worktree_edit(self):
+        original, replacement, blob = self.replacement_tree()
+        self.git("replace", original, replacement)
+        (self.root / "backend/data.bin").write_bytes(b"REPLACED_EMBED")
+        self.git("update-index", "--cacheinfo", f"100644,{blob},backend/data.bin")
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertNotEqual(self.git("--no-replace-objects", "status", "--porcelain"), "")
+        with self.assertRaisesRegex(preflight.PreflightError, "uncommitted"):
+            preflight.git_identity(self.root, allow_dirty=False)
+        self.assertEqual(preflight.git_identity(self.root, allow_dirty=True), (self.head, False))
+        target, _ = self.snapshot()
+        self.assertEqual((target / "backend/data.bin").read_bytes(), b"\x00\xfffixture\r\n")
+
+    def test_every_provenance_git_call_disables_replacement(self):
+        real_run = subprocess.run
+        with mock.patch.object(preflight.subprocess, "run", wraps=real_run) as run:
+            preflight.git_identity(self.root, allow_dirty=False)
+            self.snapshot()
+            preflight.git_identity(self.root, allow_dirty=False)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertTrue(commands)
+        for command in commands:
+            self.assertEqual(command[:4], ["git", "--no-replace-objects", "-C", str(self.root)])
+        self.assertEqual({command[4] for command in commands},
+                         {"rev-parse", "status", "ls-files", "ls-tree", "cat-file"})
 
 
 class BuildAndPublicationTests(unittest.TestCase):

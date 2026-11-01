@@ -1,0 +1,188 @@
+{
+  "schema": "dokitool-git-replacement-development-checks-v1",
+  "checked_at_utc": "2026-11-01T16:23:32.125137+00:00",
+  "source_base_commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+  "scope": "Release preflight Git replacement isolation only; no backend/frontend/PHP baseline changes",
+  "dot_receipt": {
+    "delivery": "manual user transfer; no automatic receipt inferred",
+    "tested_sha": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+    "run_id": "0575abc0-d60e-11f1-949b-54216d5907ca",
+    "zip_sha256": "4b7d5739e6600bbd389f6338f0dbf399cd5d3c18c2067cd7172de503bbdd8bcc",
+    "result_sha256": "9b3926a07aff86e913d4f0b86652b42b82cfe963afb23cf78616f9e0896f3907",
+    "payload_hashes_verified": 18,
+    "verdict": "FAIL_SOURCE_PROVENANCE; Linux execution PASS; Windows NOT_RUN",
+    "chat_ack_comment_id": 6560540222
+  },
+  "unit_before_corrected_fixture": {
+    "total": 29,
+    "passed": 21,
+    "failures": 6,
+    "errors": 1,
+    "skipped": 1,
+    "exit_code": 1,
+    "seconds": 15.67,
+    "log_sha256": "5c27c8ec8dfa2e0f60184d01fb77557f28fb9031a483cdf2ac57cf98da112660"
+  },
+  "unit_after": {
+    "total": 29,
+    "passed": 28,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skip_reason": "POSIX-only executable fixture on Windows",
+    "exit_code": 0,
+    "seconds": 15.48,
+    "log_sha256": "55c992839c4a1afb556c0bd5c478326ed2bd849ce9efc568b53744c783dc0126"
+  },
+  "old_full_preflight_counterexample": {
+    "tested_source_commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+    "recipe_override": false,
+    "recipe_sha256": "cd5b4950829361a4c8c5dfcc0d6abe19795db3cfcf36812aa08a19a9d820c2bf",
+    "head_unchanged": true,
+    "ordinary_git_status_unchanged": true,
+    "ordinary_git_view_replaced": true,
+    "raw_git_view_unchanged": true,
+    "original_tree": "9c6afdb860e1162655991688a8ad13bb0a656891",
+    "replacement_tree": "a2500952f7db7ce35aeed08c0493868cf7b00a56",
+    "original_embed_sha256": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487",
+    "replacement_embed_sha256": "a0066041fb8983424a7e8d053c322e85f38aa61f85ea63888925a0ca18770f17",
+    "source_integrity_requirement_passed": false,
+    "baseline": {
+      "exit_code": 0,
+      "log_sha256": "954c55ef790ef799b759accd57c32b73f91278c52e6cf5894dd69e867559aa8f",
+      "binary_sha256": "bbc0869be0a1cbb77b79273a283918988d03f795a64c92c69d80b0735bbf1664",
+      "mode": "0o777",
+      "catalog_exit": 0,
+      "catalog_contains_marker": false,
+      "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+      "git_clean": true,
+      "source_provenance": {
+        "kind": "verified-git-head-snapshot",
+        "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+        "backend_tree": "c8563488efc17b4ccc456daff5a24ff6317d501e",
+        "verified_files": 266
+      },
+      "go_version": "go version go1.27.3 windows/amd64",
+      "http_routes": 9,
+      "refused_configs": 2,
+      "staged_native_cli_verified": true,
+      "production_approved": false
+    },
+    "replacement": {
+      "exit_code": 0,
+      "log_sha256": "1431154649bd3cd77a4f73c94fcf5b8a39f9ee5996dfacf3a03361974b44f765",
+      "binary_sha256": "8087aa06a93d30bf8125ca3b0461bbcfb53e6dd13e7fabd44b46b06b8ca65463",
+      "mode": "0o777",
+      "catalog_exit": 0,
+      "catalog_contains_marker": true,
+      "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+      "git_clean": true,
+      "source_provenance": {
+        "kind": "verified-git-head-snapshot",
+        "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+        "backend_tree": "c8563488efc17b4ccc456daff5a24ff6317d501e",
+        "verified_files": 266
+      },
+      "go_version": "go version go1.27.3 windows/amd64",
+      "http_routes": 9,
+      "refused_configs": 2,
+      "staged_native_cli_verified": true,
+      "production_approved": false
+    }
+  },
+  "development_full_preflight_control": {
+    "tested_source_commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+    "recipe_override": true,
+    "recipe_sha256": "36a501d3c53e352b9de8983c62acbd03c248c492702b2dcf4615df2d6393970a",
+    "head_unchanged": true,
+    "ordinary_git_status_unchanged": true,
+    "ordinary_git_view_replaced": true,
+    "raw_git_view_unchanged": true,
+    "original_tree": "9c6afdb860e1162655991688a8ad13bb0a656891",
+    "replacement_tree": "a2500952f7db7ce35aeed08c0493868cf7b00a56",
+    "original_embed_sha256": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487",
+    "replacement_embed_sha256": "a0066041fb8983424a7e8d053c322e85f38aa61f85ea63888925a0ca18770f17",
+    "source_integrity_requirement_passed": true,
+    "baseline": {
+      "exit_code": 0,
+      "log_sha256": "c095dc268fc64d0a6673cbdba0cebc544701169019e04b1d2c5d9f5d66acd9b3",
+      "binary_sha256": "bbc0869be0a1cbb77b79273a283918988d03f795a64c92c69d80b0735bbf1664",
+      "mode": "0o777",
+      "catalog_exit": 0,
+      "catalog_contains_marker": false,
+      "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+      "git_clean": false,
+      "source_provenance": {
+        "kind": "verified-git-head-snapshot",
+        "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+        "backend_tree": "c8563488efc17b4ccc456daff5a24ff6317d501e",
+        "verified_files": 266
+      },
+      "go_version": "go version go1.27.3 windows/amd64",
+      "http_routes": 9,
+      "refused_configs": 2,
+      "staged_native_cli_verified": true,
+      "production_approved": false
+    },
+    "replacement": {
+      "exit_code": 0,
+      "log_sha256": "a71aab98b91f77ffd00c1dc239fc5033dc3f090a1a7787cadc74620948471e1a",
+      "binary_sha256": "bbc0869be0a1cbb77b79273a283918988d03f795a64c92c69d80b0735bbf1664",
+      "mode": "0o777",
+      "catalog_exit": 0,
+      "catalog_contains_marker": false,
+      "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+      "git_clean": false,
+      "source_provenance": {
+        "kind": "verified-git-head-snapshot",
+        "commit": "b44a21a890b6f634ba3e35c6e9625508a6c3a063",
+        "backend_tree": "c8563488efc17b4ccc456daff5a24ff6317d501e",
+        "verified_files": 266
+      },
+      "go_version": "go version go1.27.3 windows/amd64",
+      "http_routes": 9,
+      "refused_configs": 2,
+      "staged_native_cli_verified": true,
+      "production_approved": false
+    }
+  },
+  "command_logs": {
+    "unit-before": {
+      "exit_code": 1,
+      "seconds": 14.0,
+      "log_sha256": "bef184cb5f552f667dac5842944029599715541768441c36c16446d58f87acfc"
+    },
+    "unit-before-valid": {
+      "exit_code": 1,
+      "seconds": 15.67,
+      "log_sha256": "5c27c8ec8dfa2e0f60184d01fb77557f28fb9031a483cdf2ac57cf98da112660"
+    },
+    "probe-before": {
+      "exit_code": 1,
+      "seconds": 13.47,
+      "log_sha256": "183218b2deb34bb7101daae54c320afa0ec72eef48c049baeb2685fba68b4fdc"
+    },
+    "unit-after": {
+      "exit_code": 0,
+      "seconds": 15.48,
+      "log_sha256": "55c992839c4a1afb556c0bd5c478326ed2bd849ce9efc568b53744c783dc0126"
+    },
+    "probe-development": {
+      "exit_code": 0,
+      "seconds": 12.0,
+      "log_sha256": "fcd4d28ced3417d3fa153f41ed9a90335ce2a97ec2032edb5763ecb23b2d8a61"
+    }
+  },
+  "intermediate_failures": [
+    "Initial test-fixture text stdin on Windows inserted CR into mktree filenames; corrected helper to use exact bytes before drawing regression conclusions. Initial failure log retained.",
+    "Corrected original implementation: six failed assertions and one blob hash-rejection error; not seven distinct security vulnerabilities.",
+    "Old full preflight exited 0 twice and claimed clean source, but the independent source assertion exited 1."
+  ],
+  "limits": [
+    "Development recipe override is uncommitted and both manifests say git_clean:false; not final release/CI proof.",
+    "Final exact-commit clean Windows and Linux CI results must be read separately from PR/Actions.",
+    "Git executable/object database, arbitrary Git environment/config redirects, toolchain and dependency cache are not comprehensively audited.",
+    "No new real platform/browser/production/rollback verification; parent variant issue remains open.",
+    "No stopped historical private/PHP assertion/counter maintenance attempted."
+  ]
+}

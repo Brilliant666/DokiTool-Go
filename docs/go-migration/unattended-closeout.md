@@ -40,6 +40,14 @@ Chat 主责设计、实现、开发自测和唯一集成；dot 自主做独立�
 
 自动运行 `273b4641-0cec-8325-9a2e-e5114dc8fd78` 曾失败后重试，任务接口最终明确在 2026-11-01 15:42:59 UTC 完成。确认零活动终端、工作树干净且远端一致后，已归档旧 `chat-hourly-20261101T1507Z` 占用原文，再由 `chat-preflight-integrity-fix-20261101` 接续；没有在重试仍活跃时改源码，没有删除他人工作。
 
+## 最新接续：人工 dot 报告与 Git replacement 反例
+
+维护者已人工转交 run `0575abc0-d60e-11f1-949b-54216d5907ca` 对 `b44a21a` 的报告；ZIP 与 18 项载荷已核验，接收评论 `6560540222`。来源完整性仍 FAIL、Linux 落盘执行 PASS；不是 dot 自动回传成功。旧 b44a21a 的全绿 CI 不能覆盖新反例，后续不得继续把其来源完整性直接标为通过。
+
+本聊天核对 idle 占用、零活动终端、干净工作树与远端后，以 `chat-git-replacement-fix-20261101T1614Z` 接续。仅在独立 clone 中复现 Git 子树 replacement 编入合成 embed，未给产品工作树安装 replacement。修复为预检全部 Git 来源调用统一命令级禁用 replacement，七项新增反例覆盖 tree/嵌套tree/commit/blob/自定义前缀/dirty伪装/全调用检查；另有实际构建对照及 CI 接入。当前 Windows 开发 28 PASS / 1 Linux-only SKIP，完整对照恢复相同候选哈希；开发 override 的 git_clean:false 与旧失败都保留于 `git-replacement-checks.json`。
+
+下一轮先核对本次最终 Head、CI、新 CHAT_READY 和实际 dot tested_sha，不重复实现此修复。Git/工具链/缓存全面可信、复用发布目录的失败原子性未因此认证；父 variant 与停止的私有/PHP 维护边界不变。最终新 SHA 的干净 Windows 和 Linux 实测须独立查 PR/Actions，不用开发摘要替代。仍只有当前项目 Chat 集成；不改监听或其他任务。
+
 ## 仍待完成（不重复已通过阶段）
 
 | 工作 | 当前事实与下一步 |
