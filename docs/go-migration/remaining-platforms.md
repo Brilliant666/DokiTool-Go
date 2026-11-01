@@ -37,7 +37,7 @@
 
 | 平台 | 必须覆盖的产品路径与回归 | 当前状态 |
 | --- | --- | --- |
-| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | **进行中**：受控 relay、Cookie jar、目标身份、访客协议/请求和候选抽取已实现；新增 **29 组完整 PHP formatter＋16 组完整 status/TV PHP 解析/请求序列 oracle**，内部 Go 逐字段对拍，固定 PHP 8.3.6 回放及 CI 成功（Head `c2c574f`）。**正式 Parser.Parse/Resolve、unified-v1 适配和签名来源投影尚未接入，在线/浏览器待验收** |
+| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | **产品链路已接入、离线验证成功**：正式 `Parser.Parse`、`/api/parse`、`/api/resolve`、Go 签名媒体来源与独立 relay 已串通；冻结 PHP 29 组 formatter＋16 组 status/TV 请求序列＋29 组完整适配的 87 份 `internal/normal/debug` 输出严格对拍；官方协议合成 HTTP 实测及 CI [#41257671113](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41257671113) 双绿（代码 Head `aca70af8`）。**仍未做微博真实上游/浏览器/完整 PHP gateway 实际签发对照及 Go 专属原前端消费，不能标为平台最终完成** |
 | 今日头条 | 同域短链、请求内 Cookie jar/ttwid、页面 RENDER_DATA、准确作品身份、主备媒体、简介映射为 `author.description`、有界总预算 | 待实现 |
 | 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 待实现 |
 | 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 待实现 |
@@ -101,3 +101,14 @@
 新增 Go `internal/platform/weibo/session_protocol.go`，用于微博解析器的上游传输失败分类、Sina Visitor System 识别及安全的 JSONP 数据解码。使用独立的 51 例输入/输出集合，直接由固定 PHP `weiboTransportFailure()`、`weiboIsVisitor()`、`weiboJsonp()` 产品函数产生；独立 PHP 8.3.6 容器每次重新生成并与冻结输出逐字节比较，Go 单测对原输出逐项比较。输入和基线分别压缩入库，便于审查与继续扩展。
 
 这一阶段尚未注册完整微博平台 adapter，也未发起匿名游客会话或实现 status/TV component 的请求与 formatter；此前二进制 relay 不变。当前提交的 CI 结果须单独核实，不能沿用此前绿色结果。无真实平台调用、浏览器下载或生产切换。
+
+## 2026-11-01：微博正式 Go Parse/Resolve、来源签发与 PHP 公开投影对拍
+
+代码验证点 `aca70af8e21c29415e36e2ded23e4ef1c8772743`，对应 [GitHub Actions #41257671113](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41257671113)：`bilibili-php-oracle`、`offline-contract` **均 completed/success**。首次接入正式微博 `Parser.Parse`、`cmd/dokitool` 注册、`/api/parse` 与 `/api/resolve`、统一 `PreparePublic` 安全签发及已实现的 `/api/media/weibo` GET/HEAD/Range relay。新签名源触发服务端 default 重新选择，修正中间合同校验中的旧直链引用，未改变公开 schema、前端、Worker、bridge 或原 PHP 生产。
+
+**独立对拍**：固定 PHP 8.3.6 无网络容器从冻结的 29 组原 PHP formatter 结果，重新执行原 `snapAdaptWeibo`、`snapFinalizeData` 和 `snapPublicMediaView`，生成 29 个完整产品场景 × `internal/normal/debug` = **87 份原 PHP 公开适配预期**；原始基线 `php-public-baseline.json`（含旧输入）只由 PHP 生产，正式 CI 每次逐字节 `cmp`，Go 独立逐字段对拍三种输出。此前的 16 组 status/TV 请求序列、29 组 formatter 及微博签名/媒体票据原 PHP 基线继续原样保留。
+
+正式 Go HTTP 合成上游测试覆盖 status 的正常/debug `parse` 和 `resolve`、固定官方 GET、请求策略/截止、媒体票据签发验证、稳定 variant/source ID、默认选择、缺失签发密钥和非法链接拒绝。测试直接经过原 API handler、独立 Schema/语义；全包 Go race/vet/gofmt/build、来源清单和既有未改动前端通用门禁在最终 CI 通过。早期中间提交曾因 gofmt 和签名后的旧默认 URL 而失败，已修正并在最终代码点重新验证，没有放宽原 PHP 预期。
+
+**仍待验收**：上述公开投影 oracle 是**签名前**、固定时钟的完整产品适配对拍；完整旧 PHP gateway 签发后的线上公开响应，还需要同源有效样本对照。当前未做真实微博/受限匿名会话/CDN 下载、浏览器保存、Go 输出专属前端端到端消费或生产切流。微博代码集成达到离线阶段性门槛，**不能据此标记整个平台真实验收完成**；其余六个平台不受影响，继续逐一迁移。机器摘要见 [weibo-product-checks.json](weibo-product-checks.json)。
+

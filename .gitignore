@@ -158,6 +158,7 @@
 !/docs/go-migration/rollback.md
 !/docs/go-migration/weibo-candidates-checks.json
 !/docs/go-migration/weibo-formatter-resolve-checks.json
+!/docs/go-migration/weibo-product-checks.json
 !/docs/go-migration/weibo.md
 /docs/incidents/*
 !/docs/incidents/INC-20261031-001-download-delivery.md
