@@ -1,0 +1,104 @@
+{
+  "scope": "PR8 cross-entry admission during explicit refresh; no parent-ID fix",
+  "base_commit": "7a44c02fdc19fa85e7b959d9146e5e9ae322b188",
+  "environment": {
+    "os": "Windows amd64",
+    "node": "v24.22.2",
+    "test_boundary": "actual Pinia, selection, coordinator; synthetic manager and Worker acknowledgement"
+  },
+  "baseline": {
+    "tests": 12,
+    "passed": 7,
+    "failed": 5,
+    "exit_code": 1
+  },
+  "after": {
+    "targeted_tests": 17,
+    "targeted_passed": 17,
+    "targeted_exit_code": 0,
+    "frontend_tests": 358,
+    "frontend_passed": 358,
+    "frontend_exit_code": 0,
+    "typecheck_exit_code": 0,
+    "build_exit_code": 0,
+    "ssg_tests": 4,
+    "ssg_passed": 4,
+    "load_budget_exit_code": 0
+  },
+  "counting": "17 targeted tests are included in 358 frontend tests; the added five counterexamples were not part of the 12-test before run",
+  "implementation": "only exact page-owned resultVersion/item/type/variant/source keys reserve an in-flight file task; no URL or quality inference",
+  "ci_at_report_creation": "pending this commit; read final PR/Actions results",
+  "unchanged": [
+    "backend identity and source URLs",
+    "frozen PHP oracle/input/producer/hashes",
+    "original 10 public projection differences",
+    "Worker/bridge/schema",
+    "previously blocked test assertion and machine-counter edits"
+  ],
+  "not_verified": [
+    "real platform calls",
+    "real browser file save",
+    "dot independent verification of this new revision",
+    "parent variant source-set stability",
+    "additional dynamic PHP size_bytes assertion entry"
+  ],
+  "logs": [
+    {
+      "log": "admission-before.log",
+      "sha256": "024f29df6bca8f1ae76a630334bb8235b4c47608393825718bdc8a3891731e25",
+      "bytes": 4817,
+      "counts": {
+        "tests": 12,
+        "pass": 7,
+        "fail": 5,
+        "skipped": 0
+      }
+    },
+    {
+      "log": "admission-final-targeted.log",
+      "sha256": "8ccb424f92a6c9ece334889835294f8a45d6c7f5cb74979563559092f8e56ed8",
+      "bytes": 1674,
+      "counts": {
+        "tests": 17,
+        "pass": 17,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "log": "admission-final-frontend.log",
+      "sha256": "aa13f0edb113284fe6bfa9d8397876a5708e18c8da3fabbd9ee74a89933e4152",
+      "bytes": 35360,
+      "counts": {
+        "tests": 358,
+        "pass": 358,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "log": "admission-typecheck.log",
+      "sha256": "87c877d2e77000ff4893bf137e6183773fc7b608f334822f5b8dc6f6200ed17b",
+      "bytes": 50,
+      "counts": {}
+    },
+    {
+      "log": "admission-build.log",
+      "sha256": "21e875b310096884c3b8796036751f3fad35b28c34977392fe32e48bf3659b0f",
+      "bytes": 4159,
+      "counts": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "log": "admission-load-budget.log",
+      "sha256": "29cd1a835fa4d441a909396652ec96273f80a27b1189a919046a608119256582",
+      "bytes": 2321,
+      "counts": {}
+    }
+  ],
+  "report_generation_note": "Initial read-only report script failed before writes because the shell pipeline changed a Unicode regex glyph. Retried with an ASCII-only parser; product/test code and assertions were not changed."
+}

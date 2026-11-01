@@ -69,6 +69,9 @@ export function useMediaDownload({
   const archiveRetries = new Map<number, () => Promise<void>>();
   const videoRetries = new Map<number, (refresh?: boolean) => Promise<boolean>>();
   const pendingTaskActions = new Set<number>();
+  // Page-owned, exact selections survive the URL-free resolve/acknowledgement
+  // window. Never infer these identities from restored URL-only history.
+  const fileTaskSelections = new Map<number, string>();
   const sourceContexts = new Map<
     number,
     {
@@ -340,6 +343,7 @@ export function useMediaDownload({
       videoStore.removeDownload(downloadId);
       archiveRetries.delete(downloadId);
       videoRetries.delete(downloadId);
+      fileTaskSelections.delete(downloadId);
       sourceContexts.delete(downloadId);
       showToast("该资源已有下载任务", "info");
       return;
@@ -720,6 +724,36 @@ export function useMediaDownload({
     return readyVariant(variant) && variant.delivery.kind === "file" &&
       variant.delivery.sources.some(source => source.id === snapshot.choice!.source_id);
   }
+  function fileSelectionKey(snapshot: ItemSnapshot): string | undefined {
+    if (snapshot.resource || !readyItem(snapshot.item) || !snapshot.choice?.source_id)
+      return;
+    const variants = snapshot.item.variants.filter(candidate => candidate.id === snapshot.choice!.variant_id);
+    if (variants.length !== 1 || !readyVariant(variants[0])) return;
+    const delivery = variants[0].delivery;
+    if (delivery.kind !== "file" ||
+        delivery.sources.filter(source => source.id === snapshot.choice!.source_id).length !== 1)
+      return;
+    return JSON.stringify([snapshot.version, snapshot.item.id, snapshot.item.type,
+      snapshot.choice.variant_id, snapshot.choice.source_id]);
+  }
+  function selectionInFlight(key: string | undefined, exceptId?: number): boolean {
+    if (!key) return false;
+    for (const [id, selected] of fileTaskSelections) {
+      const task = taskFor(id);
+      if (!task) {
+        fileTaskSelections.delete(id);
+        continue;
+      }
+      if (id !== exceptId && selected === key &&
+          (pendingTaskActions.has(id) || task.observation === "unknown" ||
+           ["queued", "preparing", "downloading"].includes(task.status)))
+        return true;
+    }
+    return false;
+  }
+  function selectionBusyNotice(): void {
+    showToast("该版本和来源已有任务正在处理，请在下载列表查看进度", "info");
+  }
   const filenameFor = (snapshot: ItemSnapshot, extension: string) =>
     buildMediaFilename({
       title: snapshot.item.title || snapshot.title,
@@ -830,12 +864,18 @@ export function useMediaDownload({
     retryId?: number,
     refresh = false,
   ): Promise<boolean> {
+    const selected = fileSelectionKey(snapshot);
+    if (selectionInFlight(selected, retryId)) {
+      selectionBusyNotice();
+      return false;
+    }
     const id =
       retryId ??
       videoStore.addDownload({
         filename: filenameFor(snapshot, "bin"),
         statusText: "准备下载...",
       });
+    if (selected) fileTaskSelections.set(id, selected);
     const controller = new AbortController(),
       startedAt = Date.now();
     videoStore.updateDownload(id, {
@@ -1215,6 +1255,10 @@ export function useMediaDownload({
     // Restored Worker history does not reconstruct that identity from a stale URL.
     if (refresh && (!current.refreshAvailable || !videoRetries.has(id) ||
         !["failed", "interrupted"].includes(current.status))) return;
+    if (selectionInFlight(fileTaskSelections.get(id), id)) {
+      selectionBusyNotice();
+      return;
+    }
     // Retry and clear share the old attempt's acknowledgement; only one may act.
     const task = { ...current };
     pendingTaskActions.add(id);
@@ -1339,6 +1383,7 @@ export function useMediaDownload({
         if (task.deliveryId) deliveryTasks.delete(task.deliveryId);
         archiveRetries.delete(task.id);
         videoRetries.delete(task.id);
+        fileTaskSelections.delete(task.id);
         sourceContexts.delete(task.id);
         // Clearing a confirmed-gone execution is history cleanup, not a new
         // cancellation intent. Pinia's removeDownload aborts a saved controller.

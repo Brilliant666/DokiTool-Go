@@ -150,6 +150,7 @@
 !/docs/go-migration/acceptance.md
 !/docs/go-migration/bilibili-checks.json
 !/docs/go-migration/bilibili.md
+!/docs/go-migration/cross-entry-recovery-checks.json
 !/docs/go-migration/download-delivery-closeout.md
 !/docs/go-migration/frontend-checks.json
 !/docs/go-migration/known-issues.md
@@ -168,6 +169,7 @@
 !/docs/go-migration/rollback.md
 !/docs/go-migration/takeover-toutiao-weibo-checks.json
 !/docs/go-migration/toutiao.md
+!/docs/go-migration/unattended-closeout.md
 !/docs/go-migration/weibo-candidates-checks.json
 !/docs/go-migration/weibo-formatter-resolve-checks.json
 !/docs/go-migration/weibo-product-checks.json
@@ -219,6 +221,7 @@
 !/frontend/tests/download-bridge.test.mjs
 !/frontend/tests/download-manager.test.mjs
 !/frontend/tests/download-panel.test.mjs
+!/frontend/tests/download-selection-admission.test.mjs
 !/frontend/tests/download-streaming.test.mjs
 !/frontend/tests/download-transports.test.mjs
 !/frontend/tests/download-worker.test.mjs
