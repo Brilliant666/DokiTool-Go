@@ -1,5 +1,15 @@
 # Go 迁移验收记录
 
+## 2026-11-02 JST：dot 对 5157fac 两项局部目标独立受控通过
+
+维护者人工转交 run `20b49cb0-d619-11f1-8350-b952c3b22b3d`，准确 tested_sha 为 `5157face5e84e095fa2c14c628f32a51e510b4df`，对应 CHAT_READY `6561334846`。上传 ZIP SHA-256 `50d02184dd515f6e4e28e923a367ab459f5f54ddb2da4eb3ac60ed263257dd53` 与13份载荷逐项核验通过；已阅读报告、脚本、日志及独立复核，CHAT_ACK `6561629992`。本次只接收证据，不重复执行 dot 同目标测试。机器摘要与原附件各载荷哈希见 [独立验收回执](dot-lifecycle-index-acceptance.json)。
+
+接受 `PASS_CONTROLLED_SCOPED`：迟到重复释放不破坏继任所有权；10个真实CLI争抢为1个退出0、9个退出2。replacement写入实验index且status为空时，严格预检退出1、不产出成功manifest；allow-dirty退出0但明确git_clean:false，266个原始blob构建的候选不含合成标记。mode、缺失路径、额外TAB/换行路径和冲突stage的负面对照均拒绝。两个局部缺陷在该SHA完成独立受控复验；没有新的确定缺陷，同SHA同目标不再派测。
+
+故障清理支持安全拒绝，不等于自动恢复：marker删除故障可留下idle回执与长期锁，新领取及再次释放都被拒绝，仍需核对归属后审查恢复。额外特殊路径的拒绝不能外推为所有已跟踪特殊路径的正向兼容。
+
+本次dot环境为Linux x86_64、Python3.12.14、Git2.52.0、Go1.27.3；Windows、完整CI、真实平台/浏览器、PHP生产及完整回滚均未执行，不能借用开发记录冒称本次dot覆盖。父variant身份及其他未完成项不关闭，安全停止边界不解除。监听保持不变，人工转交不代表自动回传已打通。当前归档变更仅为文档/脱敏回执/公开清单，不修改产品或测试。
+
 ## 2026-11-02 JST：dot第二次复验与两项边界修复
 
 人工报告确认17ae147的原replacement来源污染已修复，但release生命周期和严格clean仍FAIL（CHAT_ACK6561169369）。本轮以共享短临界区串行化整个领取/释放，以原始HEAD树逐项对照index，保留旧失败与新反例。Windows开发互斥14/14、预检31 PASS/1 POSIX-only SKIP；完整旧Head探针独立严格拒绝断言失败且候选仍来自原HEAD。新Head完整CI/严格探针需另核，详细范围见 [生命周期与index](lifecycle-index-hardening.md) 和 [开发回执](lifecycle-index-checks.json)。未改产品后端、前端、PHP基线和安全停止项，不放行整体迁移。

@@ -1,5 +1,11 @@
 # 无人值守接续：Go 迁移收尾
 
+## 最新验收：5157fac 的两项 dot 复验已接收
+
+第三份人工报告经ZIP及13份载荷核验，CHAT_ACK `6561629992`：准确tested_sha `5157face5e84e095fa2c14c628f32a51e510b4df`，run `20b49cb0-d619-11f1-8350-b952c3b22b3d`，迟到重复release与严格index检查均 `PASS_CONTROLLED_SCOPED`。原 CHAT_READY `6561334846` 对应目标已完成独立受控复验，不再等候此报告、不重复实现或同目标派测。详细范围见 [独立验收回执](dot-lifecycle-index-acceptance.json) 与 acceptance.md 最新节；文档归档提交不改写 dot 的 tested_sha。
+
+后续优先返回头条/皮皮虾父variant稳定表示依据与反例，同时推进不受阻的真实验收和已保留回滚审查代码的独立评审。未取得稳定表示依据时明确失败，不用第一URL/同画质/宽泛删query/跨variant猜配。安全停止事项、旧混合工作树只读、共享新版lifecycle与owner锁、不合并不部署均保持。残留锁需要审查恢复，不按idle或到期自动清理。本次没有新增CHAT_READY，没有修改dot监听；任务启用与实际运行情况仍以接口为准，不将人工转交称作自动送达。
+
 ## 最新接续：第二份dot报告与生命周期/index修复
 
 已人工接收17ae147报告，CHAT_ACK6561169369；原replacement污染候选PASS_CONTROLLED，迟到release和clean误判FAIL，不能用旧全绿关闭新增缺陷。本轮在serial-review修复并验证，最终Head/CI/CHAT_READY以PR最新记录为准。所有领取和释放必须使用新版execution_guard的共享lifecycle短临界区，两个锁目录已存在或异常遗留都不能自动抢占；旧版本客户端必须退出。预检增加原始HEAD/index完整条目对照，严格完整探针新增dirty-cached-index应拒绝场景。详见 [修复与证据边界](lifecycle-index-hardening.md)。不重做原replacement修复；父variant、真实平台、回滚及原安全停止事项不变。
