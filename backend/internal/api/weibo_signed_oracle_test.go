@@ -62,6 +62,9 @@ func (f *weiboSignedOracleTape) Do(ctx context.Context, request fetch.Request) (
 	}
 	var post any
 	if request.Method == http.MethodPost {
+		if request.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			f.t.Fatal("POST omitted its form content type")
+		}
 		post = string(request.Body)
 	} else if len(request.Body) != 0 {
 		f.t.Fatal("GET request unexpectedly has a body")

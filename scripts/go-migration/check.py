@@ -138,7 +138,10 @@ def main():
         platform_comparisons = {}
         for name, path, frozen_path in (("weibo", weibo_outputs, WEIBO), ("toutiao", toutiao_outputs, TOUTIAO)):
             platform_comparisons[name] = verify_platform_exports(path, frozen_path, name)
-            exported = read_json(path)
+            # Exact numeric comparison already completed above. Aggregate the
+            # original JSON values like the existing groups; Decimal objects
+            # from the comparison reader are not a JSON serializer input.
+            exported = json.loads(path.read_text(encoding="utf-8"))
             if len(exported["cases"]) != platform_provenance[name]["parse_cases"]:
                 raise RuntimeError(f"Actual Go {name} provenance count mismatch")
             douyin["cases"].extend(exported["cases"])

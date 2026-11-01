@@ -1704,7 +1704,8 @@ if (process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE) {
       const pair = JSON.parse(await readFile(process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE, 'utf8'));
       const before = mediaContract.validateMediaEnvelope(pair.before);
       const after = mediaContract.validateMediaEnvelope(pair.after);
-      const original = before.items.find(item => item.id === before.default_item_id);
+      assert.equal(before.items.length, 1, 'the compact single-item response needs no default_item_id');
+      const original = before.items[0];
       const fresh = after.items.find(item => item.id === original.id);
       const chosen = original.variants.find(variant => explicit ? variant.metadata?.height === 1080 : variant.id === original.default.variant_id);
       assert.ok(chosen, 'fixture contains a complete alternate quality');
