@@ -193,7 +193,7 @@ try {
   }));
   const result = spawnSync(process.execPath, [
     "--test", "--test-reporter=tap", "--test-concurrency=1",
-    "--test-name-pattern=^(PR8 integration: actual (play-endpoint|cdn) adapter renewal preserves|Go Weibo integration:|Renewal stability integration:)",
+    "--test-name-pattern=^(PR8 integration: actual (play-endpoint|cdn) adapter renewal preserves|Go Weibo integration:|Renewal stability integration:|Refresh recovery integration:)",
     "tests/ui-download-contract.test.mjs",
   ], {
     cwd: root, encoding: "utf8", maxBuffer: 8 * 1024 * 1024,

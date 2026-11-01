@@ -1,0 +1,92 @@
+{
+  "scope": "Development execution on Windows; controlled inputs and mocked media, no live platform or real browser delivery claim",
+  "base_commit": "b5c2488243e15f35fe1377b61e926bfca3764ca1",
+  "status": "PARTIAL_IMPLEMENTATION",
+  "implemented": "explicit refresh-and-retry for an owned, settled, pinned file task",
+  "unresolved": [
+    "parent variant identity depends on source set",
+    "new consumer test is not yet valid for the additional dynamic PHP CDN producer without size_bytes; original frozen pipeline is distinct",
+    "new four-test machine counter was blocked; actual execution inspected from TAP"
+  ],
+  "before_core": {
+    "passed": 0,
+    "failed": 2
+  },
+  "frontend": {
+    "passed": 341,
+    "failed": 0,
+    "new_unit_scenarios": 20,
+    "typecheck": true,
+    "build": true,
+    "ssg_scenarios": 4,
+    "load_budget": true
+  },
+  "go_windows": {
+    "toolchain": "go1.27.3",
+    "all_packages": true,
+    "vet": true,
+    "build": true,
+    "race_executed": false
+  },
+  "actual_go_renewal_consumers": {
+    "passed": 10,
+    "failed": 0,
+    "existing": 6,
+    "new_explicit_refresh": 4,
+    "actual_resolveItem": true,
+    "media_transfer": "mocked"
+  },
+  "additional_dynamic_php_consumer": {
+    "last_completed_run_passed": 2,
+    "last_completed_run_failed": 2,
+    "runtime": "PHP 8.3.6",
+    "note": "The missing-size mock body was corrected; an edit to its final byte-count assertion was blocked and not retried. It remains unsupported for this extra dynamic tape, not a product regression claim."
+  },
+  "security_blocked_edits": "stopped; no alternate writer or tool used for either denied edit",
+  "logs": [
+    {
+      "name": "before-refresh.log",
+      "sha256": "edf9eb0a873895beaebe834cdde1cb9c58b2540f4c4b10da3b2c5e84ca91ff65"
+    },
+    {
+      "name": "frontend-tests-initial.log",
+      "sha256": "61668faa43239ade105879c01d435621d16a8e518507b1a4ff06c668d3d4c842"
+    },
+    {
+      "name": "frontend-tests.log",
+      "sha256": "4492c24a7c982dad072d22eb2dcc9a7d52b2b270d45cdb7833d991bb08921e68"
+    },
+    {
+      "name": "frontend-types.log",
+      "sha256": "87c877d2e77000ff4893bf137e6183773fc7b608f334822f5b8dc6f6200ed17b"
+    },
+    {
+      "name": "frontend-build.log",
+      "sha256": "27fc6ad771207ec6a4ed0769c00cd2260f36765497ee459188525641beb235fe"
+    },
+    {
+      "name": "frontend-budget.log",
+      "sha256": "21adad27fc386610801a11a13a584345ed4057b12f5b9b42cd1fb5e319b4ae0f"
+    },
+    {
+      "name": "go-tests.log",
+      "sha256": "3de41c83d4a83ab2351c573555cd612da7736f2d21dc3f2cfdc765ca62bf94f6"
+    },
+    {
+      "name": "go-vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "go-build.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "actual-go-refresh-integration.log",
+      "sha256": "b9f60ea5a1db07d2dadc0a366144991ee5fe970a7e22fc2b5f50915b8f08716d"
+    },
+    {
+      "name": "refresh-php-integration.log",
+      "sha256": "7b2490a0c84412aa883dc39385a8c8ebc316ef63b8c1c500702946a54485d996"
+    }
+  ]
+}

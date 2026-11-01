@@ -10,6 +10,7 @@ on:
       - codex/remaining-platforms-go-migration
       - codex/xhs-page-transport
       - codex/download-delivery-closeout
+      - codex/renewal-selection-stability
     paths:
       - backend/**
       - frontend/**
