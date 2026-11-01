@@ -1,8 +1,28 @@
 # Go 迁移验收记录
 
+## 2026-11-01：九平台原前端选源门禁补强并完整重跑
+
+实际代码提交 **`99d7a3f186884588772e6fcc67b15124f9ad223c`**，接续 `37c853bce54dfd0950afabbb2d26758931da1dfd`，没有覆盖此前九平台实现和文档提交。[CI #41263011500](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41263011500) 的 `bilibili-php-oracle`（job `124719943846`）与 `offline-contract`（job `124719943992`）均 **completed/success**。
+
+本次只扩展既有 `frontend/scripts/test-go-media-integration.mjs` 测试生产器，实际调用未修改的 `mediaContract` 与 `useVideoSelection`。全部 **584** 份成功 Go 响应进入原选源逻辑；另外 **334** 份预期错误继续验证原错误消息。九个平台均有非零覆盖，不能只让某个平台代替其余平台通过。
+
+| 新增原消费者检查 | 实际执行次数 |
+| --- | ---: |
+| 服务端默认完整文件及其身份/URL | 618 |
+| 空默认不擅自推导可下载文件 | 98 |
+| 显式来源、原始签名 query、首选路由及状态 | 906 |
+| 缺失 variant/source 明确拒绝，不回退到其他身份 | 1424 |
+| 替换响应对象后保留当前条目和显式选择 | 1622 |
+
+上述计数按成功响应及条目/来源统计，包含 normal/debug，不是新增真实链接数量。对象替换使用同一响应的深拷贝，**不等于平台网络续签或浏览器保存**；原抖音 4 项和微博 4 项真正受控续签回归仍单独运行并全部通过。
+
+本次完整结果仍为 Go **3835/3835** 叶场景、race/vet/gofmt/build 通过，独立 Schema＋语义 **994/994**，原前端消费 **918/918**，原 **10** 项精确公共投影差异未扩大。固定 PHP 8.3.6 job 重新执行 workflow 列出的产品生产器并逐字节比较原 oracle；本次没有新增或改写 PHP 输入、expected、生产器或来源哈希，没有修改前端产品、Worker、bridge、Schema、平台实现或 PHP 生产。
+
+最新机器报告 [nine-platform-checks.json](nine-platform-checks.json) 原样来自该运行 artifact `13065594701`，SHA-256 为 `de2b4f602b005e7bb4699056d598122813e40a6decbde240809dbb9c7938f054`；新增 `selection_coverage` 按平台保留明细，其余原报告段落与前一里程碑一致。下节旧报告使用固定提交链接保留。当前结论仍仅为**九平台实现与离线验收完成**；真实平台、浏览器交付、发布包和回滚门槛未关闭，Draft 未合并、未部署，原小时任务保持暂停。
+
 ## 2026-11-01：当前聊天完成九平台实现与完整离线验收
 
-实际执行提交 **`1fdc7b73ac6e9eb54b212539fc21893e695608f5`**，对应 [CI #41262330047](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41262330047)。`bilibili-php-oracle`（job `124717949590`）和 `offline-contract`（job `124717949406`）均 **completed/success**。机器报告由该运行原样保存为 [nine-platform-checks.json](nine-platform-checks.json)，保留精确整数，未通过 JavaScript 数值解析后再写回。
+实际执行提交 **`1fdc7b73ac6e9eb54b212539fc21893e695608f5`**，对应 [CI #41262330047](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41262330047)。`bilibili-php-oracle`（job `124717949590`）和 `offline-contract`（job `124717949406`）均 **completed/success**。机器报告由该运行原样保存为 [nine-platform-checks.json](https://github.com/Brilliant666/DokiTool-Go/blob/37c853bce54dfd0950afabbb2d26758931da1dfd/docs/go-migration/nine-platform-checks.json)，保留精确整数，未通过 JavaScript 数值解析后再写回。
 
 原小时自动任务已经暂停，最后一次自动执行正常结束；本轮由当前聊天统一接管、并行实现/独立复核、串行集成。接管前已正式注册抖音、B站和微博；本轮补齐微博签发后/前端续签验证，完成头条及余下五个平台。现在正式 Go CLI/API 注册 **9/9**；这表示实现和离线门禁完成，不代表真实平台或生产切换验收完成。
 

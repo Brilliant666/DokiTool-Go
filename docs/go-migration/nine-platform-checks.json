@@ -321,6 +321,81 @@
     "expected_errors": 334,
     "unchanged_renewal_tests": 4,
     "weibo_signed_renewal_tests": 4,
+    "selection_coverage": {
+      "douyin": {
+        "responses": 174,
+        "defaults": 170,
+        "explicit_sources": 224,
+        "rejected_missing_choices": 400,
+        "snapshot_replacements": 410,
+        "non_file_defaults": 16
+      },
+      "bilibili": {
+        "responses": 58,
+        "defaults": 42,
+        "explicit_sources": 84,
+        "rejected_missing_choices": 94,
+        "snapshot_replacements": 196,
+        "non_file_defaults": 70
+      },
+      "weibo": {
+        "responses": 38,
+        "defaults": 38,
+        "explicit_sources": 84,
+        "rejected_missing_choices": 122,
+        "snapshot_replacements": 122,
+        "non_file_defaults": 0
+      },
+      "toutiao": {
+        "responses": 40,
+        "defaults": 40,
+        "explicit_sources": 52,
+        "rejected_missing_choices": 88,
+        "snapshot_replacements": 92,
+        "non_file_defaults": 0
+      },
+      "xiaohongshu": {
+        "responses": 66,
+        "defaults": 76,
+        "explicit_sources": 142,
+        "rejected_missing_choices": 176,
+        "snapshot_replacements": 222,
+        "non_file_defaults": 4
+      },
+      "kuaishou": {
+        "responses": 60,
+        "defaults": 58,
+        "explicit_sources": 112,
+        "rejected_missing_choices": 144,
+        "snapshot_replacements": 174,
+        "non_file_defaults": 4
+      },
+      "pipixia": {
+        "responses": 48,
+        "defaults": 56,
+        "explicit_sources": 68,
+        "rejected_missing_choices": 120,
+        "snapshot_replacements": 124,
+        "non_file_defaults": 0
+      },
+      "pipigx": {
+        "responses": 38,
+        "defaults": 48,
+        "explicit_sources": 48,
+        "rejected_missing_choices": 96,
+        "snapshot_replacements": 96,
+        "non_file_defaults": 0
+      },
+      "zuiyou": {
+        "responses": 62,
+        "defaults": 90,
+        "explicit_sources": 92,
+        "rejected_missing_choices": 184,
+        "snapshot_replacements": 186,
+        "non_file_defaults": 4
+      }
+    },
+    "snapshot_scope": "Same-response object replacement only; not a platform network renewal or browser save",
     "rejected_successes": 0,
     "failures": [],
     "evidence": "Actual Go envelopes consumed by unchanged frontend validator, selection and download composables; mocked transfer bytes, no browser/file-save claim"
