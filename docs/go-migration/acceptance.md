@@ -1,5 +1,11 @@
 # Go 迁移验收记录
 
+## 2026-11-01　接续修复：发布候选来源与落盘权限
+
+在 `ce56768` 的独立审查中复现了被忽略 Go 文件参与工作目录构建，以及 Linux copyfile 发布后执行位丢失；反例和边界见 [发布预检](release-preflight.md)。本轮将后端构建改为固定 HEAD 的逐 blob 校验快照，隔离工作区/构建覆盖参数，保留只读模块与依赖校验；发布保留 mode 并实际执行落盘后的 version/catalog。没有改后端产品身份或原 PHP 基线。
+
+新增 16 项单测，本机 22 项中 21 PASS / 1 POSIX-only SKIP；开发模式实际编译和 loopback 9 路由、2 拒绝配置、落盘 CLI 通过，266 个后端文件逐项校验，Linux 交叉产物仅 build-only。中间两次拒绝及开发 `git_clean:false` 保留于 [机器回执](preflight-integrity-checks.json)。最终干净 Head 的 CI 与本机回执需独立核对，不能用这里的开发运行替代。父 variant 身份、动态 PHP 额外入口及真实线上待验均未因此关闭。
+
 ## 2026-11-01　隔离 Go 候选预检与父版本身份审查
 
 本轮未改变解析器或统一身份算法。针对头条/皮皮虾已确认的“备用来源集合影响父 variant ID”检查了两平台 formatter、FileVariants 和公开冻结输入：当前父身份由来源集合或其哈希派生；已有元数据/槽位名不足以证明存在独立、永久且能区分不同媒体编码的表示标识。因此**仍未修复，不跨 variant 猜配，不更新固定 PHP 期望**。审查和未完成反例见 [隔离发布预检](release-preflight.md)。

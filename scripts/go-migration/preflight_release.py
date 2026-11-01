@@ -14,10 +14,11 @@ import hashlib
 import http.client
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -74,6 +75,115 @@ def git_identity(root: Path, *, allow_dirty: bool) -> tuple[str, bool]:
     if not clean and not allow_dirty:
         raise PreflightError("working tree or preflight recipe is uncommitted; use --allow-dirty for development-only checks")
     return head, clean
+
+
+def isolated_environment(original: dict[str, str]) -> dict[str, str]:
+    """Keep caches/network policy, not ambient source/toolchain overrides."""
+    removed = {
+        "GOENV", "GOWORK", "GOFLAGS", "GOTOOLCHAIN", "GOOS", "GOARCH",
+        "GOROOT", "GOEXPERIMENT", "GO111MODULE", "CGO_ENABLED",
+        "GOAMD64", "GO386", "GOARM", "GOARM64", "GOMIPS", "GOMIPS64",
+        "GOPPC64", "GORISCV64", "GOWASM", "SNAP_MEDIA_SIGNING_KEY",
+    }
+    env = {key: value for key, value in original.items() if key.upper() not in removed}
+    env.update({"GOENV": "off", "GOWORK": "off", "GOFLAGS": "",
+                "GOTOOLCHAIN": "local", "GO111MODULE": "on", "CGO_ENABLED": "0"})
+    return env
+
+
+def snapshot_backend(root: Path, head: str, destination: Path) -> dict:
+    """Read exact Git objects, not checkout/ignored files or archive filters.
+
+    Each blob is checked against its tree object ID before compilation. This
+    also preserves go:embed bytes, regardless of autocrlf or export attributes.
+    Symlinks and submodules are rejected rather than followed outside the tree.
+    """
+    listing = subprocess.run(
+        ["git", "-C", str(root), "ls-tree", "-r", "-z", head, "--", "backend"],
+        stdin=subprocess.DEVNULL, capture_output=True, timeout=30, check=False,
+    )
+    if listing.returncode:
+        raise PreflightError("could not enumerate the pinned backend tree")
+    entries: dict[str, tuple[str, str]] = {}
+    for record in listing.stdout.split(b"\0"):
+        if not record:
+            continue
+        metadata, encoded_name = record.split(b"\t", 1)
+        mode, kind, oid = metadata.decode("ascii").split()
+        name = encoded_name.decode("utf-8")
+        path = PurePosixPath(name)
+        if (kind != "blob" or mode not in {"100644", "100755"}
+                or not path.parts or path.parts[0] != "backend"
+                or path.is_absolute() or path.as_posix() != name
+                or any(part in {".", ".."} for part in path.parts)
+                or "\\" in name or ":" in name):
+            raise PreflightError("unsupported path, symlink or submodule in backend tree")
+        entries[name] = (mode, oid)
+    if "backend/go.mod" not in entries or "backend/go.sum" not in entries:
+        raise PreflightError("pinned backend module and checksum files are required")
+    destination.mkdir(parents=True, exist_ok=False)
+    with tempfile.TemporaryFile() as bundle:
+        objects = subprocess.run(
+            ["git", "-C", str(root), "cat-file", "--batch"],
+            input="".join(oid + "\n" for _, oid in entries.values()).encode("ascii"),
+            stdout=bundle, stderr=subprocess.PIPE, timeout=60, check=False,
+        )
+        if objects.returncode:
+            raise PreflightError("could not read the pinned backend objects")
+        bundle.seek(0)
+        for name, (mode, oid) in entries.items():
+            header = bundle.readline(200).decode("ascii").strip().split()
+            if len(header) != 3 or header[:2] != [oid, "blob"]:
+                raise PreflightError("Git object header does not match the pinned tree")
+            size = int(header[2])
+            if size < 0:
+                raise PreflightError("negative Git blob size")
+            path = destination.joinpath(*PurePosixPath(name).parts)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            blob = hashlib.sha1(f"blob {size}\0".encode("ascii"))
+            remaining = size
+            with path.open("xb") as output:
+                while remaining:
+                    chunk = bundle.read(min(remaining, 1024 * 1024))
+                    if not chunk:
+                        raise PreflightError("truncated Git blob")
+                    blob.update(chunk)
+                    output.write(chunk)
+                    remaining -= len(chunk)
+            if bundle.read(1) != b"\n" or blob.hexdigest() != oid:
+                raise PreflightError("snapshot bytes differ from the committed Git blob")
+            path.chmod(int(mode, 8) & 0o777)
+        if bundle.read(1):
+            raise PreflightError("unexpected trailing Git object output")
+    return {"kind": "verified-git-head-snapshot", "commit": head,
+            "backend_tree": checked(["git", "-C", str(root), "rev-parse", f"{head}:backend"]),
+            "verified_files": len(entries)}
+
+
+def verify_module_sources(go: str, backend: Path, env: dict[str, str]) -> None:
+    module = read_json(checked([go, "mod", "edit", "-json"], cwd=backend, env=env))
+    for replacement in module.get("Replace") or []:
+        target = replacement.get("New") or {}
+        if not target.get("Version"):
+            raise PreflightError("local module replacements are not isolated release inputs")
+    checked([go, "mod", "verify"], cwd=backend, env=env)
+
+
+def stage_artifact(source: Path, directory: Path) -> Path:
+    target = directory / source.name
+    # On Windows stat derives execute bits from the .exe suffix. Preserve it
+    # during publication too, rather than weakening the permission check.
+    temporary = directory / (source.name + ".partial" + source.suffix)
+    try:
+        shutil.copy2(source, temporary)
+        if stat.S_IMODE(temporary.stat().st_mode) != stat.S_IMODE(source.stat().st_mode):
+            raise PreflightError("staged artifact permissions do not match the tested binary")
+        if digest(temporary)["sha256"] != digest(source)["sha256"]:
+            raise PreflightError("staged artifact bytes do not match the tested binary")
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target
 
 
 def validate_stage_dir(root: Path, directory: Path) -> Path:
@@ -230,7 +340,7 @@ def digest(path: Path) -> dict:
 
 def build(go: str, backend: Path, dest: Path, head: str, env: dict[str, str]) -> None:
     checked(
-        [go, "build", "-trimpath", "-buildvcs=false",
+        [go, "build", "-mod=readonly", "-trimpath", "-buildvcs=false",
          "-ldflags", f"-X main.version={head}", "-o", str(dest), "./cmd/dokitool"],
         cwd=backend, env=env, timeout=240,
     )
@@ -242,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--go", default="go", help="explicit Go toolchain executable")
     parser.add_argument("--output-dir", type=Path, help="stage only after every native check passes")
-    parser.add_argument("--allow-dirty", action="store_true", help="development only; never release from dirty tree")
+    parser.add_argument("--allow-dirty", action="store_true", help="allow development recipe checks; backend still comes only from committed HEAD")
     parser.add_argument("--linux-amd64", action="store_true", help="also cross-compile Linux amd64; build-only, not runtime-tested")
     parser.add_argument("--startup-timeout", type=float, default=15.0)
     args = parser.parse_args(argv)
@@ -252,18 +362,18 @@ def main(argv: list[str] | None = None) -> int:
         target = validate_stage_dir(root, args.output_dir) if args.output_dir else None
         if not 1 <= args.startup_timeout <= 60:
             raise PreflightError("startup-timeout must be within 1..60 seconds")
-        go_toolchain = checked([args.go, "version"], timeout=8)
+        env = isolated_environment(os.environ.copy())
+        go_toolchain = checked([args.go, "version"], env=env, timeout=8)
         if f" {EXPECTED_TOOLCHAIN} " not in go_toolchain:
             raise PreflightError(f"expected {EXPECTED_TOOLCHAIN}, got {go_toolchain}")
         native_name = "dokitool-go.exe" if sys.platform == "win32" else "dokitool-go"
-        env = os.environ.copy()
-        # Do not allow the developer's actual signing key to leak into the
-        # isolated loopback smoke service or resulting release receipt.
-        env.pop("SNAP_MEDIA_SIGNING_KEY", None)
         with tempfile.TemporaryDirectory(prefix="dokitool-go-preflight-") as tmp:
             stage = Path(tmp)
+            provenance = snapshot_backend(root, head, stage / "source")
+            backend = stage / "source" / "backend"
+            verify_module_sources(args.go, backend, env)
             native = stage / native_name
-            build(args.go, root / "backend", native, head, env)
+            build(args.go, backend, native, head, env)
             if checked([str(native), "version"], env=env, timeout=5) != head:
                 raise PreflightError("embedded executable version does not equal git HEAD")
             catalog = read_json(checked([str(native), "catalog"], env=env, timeout=5))
@@ -275,13 +385,20 @@ def main(argv: list[str] | None = None) -> int:
                 linux = stage / "dokitool-go-linux-amd64"
                 cross_env = env.copy()
                 cross_env.update({"GOOS": "linux", "GOARCH": "amd64", "CGO_ENABLED": "0"})
-                build(args.go, root / "backend", linux, head, cross_env)
+                build(args.go, backend, linux, head, cross_env)
                 artifacts.append(linux)
+            verify_module_sources(args.go, backend, env)
+            final_head, final_clean = git_identity(root, allow_dirty=args.allow_dirty)
+            if final_head != head or (clean and not final_clean):
+                raise PreflightError("source checkout changed during preflight; no candidate published")
             report = {
                 "schema": "dokitool-go-offline-release-preflight-v1",
                 "checked_at_utc": datetime.now(timezone.utc).isoformat(),
                 "commit": head,
                 "git_clean": clean,
+                "source_provenance": provenance,
+                "build_environment": {key: env[key] for key in (
+                    "GOENV", "GOWORK", "GOFLAGS", "GOTOOLCHAIN", "GO111MODULE", "CGO_ENABLED")},
                 "go_version": go_toolchain,
                 "native_host": {"system": platform.system(), "machine": platform.machine()},
                 "platforms": sorted(platforms),
@@ -303,16 +420,20 @@ def main(argv: list[str] | None = None) -> int:
             if target:
                 target.mkdir(parents=True, exist_ok=True)
                 for item in artifacts:
-                    temporary = target / (item.name + ".partial")
-                    shutil.copyfile(item, temporary)
-                    os.replace(temporary, target / item.name)
+                    stage_artifact(item, target)
+                published = target / native.name
+                if checked([str(published), "version"], env=env, timeout=5) != head:
+                    raise PreflightError("published candidate version is invalid")
+                if read_json(checked([str(published), "catalog"], env=env, timeout=5)) != catalog:
+                    raise PreflightError("published candidate catalog is invalid")
+                report["staged_native_cli_verified"] = True
                 receipt = target / "preflight-manifest.json"
                 temporary = target / "preflight-manifest.json.partial"
                 temporary.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
                 os.replace(temporary, receipt)
             print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
-    except (PreflightError, OSError, ValueError) as exc:
+    except (PreflightError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"PRECHECK_FAILED: {exc}", file=sys.stderr)
         return 1
 
