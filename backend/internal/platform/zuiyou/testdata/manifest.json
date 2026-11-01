@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "php_version": "8.3.6",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "parse_case_count": 48,
+  "public_envelope_count": 96,
+  "entry_json_flags": 480,
+  "files": {
+    "php-baseline.json": "6500f85f460ff8f1ab48a73f7bee0885f99a4383eba1995e4398e9343b21462f"
+  },
+  "source_files": [
+    {
+      "path": "backend/api/zuiyou.php",
+      "sha256": "93677ec2b1b41a1bdbaa44f9b1d61549707cf4123710e99db885d592e3d38e6e"
+    },
+    {
+      "path": "backend/lib/runtime.php",
+      "sha256": "0c90dca5e4e90498e904a69bb891625c7f66cbcf0723c15fedd72524d8134358"
+    },
+    {
+      "path": "backend/lib/gateway.php",
+      "sha256": "74f150b294220fd0c63e9851b31830c4ba2d11a8f8b58b1bf603c6a674e7a970"
+    },
+    {
+      "path": "backend/lib/platforms.php",
+      "sha256": "5b82407a1fb6a1b7a849154fd65a44f030b2298466561dc289b60b182c359074"
+    },
+    {
+      "path": "backend/lib/media-adapters.php",
+      "sha256": "0257081ef5f4fe40bf1f288145405a56e05dfff6c887d2e73b117c6f27ea27db"
+    },
+    {
+      "path": "backend/lib/media-contract.php",
+      "sha256": "39e2e218917ad2ddc329cfbd2d7b4e6130e240bced8e4af6526656ad6b243817"
+    },
+    {
+      "path": "backend/lib/media-metadata.php",
+      "sha256": "d96a408e91029580085ef530cb99511887e165dd11063570dbb75fee58a3483e"
+    },
+    {
+      "path": "backend/lib/media-policy.php",
+      "sha256": "ccc523c6c8e53c4f8af18f51c2204a4ba14c124ed9aeb86448dafa7cf30840d9"
+    },
+    {
+      "path": "backend/lib/weibo-media.php",
+      "sha256": "5530988ce434497251aef118af2dc0833b45640da84ad32450657aa7b86adb18"
+    },
+    {
+      "path": "backend/config/platforms.json",
+      "sha256": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487"
+    },
+    {
+      "path": "backend/tests/parser-contract.php",
+      "sha256": "758b2f39159891c262609cf46239c45e4e43512eecc48ab45d78c899cb63880b"
+    },
+    {
+      "path": "backend/tests/unified-review-platforms.php",
+      "sha256": "8e3b14ffbc06e60079a3545197d30606293715ea0e2fe1c4b78e8cd2134d63b1"
+    },
+    {
+      "path": "docs/schema/unified-v1/unified-v1.schema.json",
+      "sha256": "bde334422f63488da67b8a5a40f3081f143e031f9849f2df282a175a8df6165a"
+    }
+  ],
+  "producer_files": [
+    {
+      "path": "scripts/go-migration/produce-zuiyou.py",
+      "sha256": "0a3b37c1394646f2f9db93a6c642d641c0f4e1b953cefab1e6c6249cb00d30c0"
+    },
+    {
+      "path": "scripts/go-migration/produce-zuiyou.php",
+      "sha256": "30888abc936edba4672760755ac7ec8cb1b8b487a62723e02c76b719d2988348"
+    }
+  ],
+  "input_files": [
+    {
+      "path": "backend/internal/platform/zuiyou/testdata/inputs.json",
+      "sha256": "a7f2bd4cdd5f75410af621a8b95e85bda6ae7b4d1f2bec277707d0053a14c5bf"
+    }
+  ],
+  "scope": "Unmodified parseZuiyou/cURL IO choreography, entry JSON 480, snapAdaptParser and actual snapHandle normal/debug/resolve; synthetic metadata only; fixed time(); no PHP source changes or real media.",
+  "request_comparison": "Exact URL/method/body/explicit headers and redirect/timeout settings. PHP cURL's implicit Accept: */* is added only for comparison of HEAD requests; no other request field is excluded."
+}

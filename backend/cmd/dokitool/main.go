@@ -20,8 +20,16 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/api"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/media/weibo"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/bilibili"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/kuaishou"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipigx"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipixia"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/toutiao"
+	weiboplatform "github.com/Brilliant666/DokiTool-Go/backend/internal/platform/weibo"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/xiaohongshu"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/zuiyou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
@@ -87,13 +95,23 @@ func run(args []string) error {
 	}
 	executor := fetch.New()
 	adapters := map[string]api.Adapter{
-		"douyin":   douyin.New(executor, probe.New(executor, douyin.AllowedMediaURL)),
-		"bilibili": bilibili.New(executor),
+		"douyin":      douyin.New(executor, probe.New(executor, douyin.AllowedMediaURL)),
+		"bilibili":    bilibili.New(executor),
+		"weibo":       weiboplatform.New(executor),
+		"toutiao":     toutiao.New(executor),
+		"kuaishou":    kuaishou.New(executor),
+		"pipixia":     pipixia.New(executor),
+		"pipigx":      pipigx.New(executor),
+		"zuiyou":      zuiyou.New(executor),
+		"xiaohongshu": xiaohongshu.New(executor),
 	}
-	handler, err := api.New(c, adapters, time.Now, nil)
+	handler, err := api.New(c, adapters, time.Now, weiboplatform.PreparePublic(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
 	if err != nil {
 		return err
 	}
+	// The route is present even without a configured key, where it returns the
+	// PHP-compatible legacy 503 media envelope without issuing network calls.
+	handler.SetWeiboRelay(weibo.NewMediaRelay(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
 	server := &http.Server{Addr: *listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 50 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 64 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -107,7 +125,7 @@ func run(args []string) error {
 		}
 		return err
 	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 50*time.Second)
+		shutdown, cancel := context.WithTimeout(context.Background(), 310*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdown)
 	}

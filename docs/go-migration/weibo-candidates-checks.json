@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "scope": "weibo-private-candidates",
+  "generated_for": "Brilliant666/DokiTool-Go",
+  "implementation_commit": "ef98b6b662abccba68d1ac30d3c8bc26afe02e9b",
+  "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "php_runtime": "8.3.6",
+  "php_image": "php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9",
+  "oracle_blob_sha": "93d29950f03727c39fb98a6b46adeaec217de416",
+  "oracle_path": "backend/internal/platform/weibo/testdata/php-candidates-baseline.json",
+  "producer": "scripts/go-migration/produce-weibo-candidates.php",
+  "case_counts": {
+    "candidate": 23,
+    "count": 13,
+    "candidates": 12,
+    "total": 48
+  },
+  "first_run": {
+    "id": 41248574558,
+    "conclusion": "failure",
+    "php_oracle": "success",
+    "reason": "typed nil map in test interface compared against PHP JSON null, four cases"
+  },
+  "verified_run": {
+    "id": 41248677685,
+    "conclusion": "success",
+    "php_oracle": "success",
+    "offline_contract": "success"
+  },
+  "status": {
+    "private_go_parity": "passed",
+    "public_parse_resolve": "not_implemented",
+    "real_weibo": "not_tested",
+    "browser_save": "not_tested",
+    "deployment": "not_performed",
+    "raw_json_order": "Go ordered-key extractor covered by 12 PHP candidate cases; formal parser unbound"
+  }
+}

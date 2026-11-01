@@ -1,0 +1,838 @@
+{
+    "schema": 1,
+    "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "description": "Frozen PHP Weibo count, candidate and ordered candidates production helpers, synthetic offline inputs",
+    "cases": [
+        {
+            "id": "empty-url",
+            "kind": "candidate",
+            "input": {
+                "url": null,
+                "label": "1080p",
+                "info": []
+            },
+            "expected": null
+        },
+        {
+            "id": "blank-url",
+            "kind": "candidate",
+            "input": {
+                "url": "  ",
+                "label": "1080p",
+                "info": []
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-scheme",
+            "kind": "candidate",
+            "input": {
+                "url": "javascript:alert(1)",
+                "label": "高清",
+                "info": []
+            },
+            "expected": null
+        },
+        {
+            "id": "invalid-userinfo",
+            "kind": "candidate",
+            "input": {
+                "url": "https://user:pass@f.video.weibocdn.com/v.mp4",
+                "label": "720p",
+                "info": []
+            },
+            "expected": null
+        },
+        {
+            "id": "normal-unknown",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "高清",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "高清",
+                "quality": "unknown"
+            }
+        },
+        {
+            "id": "label-1080p",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "1080P 清晰",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "1080P 清晰",
+                "quality": "1080p"
+            }
+        },
+        {
+            "id": "label-4k",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "超清 4K",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "超清 4K",
+                "quality": "2160p"
+            }
+        },
+        {
+            "id": "label-2k",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "2k",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "2k",
+                "quality": "1440p"
+            }
+        },
+        {
+            "id": "label-8k",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "8K",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "8K",
+                "quality": "4320p"
+            }
+        },
+        {
+            "id": "label-boundary",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "abc4kdef",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "abc4kdef",
+                "quality": "unknown"
+            }
+        },
+        {
+            "id": "protocol-relative",
+            "kind": "candidate",
+            "input": {
+                "url": "//f.video.weibocdn.com/a.mp4",
+                "label": "标清",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "标清",
+                "quality": "unknown"
+            }
+        },
+        {
+            "id": "trimmed-url",
+            "kind": "candidate",
+            "input": {
+                "url": "  https://f.video.weibocdn.com/a.mp4  ",
+                "label": "SD",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "SD",
+                "quality": "unknown"
+            }
+        },
+        {
+            "id": "explicit-dimensions",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "360p",
+                "info": {
+                    "width": 1920,
+                    "height": 1080
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "360p",
+                "quality": "1080p",
+                "width": 1920,
+                "height": 1080
+            }
+        },
+        {
+            "id": "one-dimension-template",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4?template=1920x1080.a",
+                "label": "1080p",
+                "info": {
+                    "width": 640
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4?template=1920x1080.a",
+                "label": "1080p",
+                "quality": "1080p",
+                "width": 1920,
+                "height": 1080
+            }
+        },
+        {
+            "id": "template-from-query",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4?template=3840x2160.mp4",
+                "label": "普通",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4?template=3840x2160.mp4",
+                "label": "普通",
+                "quality": "2160p",
+                "width": 3840,
+                "height": 2160
+            }
+        },
+        {
+            "id": "template-repeated",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4?template=640x360&template=1280x720",
+                "label": "普通",
+                "info": []
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4?template=640x360&template=1280x720",
+                "label": "普通",
+                "quality": "720p",
+                "width": 1280,
+                "height": 720
+            }
+        },
+        {
+            "id": "zero-dimensions",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "360p",
+                "info": {
+                    "width": 0,
+                    "height": "0"
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "360p",
+                "quality": "360p"
+            }
+        },
+        {
+            "id": "signed-source-metadata",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4?token=abc%2Fdef&x=1",
+                "label": "高码率",
+                "info": {
+                    "width": "1,920",
+                    "height": "1,080",
+                    "bitrate": "2,000,000",
+                    "size": "3,500",
+                    "fps": "59.94",
+                    "video_codecs": "h265"
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4?token=abc%2Fdef&x=1",
+                "label": "高码率",
+                "quality": "1080p",
+                "width": 1920,
+                "height": 1080,
+                "bit_rate": 2000000,
+                "size": 3500,
+                "fps": 59,
+                "codec": "h265"
+            }
+        },
+        {
+            "id": "untrusted-metadata",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "720p",
+                "info": {
+                    "width": "-1",
+                    "height": "NaN",
+                    "bitrate": -50,
+                    "size": false,
+                    "fps": null
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "720p",
+                "quality": "720p"
+            }
+        },
+        {
+            "id": "width-only",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "中画质",
+                "info": {
+                    "width": 1920
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "中画质",
+                "quality": "unknown",
+                "width": 1920
+            }
+        },
+        {
+            "id": "codec-string",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "未知",
+                "info": {
+                    "video_codecs": "avc1.640028"
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "未知",
+                "quality": "unknown",
+                "codec": "avc1.640028"
+            }
+        },
+        {
+            "id": "codec-empty",
+            "kind": "candidate",
+            "input": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "未知",
+                "info": {
+                    "video_codecs": ""
+                }
+            },
+            "expected": {
+                "url": "https://f.video.weibocdn.com/a.mp4",
+                "label": "未知",
+                "quality": "unknown"
+            }
+        },
+        {
+            "id": "http-video",
+            "kind": "candidate",
+            "input": {
+                "url": "http://f.video.weibocdn.com/file.mp4",
+                "label": "540p",
+                "info": []
+            },
+            "expected": {
+                "url": "http://f.video.weibocdn.com/file.mp4",
+                "label": "540p",
+                "quality": "540p"
+            }
+        },
+        {
+            "id": "count-null",
+            "kind": "count",
+            "input": {
+                "value": null
+            },
+            "expected": null
+        },
+        {
+            "id": "count-bool",
+            "kind": "count",
+            "input": {
+                "value": true
+            },
+            "expected": null
+        },
+        {
+            "id": "count-zero",
+            "kind": "count",
+            "input": {
+                "value": 0
+            },
+            "expected": 0
+        },
+        {
+            "id": "count-string-zero",
+            "kind": "count",
+            "input": {
+                "value": "0"
+            },
+            "expected": 0
+        },
+        {
+            "id": "count-commas",
+            "kind": "count",
+            "input": {
+                "value": "12,345"
+            },
+            "expected": 12345
+        },
+        {
+            "id": "count-fraction",
+            "kind": "count",
+            "input": {
+                "value": "29.97"
+            },
+            "expected": 29
+        },
+        {
+            "id": "count-exponent",
+            "kind": "count",
+            "input": {
+                "value": "2.5e2"
+            },
+            "expected": 250
+        },
+        {
+            "id": "count-negative",
+            "kind": "count",
+            "input": {
+                "value": "-1"
+            },
+            "expected": null
+        },
+        {
+            "id": "count-nan",
+            "kind": "count",
+            "input": {
+                "value": "NaN"
+            },
+            "expected": null
+        },
+        {
+            "id": "count-empty",
+            "kind": "count",
+            "input": {
+                "value": ""
+            },
+            "expected": null
+        },
+        {
+            "id": "count-bad-comma",
+            "kind": "count",
+            "input": {
+                "value": "1,00"
+            },
+            "expected": null
+        },
+        {
+            "id": "count-leading-space",
+            "kind": "count",
+            "input": {
+                "value": " 10 "
+            },
+            "expected": 10
+        },
+        {
+            "id": "count-float-zero",
+            "kind": "count",
+            "input": {
+                "value": 0
+            },
+            "expected": 0
+        },
+        {
+            "id": "none",
+            "kind": "candidates",
+            "input": {
+                "video_info": [],
+                "status": [],
+                "url_keys": []
+            },
+            "expected": []
+        },
+        {
+            "id": "video-single",
+            "kind": "candidates",
+            "input": {
+                "video_info": {
+                    "urls": {
+                        "高清": "https://f.video.weibocdn.com/a.mp4"
+                    }
+                },
+                "status": [],
+                "url_keys": [
+                    "高清"
+                ]
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/a.mp4",
+                    "label": "高清",
+                    "quality": "unknown"
+                }
+            ]
+        },
+        {
+            "id": "video-sorted",
+            "kind": "candidates",
+            "input": {
+                "video_info": {
+                    "urls": {
+                        "低清": "https://f.video.weibocdn.com/lo.mp4?template=640x360",
+                        "高画质": "https://f.video.weibocdn.com/hi.mp4?template=1920x1080"
+                    }
+                },
+                "status": [],
+                "url_keys": [
+                    "低清",
+                    "高画质"
+                ]
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/hi.mp4?template=1920x1080",
+                    "label": "高画质",
+                    "quality": "1080p",
+                    "width": 1920,
+                    "height": 1080
+                },
+                {
+                    "url": "https://f.video.weibocdn.com/lo.mp4?template=640x360",
+                    "label": "低清",
+                    "quality": "360p",
+                    "width": 640,
+                    "height": 360
+                }
+            ]
+        },
+        {
+            "id": "video-dedup-first",
+            "kind": "candidates",
+            "input": {
+                "video_info": {
+                    "urls": {
+                        "1080p": "https://f.video.weibocdn.com/x.mp4",
+                        "720p": "https://f.video.weibocdn.com/x.mp4"
+                    }
+                },
+                "status": [],
+                "url_keys": [
+                    "1080p",
+                    "720p"
+                ]
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/x.mp4",
+                    "label": "1080p",
+                    "quality": "1080p"
+                }
+            ]
+        },
+        {
+            "id": "playback-only",
+            "kind": "candidates",
+            "input": {
+                "video_info": [],
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/p.mp4",
+                                        "label": "HD",
+                                        "width": 1280,
+                                        "height": 720,
+                                        "bitrate": 1500000
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "url_keys": []
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/p.mp4",
+                    "label": "HD",
+                    "quality": "720p",
+                    "width": 1280,
+                    "height": 720,
+                    "bit_rate": 1500000
+                }
+            ]
+        },
+        {
+            "id": "playback-ignores-image",
+            "kind": "candidates",
+            "input": {
+                "video_info": [],
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "image/jpeg",
+                                        "url": "https://f.video.weibocdn.com/nope.jpg",
+                                        "label": "1080p"
+                                    }
+                                },
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/yes.mp4",
+                                        "label": "720p"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "url_keys": []
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/yes.mp4",
+                    "label": "720p",
+                    "quality": "720p"
+                }
+            ]
+        },
+        {
+            "id": "playback-over-video-duplicate",
+            "kind": "candidates",
+            "input": {
+                "video_info": {
+                    "urls": {
+                        "lower": "https://f.video.weibocdn.com/same.mp4",
+                        "other": "https://f.video.weibocdn.com/other.mp4"
+                    }
+                },
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/same.mp4",
+                                        "label": "1080p",
+                                        "width": 1920,
+                                        "height": 1080
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "url_keys": [
+                    "lower",
+                    "other"
+                ]
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/same.mp4",
+                    "label": "1080p",
+                    "quality": "1080p",
+                    "width": 1920,
+                    "height": 1080
+                },
+                {
+                    "url": "https://f.video.weibocdn.com/other.mp4",
+                    "label": "other",
+                    "quality": "unknown"
+                }
+            ]
+        },
+        {
+            "id": "fallback-mp4",
+            "kind": "candidates",
+            "input": {
+                "video_info": [],
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "mp4_720p_mp4": "https://f.video.weibocdn.com/f720.mp4",
+                            "mp4_1080p_mp4": "https://f.video.weibocdn.com/f1080.mp4",
+                            "stream_url": "https://f.video.weibocdn.com/flow.mp4"
+                        }
+                    }
+                },
+                "url_keys": []
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/f1080.mp4",
+                    "label": "mp4_1080p_mp4",
+                    "quality": "1080p"
+                },
+                {
+                    "url": "https://f.video.weibocdn.com/f720.mp4",
+                    "label": "mp4_720p_mp4",
+                    "quality": "720p"
+                },
+                {
+                    "url": "https://f.video.weibocdn.com/flow.mp4",
+                    "label": "stream_url",
+                    "quality": "unknown"
+                }
+            ]
+        },
+        {
+            "id": "fallback-skipped",
+            "kind": "candidates",
+            "input": {
+                "video_info": {
+                    "urls": {
+                        "source": "https://f.video.weibocdn.com/source.mp4"
+                    }
+                },
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "mp4_1080p_mp4": "https://f.video.weibocdn.com/f1080.mp4"
+                        }
+                    }
+                },
+                "url_keys": [
+                    "source"
+                ]
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/source.mp4",
+                    "label": "source",
+                    "quality": "unknown"
+                }
+            ]
+        },
+        {
+            "id": "fallback-duplicate",
+            "kind": "candidates",
+            "input": {
+                "video_info": [],
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "mp4_1080p_mp4": "https://f.video.weibocdn.com/same.mp4",
+                            "mp4_hd_url": "https://f.video.weibocdn.com/same.mp4"
+                        }
+                    }
+                },
+                "url_keys": []
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/same.mp4",
+                    "label": "mp4_hd_url",
+                    "quality": "unknown"
+                }
+            ]
+        },
+        {
+            "id": "playback-invalid-mime",
+            "kind": "candidates",
+            "input": {
+                "video_info": [],
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/x-flv",
+                                        "url": "https://f.video.weibocdn.com/flv.mp4",
+                                        "label": "480p"
+                                    }
+                                },
+                                {
+                                    "play_info": {
+                                        "mime": null,
+                                        "url": "https://f.video.weibocdn.com/none.mp4"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "url_keys": []
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/flv.mp4",
+                    "label": "480p",
+                    "quality": "480p"
+                }
+            ]
+        },
+        {
+            "id": "playback-conflicting-resolution",
+            "kind": "candidates",
+            "input": {
+                "video_info": [],
+                "status": {
+                    "page_info": {
+                        "media_info": {
+                            "playback_list": [
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/one.mp4?template=3840x2160",
+                                        "label": "SD",
+                                        "width": 854,
+                                        "height": 480
+                                    }
+                                },
+                                {
+                                    "play_info": {
+                                        "mime": "video/mp4",
+                                        "url": "https://f.video.weibocdn.com/two.mp4",
+                                        "label": "720p",
+                                        "bitrate": 3000000
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+                "url_keys": []
+            },
+            "expected": [
+                {
+                    "url": "https://f.video.weibocdn.com/two.mp4",
+                    "label": "720p",
+                    "quality": "720p",
+                    "bit_rate": 3000000
+                },
+                {
+                    "url": "https://f.video.weibocdn.com/one.mp4?template=3840x2160",
+                    "label": "SD",
+                    "quality": "480p",
+                    "width": 854,
+                    "height": 480
+                }
+            ]
+        }
+    ]
+}

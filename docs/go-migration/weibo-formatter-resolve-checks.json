@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "scope": "weibo-private-formatter-resolve",
+  "generated_for": "Brilliant666/DokiTool-Go",
+  "implementation_commit": "c2c574fd3a38d5070fe76bb3a49f903595828c1e",
+  "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "php_runtime": "8.3.6",
+  "php_image": "php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9",
+  "oracles": {
+    "formatter": {
+      "cases": 29,
+      "producer": "scripts/go-migration/produce-weibo-formatter.php",
+      "input": "backend/internal/platform/weibo/testdata/formatter-inputs.json",
+      "expected": "backend/internal/platform/weibo/testdata/php-formatter-baseline.json",
+      "blob_sha": "9a0f7cbd2311ae82584ca10e4a8e46666f8adfc3"
+    },
+    "resolver": {
+      "cases": 16,
+      "producer": "scripts/go-migration/produce-weibo-resolve.php",
+      "input": "backend/internal/platform/weibo/testdata/resolve-inputs.json",
+      "expected": "backend/internal/platform/weibo/testdata/php-resolve-baseline.json",
+      "blob_sha": "1c19a5d6773a8009514e4941322d60dea6f50b1d"
+    }
+  },
+  "ci": {
+    "initial_failure": {
+      "run_id": 41252623902,
+      "reason": "Generated .gitignore root wildcard typo; corrected without weakening validator"
+    },
+    "verified": {
+      "run_id": 41253090716,
+      "conclusion": "success",
+      "jobs": {
+        "bilibili-php-oracle": "success",
+        "offline-contract": "success"
+      }
+    }
+  },
+  "status": {
+    "private_php_go_parity": "passed",
+    "go_race_vet_build_schema_frontend": "passed",
+    "public_weibo_parse_resolve": "not_implemented",
+    "signed_public_media": "not_implemented",
+    "online_weibo": "not_tested",
+    "browser_save": "not_tested",
+    "deployment": "not_performed"
+  }
+}

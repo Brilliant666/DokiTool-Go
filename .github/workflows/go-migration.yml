@@ -6,6 +6,7 @@ on:
       - main
       - codex/go-backend-migration
       - codex/fix-public-media-projection
+      - codex/bilibili-go-migration
     paths:
       - backend/**
       - frontend/**
@@ -63,6 +64,158 @@ jobs:
           cmp backend/internal/platform/bilibili/testdata/php-baseline.json "$RUNNER_TEMP/bilibili-php/php-baseline.json"
           cmp backend/internal/platform/bilibili/testdata/manifest.json "$RUNNER_TEMP/bilibili-php/manifest.json"
 
+      - name: Reproduce Weibo media Range and response plan from frozen PHP 8.3.6
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/lib/weibo-media.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/lib/weibo-media.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-media.php > "$RUNNER_TEMP/weibo-media-baseline.json"
+          gzip -dc backend/internal/media/weibo/testdata/php-media-baseline.json.gz | cmp - "$RUNNER_TEMP/weibo-media-baseline.json"
+          cp "$RUNNER_TEMP/weibo-media-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-media-baseline.json"
+
+      - name: Reproduce Weibo media request preparation using frozen PHP 8.3.6
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-prepare.php > "$RUNNER_TEMP/weibo-prepare-baseline.json"
+          cmp backend/internal/media/weibo/testdata/php-prepare-baseline.json "$RUNNER_TEMP/weibo-prepare-baseline.json"
+          cp "$RUNNER_TEMP/weibo-prepare-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-prepare-baseline.json"
+
+      - name: Replay original PHP Weibo target identity and compare immutable oracle
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-target.php > "$RUNNER_TEMP/weibo-target-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/php-target-baseline.json "$RUNNER_TEMP/weibo-target-baseline.json"
+          cp "$RUNNER_TEMP/weibo-target-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-target-baseline.json"
+
+      - name: Replay real PHP Weibo visitor, transport and JSONP helpers
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-session.php > "$RUNNER_TEMP/weibo-session-baseline.json"
+          gzip -dc backend/internal/platform/weibo/testdata/php-session-baseline.json.gz | cmp - "$RUNNER_TEMP/weibo-session-baseline.json"
+          cp "$RUNNER_TEMP/weibo-session-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-session-baseline.json"
+
+      - name: Replay original PHP Weibo guest request and initialization flow
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-request.php > "$RUNNER_TEMP/weibo-request-baseline.json"
+          gzip -dc backend/internal/platform/weibo/testdata/php-request-baseline.json.gz | cmp - "$RUNNER_TEMP/weibo-request-baseline.json"
+          cp "$RUNNER_TEMP/weibo-request-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-request-baseline.json"
+
+      - name: Replay frozen PHP Weibo request header product helper
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-network-headers.php > "$RUNNER_TEMP/weibo-network-headers.json"
+          cmp backend/internal/platform/weibo/testdata/php-network-headers.json "$RUNNER_TEMP/weibo-network-headers.json"
+          cp "$RUNNER_TEMP/weibo-network-headers.json" "$RUNNER_TEMP/bilibili-php/weibo-network-headers.json"
+
+      - name: Replay frozen PHP Weibo candidate selection and metadata
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-candidates.php > "$RUNNER_TEMP/weibo-candidates-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/php-candidates-baseline.json "$RUNNER_TEMP/weibo-candidates-baseline.json"
+          cp "$RUNNER_TEMP/weibo-candidates-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-candidates-baseline.json"
+
+      - name: Generate independent frozen PHP Weibo formatter fixture for review
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-formatter.php > "$RUNNER_TEMP/weibo-formatter-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/php-formatter-baseline.json "$RUNNER_TEMP/weibo-formatter-baseline.json"
+          cp "$RUNNER_TEMP/weibo-formatter-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-formatter-baseline.json"
+
+      - name: Generate independent frozen PHP Weibo status and TV request-flow oracle
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          frozen="$(git show 25beaee107f8c1a208ced9deb3c637068445e316:backend/api/weibo.php | sha256sum | cut -d' ' -f1)"
+          current="$(sha256sum backend/api/weibo.php | cut -d' ' -f1)"
+          test "$frozen" = "$current"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-resolve.php > "$RUNNER_TEMP/weibo-resolve-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/php-resolve-baseline.json "$RUNNER_TEMP/weibo-resolve-baseline.json"
+          cp "$RUNNER_TEMP/weibo-resolve-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-resolve-baseline.json"
+
+      - name: Generate independent frozen PHP Weibo unified adapter and public views
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          for path in backend/lib/media-adapters.php backend/lib/media-contract.php backend/lib/media-policy.php; do
+            frozen="$(git show "25beaee107f8c1a208ced9deb3c637068445e316:$path" | sha256sum | cut -d' ' -f1)"
+            current="$(sha256sum "$path" | cut -d' ' -f1)"
+            test "$frozen" = "$current"
+          done
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-public.php > "$RUNNER_TEMP/weibo-public-baseline.json"
+          cp "$RUNNER_TEMP/weibo-public-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-public-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/php-public-baseline.json "$RUNNER_TEMP/weibo-public-baseline.json"
+
+      - name: Reproduce frozen signed Weibo and Toutiao PHP oracles
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          export TMPDIR="$DOKITOOL_ORACLE_TMP"
+          python3 -B scripts/go-migration/produce-weibo-signed.py --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/weibo-signed-php"
+          python3 -B scripts/go-migration/produce-toutiao.py --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/toutiao-php"
+          python3 -B scripts/go-migration/verify-toutiao.py --directory "$RUNNER_TEMP/toutiao-php" --check-git-source
+          python3 -B scripts/go-migration/verify-weibo-signed.py --directory "$RUNNER_TEMP/weibo-signed-php" --check-git-source
+          cmp backend/internal/platform/weibo/testdata/php-signed-baseline.json "$RUNNER_TEMP/weibo-signed-php/php-signed-baseline.json"
+          cmp backend/internal/platform/weibo/testdata/signed-manifest.json "$RUNNER_TEMP/weibo-signed-php/signed-manifest.json"
+          cmp backend/internal/platform/toutiao/testdata/php-baseline.json "$RUNNER_TEMP/toutiao-php/php-baseline.json"
+          cmp backend/internal/platform/toutiao/testdata/manifest.json "$RUNNER_TEMP/toutiao-php/manifest.json"
+          "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-count-boundaries.php > "$RUNNER_TEMP/weibo-count-boundaries.json"
+          cmp backend/internal/platform/weibo/testdata/php-count-boundaries.json "$RUNNER_TEMP/weibo-count-boundaries.json"
+          "$RUNNER_TEMP/dokitool-fixed-php" -r 'foreach ([chr(11), chr(12)] as $suffix) { if (base64_decode("aHR0cHM6Ly9leGFtcGxlLmNvbS94Lm1wNA==" . $suffix, true) !== false) { exit(1); } }'
+          cp -r "$RUNNER_TEMP/weibo-signed-php" "$RUNNER_TEMP/toutiao-php" "$RUNNER_TEMP/bilibili-php/"
+          cp "$RUNNER_TEMP/weibo-count-boundaries.json" "$RUNNER_TEMP/bilibili-php/"
+
+      - name: Reproduce all remaining frozen PHP platform oracles
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          export TMPDIR="$DOKITOOL_ORACLE_TMP"
+          for platform in kuaishou pipixia pipigx zuiyou xiaohongshu; do
+            python3 -B "scripts/go-migration/produce-$platform.py" --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/$platform-php"
+            python3 -B "scripts/go-migration/verify-$platform.py" --directory "$RUNNER_TEMP/$platform-php" --check-git-source
+            cmp "backend/internal/platform/$platform/testdata/php-baseline.json" "$RUNNER_TEMP/$platform-php/php-baseline.json"
+            cmp "backend/internal/platform/$platform/testdata/manifest.json" "$RUNNER_TEMP/$platform-php/manifest.json"
+            cp -r "$RUNNER_TEMP/$platform-php" "$RUNNER_TEMP/bilibili-php/"
+          done
+
+      - name: Reproduce independent Xiaohongshu JSON output boundary
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          mkdir -p "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source"
+          git archive 25beaee107f8c1a208ced9deb3c637068445e316 | tar -x -C "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source"
+          "$RUNNER_TEMP/dokitool-fixed-php" -d 'disable_functions=time,curl_exec,curl_multi_exec,dns_get_record,fsockopen,pfsockopen,stream_socket_client' -d allow_url_fopen=0 scripts/go-migration/produce-xiaohongshu-wire.php "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source" > "$RUNNER_TEMP/php-wire-baseline.json"
+          python3 -B scripts/go-migration/verify-xiaohongshu-wire.py --directory "$RUNNER_TEMP" --check-git-source
+          cmp backend/internal/platform/xiaohongshu/testdata/php-wire-baseline.json "$RUNNER_TEMP/php-wire-baseline.json"
+          cp "$RUNNER_TEMP/php-wire-baseline.json" "$RUNNER_TEMP/bilibili-php/"
+
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -98,9 +251,13 @@ jobs:
 
       - name: Verify Go source formatting
         run: |
-          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/api/bilibili_test.go backend/cmd/dokitool/main.go)"
+          unformatted="$(gofmt -l backend/internal/platform backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
+            # Show exact formatter repairs without modifying the index.
+            while IFS= read -r filename; do
+              gofmt -d "$filename"
+            done <<< "$unformatted"
             exit 1
           fi
 
@@ -115,6 +272,26 @@ jobs:
 
       - name: Test strict public-difference comparison
         run: python3 -B scripts/go-migration/test-public-projection.py
+
+      - name: Exercise new Weibo preflight parity with actionable failure output
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/media/weibo -run 'TestPHPWeiboMediaPreparation|TestPHPMediaQueryBoundary|TestMediaRelay'
+
+      - name: Compare Go Weibo identity to immutable PHP product oracle
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/platform/weibo
+
+      - name: Verify real Weibo HTTP and PHP public parity with focused diagnostics
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/api ./internal/platform/weibo -run 'TestWeibo|TestFrozenPHPWeiboPublicAdapter'
+
+      - name: Verify Toutiao parser and real HTTP parity with focused diagnostics
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/api ./internal/platform/toutiao -run 'TestToutiao|TestPHPToutiao'
+
+      - name: Verify all five remaining parsers and real HTTP routes
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/platform/kuaishou ./internal/platform/pipixia ./internal/platform/pipigx ./internal/platform/zuiyou ./internal/platform/xiaohongshu ./internal/api ./internal/fetch -run 'TestPHPKuaishou|TestPHPPipixia|TestPHPPipigx|TestPHPZuiyou|TestPHPXiaohongshu|TestKuaishou|TestPipixia|TestPipigx|TestZuiyou|TestXiaohongshu|TestAutoReferer'
 
       - name: Run the complete offline migration gate
         run: |

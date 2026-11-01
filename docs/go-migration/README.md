@@ -2,13 +2,15 @@
 
 后续 Go 开发在独立仓库 [Brilliant666/DokiTool-Go](https://github.com/Brilliant666/DokiTool-Go) 进行，维护者已将其公开用于开发协作。原 [Brilliant666/DokiTool](https://github.com/Brilliant666/DokiTool) 的 `main` 继续保留 PHP 开源版本，不整体合入 Go 迁移分支，也不以删除公开 PHP 为迁移目标。
 
-维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。当前从公共合同修复接续 B 站迁移，不部署 Go、不改变 PHP 生产；受控上游测试不等于真实平台或浏览器保存验收。
+维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)；不部署 Go、不改变 PHP 生产，受控上游测试不等于真实平台或浏览器保存验收。
+
+**九平台实现和完整离线门禁已完成**：Go 3835 叶场景，独立响应 994/994，原前端消费 918/918；签发后微博和全部新平台的公开响应均严格对拍。最新证据见 [验收记录](acceptance.md)、[机器报告](nine-platform-checks.json) 和 [五平台实施说明](remaining-platforms-implementation.md)。原自动调度保持暂停，本轮由当前聊天直接接管完成；线上双实现对照与切换交付仍待验收。
 
 [B 站实现与验收范围](bilibili.md)保留分 P、合集、单文件、分段和独立音轨的实际 PHP 行为；55 个固定 PHP 输入的 110 份 Go 公开响应已严格对拍通过。机器报告见 [bilibili-checks.json](bilibili-checks.json)，实际执行提交和 CI 链接见 [验收记录](acceptance.md)。
 
 ## 当前运行方式
 
-Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 随私库路径统一。固定工具链为 Go **1.27.3**，生产代码当前只使用标准库。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
+Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**，生产代码当前只使用标准库。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
 
 ```sh
 cd backend
@@ -20,7 +22,7 @@ go build -o /tmp/dokitool-go ./cmd/dokitool
 /tmp/dokitool-go serve -listen 127.0.0.1:9082
 ```
 
-catalog 从原路径 `backend/config/platforms.json` 内嵌，公开字段与九平台 PHP 目录保持一致。目录表示项目的平台注册事实；某平台尚未绑定 Go adapter 时，其解析请求明确返回 `503 SERVICE_NOT_CONFIGURED`，不会把空媒体结果当迁移成功。本分支绑定抖音与 B 站，其他七个平台尚未迁移。两类 [历史基线合同问题](known-issues.md) 的公共修正已通过 PR #2 的完整离线门禁，Go 服务仍不能替代九平台生产入口。
+catalog 从原路径 `backend/config/platforms.json` 内嵌，公开字段与九平台 PHP 目录保持一致。目录表示项目的平台注册事实；某平台尚未绑定 Go adapter 时，其解析请求明确返回 `503 SERVICE_NOT_CONFIGURED`，不会把空媒体结果当迁移成功。本分支已绑定抖音、B站、微博、头条、快手、皮皮虾、皮皮搞笑、最右、小红书全部九个平台。两类 [历史基线合同问题](known-issues.md) 的公共修正已通过 PR #2 的完整离线门禁，Go 服务仍不能替代九平台生产入口。
 
 公开 JSON 仍为 `/api/parse`、`/api/resolve`、`/api/platforms`，需要 `schema_version=1.0`。例如检查目录：
 
@@ -52,7 +54,7 @@ go test ./internal/unified
 
 ```sh
 python scripts/go-migration/check.py --race --report /tmp/dokitool-go-checks.json
-# 已安装 frontend/package-lock.json 中的依赖时，再加入原前端消费和四项续签检查：
+# 已安装 frontend/package-lock.json 中的依赖时，再加入原前端消费、原有四项续签及微博四项签名续签检查：
 python scripts/go-migration/check.py --race --frontend --report /tmp/dokitool-go-checks.json
 ```
 
@@ -94,16 +96,8 @@ python scripts/validate-unified-schema.py /tmp/dokitool-go-baseline.json
 
 Python 校验依赖仍由 `scripts/requirements-validation.txt` 声明。导出不覆盖 PHP 期望输出，也不把未知动态字段整批删掉。
 
-抖音实际输出可独立导出后给原前端消费；以下脚本只增加测试生产器，没有修改前端产品代码：
-
-```sh
-cd backend
-DOKITOOL_GO_DOUYIN_OUTPUT=/tmp/dokitool-go-douyin.json \
-  go test ./internal/platform/douyin -run TestPHPDouyinBaseline -count=1
-cd ..
-node frontend/scripts/test-go-media-integration.mjs /tmp/dokitool-go-douyin.json /tmp/dokitool-frontend-go.json
-```
+单个平台仍可通过对应 `DOKITOOL_GO_*_OUTPUT` 导出实际响应，用于单独审查。完整前端脚本要求九平台的冻结库存齐全，请使用上面的 `check.py --frontend` 统一生成和消费；不要把只有抖音的导出文件传给全平台脚本。该脚本只扩展测试输入，未改变前端产品代码。
 
 ## 阶段顺序
 
-骨架、公共合同、稳定身份、票据与首个抖音实现保留为当前阶段成果。本轮将已发布 PHP 的相关行为与版本化基线同步到私库；其他平台的后续迁移、Go 发布和目标环境切流均另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器及小红书 4K 新传输专项保持后续范围。
+骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；Go 发布和目标环境切流仍另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器及小红书 4K 新传输专项保持后续范围。

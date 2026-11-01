@@ -33,6 +33,7 @@ type Handler struct {
 	adapters    map[string]Adapter
 	now         func() time.Time
 	publicMedia PublicMedia
+	weiboRelay  http.Handler
 }
 
 func New(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, media PublicMedia) (*Handler, error) {
@@ -54,6 +55,10 @@ func New(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, 
 	}
 	return &Handler{catalog: c, adapters: registered, now: now, publicMedia: media}, nil
 }
+
+// SetWeiboRelay registers a binary-only handler before server startup.
+// Its response is never passed through the unified JSON encoder.
+func (h *Handler) SetWeiboRelay(relay http.Handler) { h.weiboRelay = relay }
 
 var shareURL = regexp.MustCompile(`(?i)https?://[^\s"'<>]+`)
 
@@ -169,8 +174,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sendError(w, 410, "接口已更新，请等待当前下载结束后刷新页面")
 		return
 	case "/api/media/weibo":
-		// This phase has no relay implementation. Never fall back to an arbitrary
-		// URL proxy or return a successful normalized response for it.
+		if h.weiboRelay != nil {
+			h.weiboRelay.ServeHTTP(w, r)
+			return
+		}
 		sendError(w, 503, "微博播放服务尚未配置，请联系站点维护者")
 		return
 	case "/api/parse", "/api/resolve", "/api/platforms":

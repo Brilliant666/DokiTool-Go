@@ -1,0 +1,980 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "cases": [
+    {
+      "id": "xiaohongshu/stream/minimal",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/stream/all-codecs-media-v2",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDAsImJhY2t1cFVybHMiOlsiaHR0cHM6Ly9iYWNrdXAuZXhhbXBsZS83MjAubXA0IiwiaHR0cHM6Ly9iYWNrdXAuZXhhbXBsZS83MjAubXA0Il19XSwiaDI2NSI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzEwODAubXA0P3NpZz1zeW50aGV0aWMlMkJ0b2tlbiIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODAsImF2Z0JpdHJhdGUiOjI1MDAwMDAsImR1cmF0aW9uIjoxMDAwMCwic2l6ZSI6MzAwMDAwMH1dLCJhdjEiOlt7Im1hc3RlclVybCI6Imh0dHBzOi8vbWVkaWEuZXhhbXBsZS9hdjEubXA0P3NpZz1zeW50aGV0aWMlMkJ0b2tlbiIsIndpZHRoIjoxOTIwLCJoZWlnaHQiOjEwODAsImF2Z0JpdHJhdGUiOjI1MDAwMDAsImR1cmF0aW9uIjoxMDAwMCwic2l6ZSI6MzAwMDAwMH1dfX0sIm1lZGlhVjIiOiJ7XCJzb3VyY2VfZGltZW5zaW9uXCI6e1wid2lkdGhcIjo3NjgwLFwiaGVpZ2h0XCI6NDMyMH0sXCJvcGFxdWUxXCI6XCJ7XFxcImhkX3NjcmVlbmNhc3Rfc3RyZWFtXFxcIjpcXFwie1xcXFxcXFwibWFzdGVyVXJsXFxcXFxcXCI6XFxcXFxcXCJodHRwczovL21lZGlhLmV4YW1wbGUvc2NyZWVuY2FzdC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuXFxcXFxcXCIsXFxcXFxcXCJ3aWR0aFxcXFxcXFwiOjI1NjAsXFxcXFxcXCJoZWlnaHRcXFxcXFxcIjoxNDQwLFxcXFxcXFwiYXZnQml0cmF0ZVxcXFxcXFwiOjI1MDAwMDAsXFxcXFxcXCJkdXJhdGlvblxcXFxcXFwiOjEwMDAwLFxcXFxcXFwic2l6ZVxcXFxcXFwiOjMwMDAwMDAsXFxcXFxcXCJ2aWRlb0NvZGVjXFxcXFxcXCI6XFxcXFxcXCJoZXZjXFxcXFxcXCJ9XFxcIixcXFwiZGVmYXVsdF9zY3JlZW5jYXN0X3N0cmVhbVxcXCI6e1xcXCJtYXN0ZXJfdXJsXFxcIjpcXFwiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuXFxcIixcXFwiYmFja3VwX3VybHNcXFwiOltcXFwiaHR0cHM6Ly90aGlyZC5leGFtcGxlLzcyMC5tcDRcXFwiXX19XCJ9In19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/entry/rednote-direct",
+      "input": {
+        "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/entry/discovery",
+      "input": {
+        "url": "https://www.xiaohongshu.com/discovery/item/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/discovery/item/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/entry/short",
+      "input": {
+        "url": "https://xhslink.com/a/synthetic",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://xhslink.com/a/synthetic",
+            "method": "GET",
+            "range": "",
+            "status": 302,
+            "headers": {
+              "Location": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525"
+            },
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          },
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/entry/xhs-com-alias",
+      "input": {
+        "url": "https://xhs.com/a/synthetic",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://xhslink.com/a/synthetic",
+            "method": "GET",
+            "range": "",
+            "status": 302,
+            "headers": {
+              "Location": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525"
+            },
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          },
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/page/fallback-after-403",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/page/fallback-after-empty",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnt9fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlRGF0YSI6eyJkYXRhIjp7Im5vdGVEYXRhIjp7Im5vdGVJZCI6ImZpeHR1cmUwMSIsInR5cGUiOiJ2aWRlbyIsInRpdGxlIjoidW5kZWZpbmVkIG5ldyBTZXQoW10pIOWtl+espuS4siBBK0IiLCJkZXNjIjoi6KeG6aKR6K+05piOIiwidXNlciI6eyJuaWNrbmFtZSI6IuWQiOaIkOS9nOiAhSIsInVzZXJJZCI6IjkwMDcxOTkyNTQ3NDA5OTMwMDEyIiwiYXZhdGFyIjoiaHR0cHM6Ly9pbWFnZXMuZXhhbXBsZS9hdmF0YXIuanBnIn0sInRpbWUiOjE3NDY3MDA4MDAwMDAsImludGVyYWN0SW5mbyI6eyJsaWtlZENvdW50IjowLCJjb21tZW50Q291bnQiOiIxMiIsInNoYXJlQ291bnQiOjAsImNvbGxlY3RlZENvdW50IjoxfSwiaW1hZ2VMaXN0IjpbeyJ1cmwiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2NvdmVyLmpwZyJ9XSwidmlkZW8iOnsibWVkaWEiOnsic3RyZWFtIjp7ImgyNjQiOlt7Im1hc3RlclVybCI6Imh0dHBzOi8vbWVkaWEuZXhhbXBsZS83MjAubXA0P3NpZz1zeW50aGV0aWMlMkJ0b2tlbiIsIndpZHRoIjoxMjgwLCJoZWlnaHQiOjcyMCwiYXZnQml0cmF0ZSI6MjUwMDAwMCwiZHVyYXRpb24iOjEwMDAwLCJzaXplIjozMDAwMDAwfV19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/page/relative-redirect",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 307,
+            "headers": {
+              "Location": "/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525&step=2"
+            },
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525&step=2",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/page/foreign-redirect-fallback",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 302,
+            "headers": {
+              "Location": "https://example.com/unsafe"
+            },
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/state/inert-js-values",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fX19fX0sIm5vbmUiOnVuZGVmaW5lZCwic2V0IjpuZXcgU2V0KFtdKSwibWFwIjpuZXcgTWFwKFtdKX07PC9zY3JpcHQ+",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/image/album-rewrites",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6Im5vcm1hbCIsInRpdGxlIjoidW5kZWZpbmVkIG5ldyBTZXQoW10pIOWtl+espuS4siBBK0IiLCJkZXNjIjoi6KeG6aKR6K+05piOIiwidXNlciI6eyJuaWNrbmFtZSI6IuWQiOaIkOS9nOiAhSIsInVzZXJJZCI6IjkwMDcxOTkyNTQ3NDA5OTMwMDEyIiwiYXZhdGFyIjoiaHR0cHM6Ly9pbWFnZXMuZXhhbXBsZS9hdmF0YXIuanBnIn0sInRpbWUiOjE3NDY3MDA4MDAwMDAsImludGVyYWN0SW5mbyI6eyJsaWtlZENvdW50IjowLCJjb21tZW50Q291bnQiOiIxMiIsInNoYXJlQ291bnQiOjAsImNvbGxlY3RlZENvdW50IjoxfSwiaW1hZ2VMaXN0IjpbeyJ1cmwiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL25vdGVzX3ByZV9wb3N0L2FiYyFzbWFsbCJ9LHsidXJsIjoiaHR0cHM6Ly9pbWFnZXMuZXhhbXBsZS9vc3Mtc2cvc3BlY3RydW0vZGVmIXNtYWxsIn0seyJ1cmwiOiJodHRwczovL2ltYWdlcy5leGFtcGxlLzEyMzQ1Ni9naGkhc21hbGwifV0sInZpZGVvIjp7fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/image/mixed-live",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6Im5vcm1hbCIsInRpdGxlIjoidW5kZWZpbmVkIG5ldyBTZXQoW10pIOWtl+espuS4siBBK0IiLCJkZXNjIjoi6KeG6aKR6K+05piOIiwidXNlciI6eyJuaWNrbmFtZSI6IuWQiOaIkOS9nOiAhSIsInVzZXJJZCI6IjkwMDcxOTkyNTQ3NDA5OTMwMDEyIiwiYXZhdGFyIjoiaHR0cHM6Ly9pbWFnZXMuZXhhbXBsZS9hdmF0YXIuanBnIn0sInRpbWUiOjE3NDY3MDA4MDAwMDAsImludGVyYWN0SW5mbyI6eyJsaWtlZENvdW50IjowLCJjb21tZW50Q291bnQiOiIxMiIsInNoYXJlQ291bnQiOjAsImNvbGxlY3RlZENvdW50IjoxfSwiaW1hZ2VMaXN0IjpbeyJ1cmwiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL25vdGVzX3ByZV9wb3N0L2FiYyFzbWFsbCIsInN0cmVhbSI6eyJoMjY0IjpbeyJtYXN0ZXJVcmwiOiJodHRwczovL21lZGlhLmV4YW1wbGUvbGl2ZS5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEwODAsImhlaWdodCI6MTkyMCwiYXZnQml0cmF0ZSI6MjUwMDAwMCwiZHVyYXRpb24iOjEwMDAwLCJzaXplIjozMDAwMDAwfV0sImgyNjUiOlt7Im1hc3RlclVybCI6Imh0dHBzOi8vbWVkaWEuZXhhbXBsZS9saXZlLWhldmMubXA0P3NpZz1zeW50aGV0aWMlMkJ0b2tlbiIsIndpZHRoIjoxMDgwLCJoZWlnaHQiOjE5MjAsImF2Z0JpdHJhdGUiOjI1MDAwMDAsImR1cmF0aW9uIjoxMDAwMCwic2l6ZSI6MzAwMDAwMH1dfX0seyJ1cmwiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL29zcy1zZy9zcGVjdHJ1bS9kZWYhc21hbGwifSx7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvMTIzNDU2L2doaSFzbWFsbCJ9XSwidmlkZW8iOnt9fX19fX07PC9zY3JpcHQ+",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/image/cover-fileid",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOltdLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19fSwiY292ZXIiOnsiZmlsZUlkIjoiY292ZXIwMSJ9fX19fX07PC9zY3JpcHQ+",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/stream/unknown-does-not-borrow-dimensions",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsidW5rbm93biI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlL3Vua25vd24ubXA0Iiwic291cmNlX2RpbWVuc2lvbiI6eyJ3aWR0aCI6NzY4MCwiaGVpZ2h0Ijo0MzIwfX1dfX19fX19fX07PC9zY3JpcHQ+",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/measured-4k-mov",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6InNwZWN0cnVtL3N5bnRoZXRpYy1vcmlnaW4ifX19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qn.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "288",
+              "Content-Range": "bytes 0-287/288"
+            },
+            "body_b64": "AAAAFGZ0eXBxdCAgAAAAAHF0ICAAAADSbW9vdgAAAMp0cmFrAAAAwm1kaWEAAAAcbWRoZAAAAAAAAAAAAAAAAAAAA+gAACcQAAAAFGhkbHIAAAAAAAAAAHZpZGUAAACKbWluZgAAAIJzdGJsAAAAZnN0c2QAAAAAAAAAAQAAAFZodmMxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAIcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFHN0c3oAAAAAAAAABQAAAAoAAAA6bWRhdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/measured-4k-mp4",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6InNwZWN0cnVtL3N5bnRoZXRpYy1vcmlnaW4ifX19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qn.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/mp4",
+              "Content-Length": "288",
+              "Content-Range": "bytes 0-287/288"
+            },
+            "body_b64": "AAAAFGZ0eXBpc29tAAAAAGlzb20AAADSbW9vdgAAAMp0cmFrAAAAwm1kaWEAAAAcbWRoZAAAAAAAAAAAAAAAAAAAA+gAACcQAAAAFGhkbHIAAAAAAAAAAHZpZGUAAACKbWluZgAAAIJzdGJsAAAAZnN0c2QAAAAAAAAAAQAAAFZodmMxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAIcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFHN0c3oAAAAAAAAABQAAAAoAAAA6bWRhdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/second-cdn",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6InNwZWN0cnVtL3N5bnRoZXRpYy1vcmlnaW4ifX19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qn.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-al.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "288",
+              "Content-Range": "bytes 0-287/288"
+            },
+            "body_b64": "AAAAFGZ0eXBxdCAgAAAAAHF0ICAAAADSbW9vdgAAAMp0cmFrAAAAwm1kaWEAAAAcbWRoZAAAAAAAAAAAAAAAAAAAA+gAACcQAAAAFGhkbHIAAAAAAAAAAHZpZGUAAACKbWluZgAAAIJzdGJsAAAAZnN0c2QAAAAAAAAAAQAAAFZodmMxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAIcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFHN0c3oAAAAAAAAABQAAAAoAAAA6bWRhdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/all-unavailable",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6InNwZWN0cnVtL3N5bnRoZXRpYy1vcmlnaW4ifX19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qn.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-al.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qc.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-bd.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/unmeasured-retained",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6InNwZWN0cnVtL3N5bnRoZXRpYy1vcmlnaW4ifX19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qn.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "21",
+              "Content-Range": "bytes 0-20/21"
+            },
+            "body_b64": "bm90IGEgbWVkaWEgY29udGFpbmVy",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-al.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "21",
+              "Content-Range": "bytes 0-20/21"
+            },
+            "body_b64": "bm90IGEgbWVkaWEgY29udGFpbmVy",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qc.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "21",
+              "Content-Range": "bytes 0-20/21"
+            },
+            "body_b64": "bm90IGEgbWVkaWEgY29udGFpbmVy",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-bd.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "21",
+              "Content-Range": "bytes 0-20/21"
+            },
+            "body_b64": "bm90IGEgbWVkaWEgY29udGFpbmVy",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/public-cdn-redirect",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6InNwZWN0cnVtL3N5bnRoZXRpYy1vcmlnaW4ifX19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qn.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 302,
+            "headers": {
+              "Location": "https://edge.example.net/original.mov?sig=synthetic%2Bvalue"
+            },
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://edge.example.net/original.mov?sig=synthetic%2Bvalue",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 206,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "288",
+              "Content-Range": "bytes 0-287/288"
+            },
+            "body_b64": "AAAAFGZ0eXBxdCAgAAAAAHF0ICAAAADSbW9vdgAAAMp0cmFrAAAAwm1kaWEAAAAcbWRoZAAAAAAAAAAAAAAAAAAAA+gAACcQAAAAFGhkbHIAAAAAAAAAAHZpZGUAAACKbWluZgAAAIJzdGJsAAAAZnN0c2QAAAAAAAAAAQAAAFZodmMxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAIcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFHN0c3oAAAAAAAAABQAAAAoAAAA6bWRhdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/invalid-key",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6Ii4uL3Vuc2FmZSJ9fX19fX19Ozwvc2NyaXB0Pg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/origin/small-complete-200",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOlt7InVybCI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvY292ZXIuanBnIn1dLCJ2aWRlbyI6eyJtZWRpYSI6eyJzdHJlYW0iOnsiaDI2NCI6W3sibWFzdGVyVXJsIjoiaHR0cHM6Ly9tZWRpYS5leGFtcGxlLzcyMC5tcDQ/c2lnPXN5bnRoZXRpYyUyQnRva2VuIiwid2lkdGgiOjEyODAsImhlaWdodCI6NzIwLCJhdmdCaXRyYXRlIjoyNTAwMDAwLCJkdXJhdGlvbiI6MTAwMDAsInNpemUiOjMwMDAwMDB9XX19LCJjb25zdW1lciI6eyJvcmlnaW5WaWRlb0tleSI6InNwZWN0cnVtL3N5bnRoZXRpYy1vcmlnaW4ifX19fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://sns-video-qn.xhscdn.com/spectrum/synthetic-origin",
+            "method": "GET",
+            "range": "0-65535",
+            "status": 200,
+            "headers": {
+              "Content-Type": "video/quicktime",
+              "Content-Length": "288"
+            },
+            "body_b64": "AAAAFGZ0eXBxdCAgAAAAAHF0ICAAAADSbW9vdgAAAMp0cmFrAAAAwm1kaWEAAAAcbWRoZAAAAAAAAAAAAAAAAAAAA+gAACcQAAAAFGhkbHIAAAAAAAAAAHZpZGUAAACKbWluZgAAAIJzdGJsAAAAZnN0c2QAAAAAAAAAAQAAAFZodmMxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwAIcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFHN0c3oAAAAAAAAABQAAAAoAAAA6bWRhdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/http-0",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 0,
+            "headers": {},
+            "body_b64": "",
+            "error": 7
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 0,
+            "headers": {},
+            "body_b64": "",
+            "error": 7
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/http-403",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 403,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/http-404",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 404,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 404,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/http-429",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 429,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 429,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/http-500",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 500,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 500,
+            "headers": {},
+            "body_b64": "",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/invalid-json",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189e2JhZH07PC9zY3JpcHQ+",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189e2JhZH07PC9zY3JpcHQ+",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/mismatch",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoib3RoZXIiLCJ0eXBlIjoidmlkZW8iLCJ0aXRsZSI6InVuZGVmaW5lZCBuZXcgU2V0KFtdKSDlrZfnrKbkuLIgQStCIiwiZGVzYyI6IuinhumikeivtOaYjiIsInVzZXIiOnsibmlja25hbWUiOiLlkIjmiJDkvZzogIUiLCJ1c2VySWQiOiI5MDA3MTk5MjU0NzQwOTkzMDAxMiIsImF2YXRhciI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvYXZhdGFyLmpwZyJ9LCJ0aW1lIjoxNzQ2NzAwODAwMDAwLCJpbnRlcmFjdEluZm8iOnsibGlrZWRDb3VudCI6MCwiY29tbWVudENvdW50IjoiMTIiLCJzaGFyZUNvdW50IjowLCJjb2xsZWN0ZWRDb3VudCI6MX0sImltYWdlTGlzdCI6W3sidXJsIjoiaHR0cHM6Ly9pbWFnZXMuZXhhbXBsZS9jb3Zlci5qcGcifV0sInZpZGVvIjp7Im1lZGlhIjp7InN0cmVhbSI6eyJoMjY0IjpbeyJtYXN0ZXJVcmwiOiJodHRwczovL21lZGlhLmV4YW1wbGUvNzIwLm1wND9zaWc9c3ludGhldGljJTJCdG9rZW4iLCJ3aWR0aCI6MTI4MCwiaGVpZ2h0Ijo3MjAsImF2Z0JpdHJhdGUiOjI1MDAwMDAsImR1cmF0aW9uIjoxMDAwMCwic2l6ZSI6MzAwMDAwMH1dfX19fX19fX07PC9zY3JpcHQ+",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoib3RoZXIiLCJ0eXBlIjoidmlkZW8iLCJ0aXRsZSI6InVuZGVmaW5lZCBuZXcgU2V0KFtdKSDlrZfnrKbkuLIgQStCIiwiZGVzYyI6IuinhumikeivtOaYjiIsInVzZXIiOnsibmlja25hbWUiOiLlkIjmiJDkvZzogIUiLCJ1c2VySWQiOiI5MDA3MTk5MjU0NzQwOTkzMDAxMiIsImF2YXRhciI6Imh0dHBzOi8vaW1hZ2VzLmV4YW1wbGUvYXZhdGFyLmpwZyJ9LCJ0aW1lIjoxNzQ2NzAwODAwMDAwLCJpbnRlcmFjdEluZm8iOnsibGlrZWRDb3VudCI6MCwiY29tbWVudENvdW50IjoiMTIiLCJzaGFyZUNvdW50IjowLCJjb2xsZWN0ZWRDb3VudCI6MX0sImltYWdlTGlzdCI6W3sidXJsIjoiaHR0cHM6Ly9pbWFnZXMuZXhhbXBsZS9jb3Zlci5qcGcifV0sInZpZGVvIjp7Im1lZGlhIjp7InN0cmVhbSI6eyJoMjY0IjpbeyJtYXN0ZXJVcmwiOiJodHRwczovL21lZGlhLmV4YW1wbGUvNzIwLm1wND9zaWc9c3ludGhldGljJTJCdG9rZW4iLCJ3aWR0aCI6MTI4MCwiaGVpZ2h0Ijo3MjAsImF2Z0JpdHJhdGUiOjI1MDAwMDAsImR1cmF0aW9uIjoxMDAwMCwic2l6ZSI6MzAwMDAwMH1dfX19fX19fX07PC9zY3JpcHQ+",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/empty-note",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnt9fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnt9fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/no-media",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PHNjcmlwdD53aW5kb3cuX19JTklUSUFMX1NUQVRFX189eyJub3RlIjp7Im5vdGVEZXRhaWxNYXAiOnsiZml4dHVyZTAxIjp7Im5vdGUiOnsibm90ZUlkIjoiZml4dHVyZTAxIiwidHlwZSI6InZpZGVvIiwidGl0bGUiOiJ1bmRlZmluZWQgbmV3IFNldChbXSkg5a2X56ym5LiyIEErQiIsImRlc2MiOiLop4bpopHor7TmmI4iLCJ1c2VyIjp7Im5pY2tuYW1lIjoi5ZCI5oiQ5L2c6ICFIiwidXNlcklkIjoiOTAwNzE5OTI1NDc0MDk5MzAwMTIiLCJhdmF0YXIiOiJodHRwczovL2ltYWdlcy5leGFtcGxlL2F2YXRhci5qcGcifSwidGltZSI6MTc0NjcwMDgwMDAwMCwiaW50ZXJhY3RJbmZvIjp7Imxpa2VkQ291bnQiOjAsImNvbW1lbnRDb3VudCI6IjEyIiwic2hhcmVDb3VudCI6MCwiY29sbGVjdGVkQ291bnQiOjF9LCJpbWFnZUxpc3QiOltdLCJ2aWRlbyI6e319fX19fTs8L3NjcmlwdD4=",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/no-state",
+      "input": {
+        "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://www.rednote.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PGh0bWw+dmVyaWZpY2F0aW9uPC9odG1sPg==",
+            "error": 0
+          },
+          {
+            "url": "https://www.xiaohongshu.com/explore/fixture01?xsec_token=synthetic%2Btoken%2Fvalue%3D&xsec_source=pc_feed&keep=a+b%2525",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PGh0bWw+dmVyaWZpY2F0aW9uPC9odG1sPg==",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/failure/short-without-id",
+      "input": {
+        "url": "https://xhslink.com/a/synthetic",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "url": "https://xhslink.com/a/synthetic",
+            "method": "GET",
+            "range": "",
+            "status": 200,
+            "headers": {},
+            "body_b64": "PGh0bWw+dW5rbm93bjwvaHRtbD4=",
+            "error": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "xiaohongshu/entry/reject-foreign",
+      "input": {
+        "url": "https://example.com/explore/fixture01",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "xiaohongshu/entry/reject-userinfo",
+      "input": {
+        "url": "https://user@www.rednote.com/explore/fixture01",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "xiaohongshu/entry/reject-port",
+      "input": {
+        "url": "https://www.rednote.com:8443/explore/fixture01",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@ package douyin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -44,6 +45,55 @@ func TestNilProbePreservesKnownFileAndUnknownOriginal(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireSameWire(t, unified.PublicView(full, false, int64(now)), expected["normal"])
+}
+
+func TestNamedAudioURLsPreserveExplicitMuxAndWireOrder(t *testing.T) {
+	input := unified.Map(findFixture(t, "audio-capability/alternate-language")["input"])
+	now, _ := unified.Numeric(input["now"])
+	responses := unified.Slice(input["http_responses"])
+	parse := func(urls json.RawMessage) object {
+		t.Helper()
+		response := unified.Clone(unified.Map(responses[0]))
+		payload, err := unified.Decode([]byte(unified.Str(response["body"])))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tracks := unified.Slice(child(payload, "aweme_detail", "video", "bit_rate_audio"))
+		unified.Map(child(tracks[0], "audio_meta"))["url_list"] = urls
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response["body"] = string(encoded)
+		parser := New(&fixtureExecutor{t: t, responses: array{response}}, nil)
+		full, err := parser.Parse(context.Background(), unified.Str(input["url"]), int64(now))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return unified.PublicView(full, true, int64(now))
+	}
+	want := parse(json.RawMessage(`["https://audio.example/z.m4a","https://audio.example/a.m4a"]`))
+	got := parse(json.RawMessage(`{"z":"https://audio.example/discard.m4a","a":"https://audio.example/a.m4a","z":"https://audio.example/z.m4a"}`))
+	requireSameWire(t, got, want)
+	items := unified.Slice(child(got, "data", "items"))
+	if len(items) != 1 {
+		t.Fatal("missing video item")
+	}
+	for _, variant := range unified.Slice(child(items[0], "variants")) {
+		if child(variant, "delivery", "kind") != "mux" {
+			continue
+		}
+		for _, resource := range unified.Slice(child(variant, "delivery", "resources")) {
+			if child(resource, "role") != "audio" {
+				continue
+			}
+			sources := unified.Slice(child(resource, "delivery", "sources"))
+			if len(sources) == 2 && child(sources[0], "url") == "https://audio.example/z.m4a" && child(sources[1], "url") == "https://audio.example/a.m4a" {
+				return
+			}
+		}
+	}
+	t.Fatal("explicit mux lost audio sources or their original order")
 }
 
 func TestParseCancellationStopsEachBoundary(t *testing.T) {
