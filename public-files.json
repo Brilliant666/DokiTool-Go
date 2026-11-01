@@ -37,6 +37,7 @@
     "backend/internal/api/douyin_test.go",
     "backend/internal/api/handler.go",
     "backend/internal/api/handler_test.go",
+    "backend/internal/api/weibo_test.go",
     "backend/internal/catalog/catalog.go",
     "backend/internal/catalog/catalog_test.go",
     "backend/internal/fetch/fetch.go",
