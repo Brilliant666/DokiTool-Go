@@ -37,13 +37,13 @@
 
 | 平台 | 必须覆盖的产品路径与回归 | 当前状态 |
 | --- | --- | --- |
-| 微博 | status/TV component、匿名访客与补充请求；公开媒体票据签发与续签；受控 `/api/media/weibo` GET/HEAD、单 Range、200/206/416、取消、过期/签名、无任意代理；既有错误与响应头语义 | **产品链路已接入、离线验证成功**：正式 `Parser.Parse`、`/api/parse`、`/api/resolve`、Go 签名媒体来源与独立 relay 已串通；冻结 PHP 29 组 formatter＋16 组 status/TV 请求序列＋29 组完整适配的 87 份 `internal/normal/debug` 输出严格对拍；官方协议合成 HTTP 实测及 CI [#41257671113](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41257671113) 双绿（代码 Head `aca70af8`）。**仍未做微博真实上游/浏览器/完整 PHP gateway 实际签发对照及 Go 专属原前端消费，不能标为平台最终完成** |
-| 今日头条 | 同域短链、请求内 Cookie jar/ttwid、页面 RENDER_DATA、准确作品身份、主备媒体、简介映射为 `author.description`、有界总预算 | 待实现 |
-| 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 待实现 |
-| 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 待实现 |
-| 皮皮搞笑 | pid/mid 与固定 fetch_content POST、精确整数、完整 private_videos、多视频、原始索引身份及失败语义；不新增图集能力 | 待实现 |
-| 最右 | pid/短链与固定 post/detail_h5、imgs 顺序、原 videos 映射键、缺失前项不改变后项身份、目标缺失明确拒绝 | 待实现 |
-| 小红书 | rednote 优先及既有回退、SSR、stream/mediaV2/origin、多 CDN、Live 关联、已知零值、签名查询、实际 MOV/MP4 有界探测与已验证媒体事实 | 待实现；新 TLS 指纹与 4K 端到端专项另列范围 |
+| 微博 | status/TV、访客、签名与续签、限定媒体 relay、Range/取消/可信错误 | **完整离线门禁通过**：签发后 35 场景/70 响应严格对拍，原前端 4 项默认/显式续签通过；真实平台和浏览器仍待验收 |
+| 今日头条 | 短链、ttwid、RENDER_DATA、作品身份、主备来源、author.description、共享预算 | **完整离线门禁通过**：48 场景/96 响应、86 上游步骤与 176 正式 HTTP 场景；真实平台仍待验收 |
+| 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 当前聊天迁移中；独立 PHP producer/输入已准备 |
+| 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 当前聊天迁移中；独立 PHP producer/输入已准备 |
+| 皮皮搞笑 | pid/mid 与固定 fetch_content POST、精确整数、完整 private_videos、多视频、原始索引身份及失败语义；不新增图集能力 | 当前聊天迁移中；独立 PHP producer/输入已准备 |
+| 最右 | pid/短链与固定 post/detail_h5、imgs 顺序、原 videos 映射键、缺失前项不改变后项身份、目标缺失明确拒绝 | 当前聊天迁移中；独立 PHP producer/输入已准备 |
+| 小红书 | rednote 优先及既有回退、SSR、stream/mediaV2/origin、多 CDN、Live 关联、已知零值、签名查询、实际 MOV/MP4 有界探测与已验证媒体事实 | 当前聊天迁移中；独立 PHP producer/输入已准备；新 TLS 指纹与 4K 端到端专项另列范围 |
 
 微博不能只把 JSON parser 注册为成功就关闭任务。现有 server 的 50 秒 WriteTimeout/关停窗口与媒体链路的 300 秒传输预算需一起审查并用受控测试证明相容；不得误把媒体响应包装为统一 JSON 成功体，HEAD 不写响应正文。若这要求公共 HTTP 层变更，要补相应回归并保留普通 API 预算。
 
@@ -65,7 +65,11 @@
 
 合并与部署仍须另外授权。切换前必须冻结最终 PHP 基线并入库，准备含 Caddy/FPM 配置及前端产物的旧发布包，密钥只记录引用，并演练一次回滚；参见 [rollback.md](rollback.md)。
 
-## 每轮自动接续方式
+## 接管状态与后续接续
+
+2026-11-01 当前聊天已暂停原小时调度并接管。自动调度未继续运行；以下是可复用的接续规范，不表示另有后台写入者。最新已验证里程碑见 [验收记录](acceptance.md)。
+
+### 接续规范
 
 1. 读取实际远端 PR、分支 Head、本文件和最新验收记录，确认仍在本任务仓库/分支。保护已有未提交工作；不要把临时工作区的本地快照 SHA 当作远端提交。
 2. 有未完成的实现/审查/CI 时接着完成；否则选表中下一个平台。每轮实际推进产品代码、基线或验证，不只发计划与提醒。可并行分配不同平台文件，公共注册、合同、CI 和最终提交由一个集成者负责。

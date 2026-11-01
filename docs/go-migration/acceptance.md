@@ -1,5 +1,17 @@
 # Go 迁移验收记录
 
+## 2026-11-01：聊天接管，头条与微博完整离线门禁通过
+
+自动调度已暂停，最后一次自动执行正常结束；后续由当前聊天统一集成，避免并发更新同一分支。接管远端 Head 为 `30312d27ec983a34b173672ef2e4284506ac36ac`。本阶段验证提交 `2dbad5da563b32b664ae35741ca5df1661e6d0f8`，[CI #41260973668](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41260973668) 两个 job 均 completed/success；未合并或部署。
+
+- **头条**：新增正式 Go parser、CLI/API 注册；固定 PHP 8.3.6 执行原 `toutiao/toutiaoRequest`、入口 JSON 和原 adapter/public，48 场景、86 请求生成 96 份独立公开预期。所有字段、来源顺序、身份、HTTP 请求和共享 35 秒预算严格对拍，声明差异为 0。正式 HTTP 另有 176 场景，包含解析、指定条目 resolve 与缺失目标拒绝。
+- **微博**：追加真实旧 PHP gateway 签发后的 35 场景/70 份 normal/debug 响应，与实际 Go HTTP 逐字段相等，声明差异为 0。修复可选 TV 补充超时丢失已取得的视频、计数大整数舍入、业务错误优先级/数组 urls，以及 Range 首字节前错误提交成功媒体头；35 个新增精确整数 PHP oracle 与受控 EOF/截断回归保持冻结预期。
+- **总门禁**：Go **2239** 个叶子场景、race/vet/gofmt/构建通过；独立 Schema＋语义 **542/542**；原前端实际消费 **466/466**（310 成功＋156 预期错误），原有续签 **4/4**，微博默认/显式选择及真正 `resolveItem` 续签 **4/4**。原 10 项精确公共投影差异未扩宽。机器报告见 [takeover-toutiao-weibo-checks.json](takeover-toutiao-weibo-checks.json)。
+
+首轮 `7487ef6` 的 Go 和固定 PHP 对拍通过，但新增前端测试误把单媒体可省略的 `default_item_id` 当必填，4 项失败；仅修正测试识别单条目，未向响应增加字段、未改产品前端。最终提交已重新完整验证。固定 PHP 数字/请求来源不能被 Go 期望反写；旧 fixture/producer/hash 未改。
+
+目前正式注册 **4/9**：抖音、B站、微博、头条；快手、皮皮虾、皮皮搞笑、最右、小红书继续迁移。证据全部为冻结或受控输入，没有新真实平台请求、媒体下载、浏览器保存、生产部署或回滚演练。小红书新增 TLS 指纹/4K 端到端专项及合流执行器仍不在范围。
+
 ## 2026-11-01：微博正式 Go Parse/Resolve、来源签发与 PHP 公开投影对拍
 
 代码验证点 `aca70af8e21c29415e36e2ded23e4ef1c8772743`，对应 [GitHub Actions #41257671113](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41257671113)：`bilibili-php-oracle`、`offline-contract` **均 completed/success**。首次接入正式微博 `Parser.Parse`、`cmd/dokitool` 注册、`/api/parse` 与 `/api/resolve`、统一 `PreparePublic` 安全签发及已实现的 `/api/media/weibo` GET/HEAD/Range relay。新签名源触发服务端 default 重新选择，修正中间合同校验中的旧直链引用，未改变公开 schema、前端、Worker、bridge 或原 PHP 生产。

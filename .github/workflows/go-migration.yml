@@ -192,6 +192,37 @@ jobs:
           cp -r "$RUNNER_TEMP/weibo-signed-php" "$RUNNER_TEMP/toutiao-php" "$RUNNER_TEMP/bilibili-php/"
           cp "$RUNNER_TEMP/weibo-count-boundaries.json" "$RUNNER_TEMP/bilibili-php/"
 
+      - name: Bootstrap remaining platform PHP product oracles
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          export TMPDIR="$DOKITOOL_ORACLE_TMP"
+          python3 - <<'PY'
+          import base64,gzip,hashlib,json,os,pathlib,subprocess,sys
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          failed=[]
+          for platform in ('kuaishou','pipixia','pipigx','zuiyou','xiaohongshu'):
+              output=root/(platform+'-php')
+              result=subprocess.run([sys.executable,'-B','scripts/go-migration/produce-'+platform+'.py','--php',str(root/'dokitool-fixed-php'),'--output',str(output)],text=True,capture_output=True)
+              print(platform+' producer: '+result.stdout)
+              if result.returncode:
+                  print(result.stderr)
+                  failed.append(platform)
+                  continue
+              verifier=pathlib.Path('scripts/go-migration/verify-'+platform+'.py')
+              if verifier.is_file():
+                  verified=subprocess.run([sys.executable,'-B',str(verifier),'--directory',str(output),'--check-git-source'],text=True,capture_output=True)
+                  print(platform+' verifier: '+verified.stdout)
+                  if verified.returncode:
+                      print(verified.stderr)
+                      failed.append(platform)
+              payload={p.name:p.read_text() for p in sorted(output.glob('*.json'))}
+              raw=json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode()
+              print('REMAINING_ORACLE_'+platform+'_SHA256='+hashlib.sha256(raw).hexdigest())
+              print('REMAINING_ORACLE_'+platform+'_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
+          if failed: raise SystemExit('Failed independent oracles: '+', '.join(failed))
+          PY
+
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

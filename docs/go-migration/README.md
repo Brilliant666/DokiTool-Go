@@ -4,7 +4,7 @@
 
 维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)；不部署 Go、不改变 PHP 生产，受控上游测试不等于真实平台或浏览器保存验收。
 
-[微博候选提取的固定 PHP 8.3.6 对拍与机器报告](weibo-candidates-checks.json) 是当前私有 formatter 前置里程碑，不代表微博 Parse/Resolve 已完成。
+微博签发后完整 HTTP 对拍与头条正式接入已通过离线门禁，当前聊天继续其余五个平台。最新证据见 [验收记录](acceptance.md) 和 [机器报告](takeover-toutiao-weibo-checks.json)。原自动调度已暂停，避免与聊天同时修改分支。
 
 [B 站实现与验收范围](bilibili.md)保留分 P、合集、单文件、分段和独立音轨的实际 PHP 行为；55 个固定 PHP 输入的 110 份 Go 公开响应已严格对拍通过。机器报告见 [bilibili-checks.json](bilibili-checks.json)，实际执行提交和 CI 链接见 [验收记录](acceptance.md)。
 
@@ -22,7 +22,7 @@ go build -o /tmp/dokitool-go ./cmd/dokitool
 /tmp/dokitool-go serve -listen 127.0.0.1:9082
 ```
 
-catalog 从原路径 `backend/config/platforms.json` 内嵌，公开字段与九平台 PHP 目录保持一致。目录表示项目的平台注册事实；某平台尚未绑定 Go adapter 时，其解析请求明确返回 `503 SERVICE_NOT_CONFIGURED`，不会把空媒体结果当迁移成功。本分支绑定抖音与 B 站，其他七个平台尚未迁移。两类 [历史基线合同问题](known-issues.md) 的公共修正已通过 PR #2 的完整离线门禁，Go 服务仍不能替代九平台生产入口。
+catalog 从原路径 `backend/config/platforms.json` 内嵌，公开字段与九平台 PHP 目录保持一致。目录表示项目的平台注册事实；某平台尚未绑定 Go adapter 时，其解析请求明确返回 `503 SERVICE_NOT_CONFIGURED`，不会把空媒体结果当迁移成功。本分支已绑定抖音、B站、微博与头条，其他五个平台正在迁移。两类 [历史基线合同问题](known-issues.md) 的公共修正已通过 PR #2 的完整离线门禁，Go 服务仍不能替代九平台生产入口。
 
 公开 JSON 仍为 `/api/parse`、`/api/resolve`、`/api/platforms`，需要 `schema_version=1.0`。例如检查目录：
 
@@ -54,7 +54,7 @@ go test ./internal/unified
 
 ```sh
 python scripts/go-migration/check.py --race --report /tmp/dokitool-go-checks.json
-# 已安装 frontend/package-lock.json 中的依赖时，再加入原前端消费和四项续签检查：
+# 已安装 frontend/package-lock.json 中的依赖时，再加入原前端消费、原有四项续签及微博四项签名续签检查：
 python scripts/go-migration/check.py --race --frontend --report /tmp/dokitool-go-checks.json
 ```
 
