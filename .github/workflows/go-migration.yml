@@ -7,6 +7,7 @@ on:
       - codex/go-backend-migration
       - codex/fix-public-media-projection
       - codex/bilibili-go-migration
+      - codex/remaining-platforms-go-migration
     paths:
       - backend/**
       - frontend/**
@@ -311,3 +312,39 @@ jobs:
           path: ${{ runner.temp }}/dokitool-go-checks.json
           if-no-files-found: warn
           retention-days: 7
+
+  xhs-dependency-review:
+    if: github.repository == 'Brilliant666/DokiTool-Go'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+      - name: Retain public source and pinned dependency review material
+        run: |
+          mkdir -p "$RUNNER_TEMP/xhs-review/module" "$RUNNER_TEMP/xhs-review/dependencies"
+          git archive HEAD | gzip -n > "$RUNNER_TEMP/xhs-review/source.tar.gz"
+          git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/xhs-review/source-revision.txt"
+          cd "$RUNNER_TEMP/xhs-review/module"
+          go mod init dokitool.invalid/dependency-review
+          go mod edit -go=1.27.3
+          go get github.com/bogdanfinn/tls-client@v1.18.0
+          go list -m -json all > "$RUNNER_TEMP/xhs-review/modules.json"
+          for module in github.com/bogdanfinn/tls-client github.com/bogdanfinn/fhttp github.com/bogdanfinn/utls; do
+            directory="$(go list -m -f '{{.Dir}}' "$module")"
+            tar -czf "$RUNNER_TEMP/xhs-review/dependencies/$(basename "$module").tar.gz" -C "$directory" .
+          done
+          sha256sum "$RUNNER_TEMP/xhs-review/source.tar.gz" "$RUNNER_TEMP/xhs-review/dependencies/"*.tar.gz > "$RUNNER_TEMP/xhs-review/checksums.txt"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: xhs-review-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/xhs-review
+          retention-days: 1
+          if-no-files-found: error
