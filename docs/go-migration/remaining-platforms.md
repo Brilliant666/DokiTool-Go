@@ -1,5 +1,11 @@
 # 剩余七平台的持续迁移
 
+## 当前结果：九平台实现与离线门禁完成
+
+本轮执行提交 `1fdc7b73ac6e9eb54b212539fc21893e695608f5`，[CI #41262330047](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41262330047) 两个 job 均成功。Go 已正式注册九个平台；3835 叶场景、race/vet/gofmt/build，独立响应 994/994、原前端消费 918/918、抖音与微博各 4/4 续签通过。完整事实见 [验收记录](acceptance.md)、[机器报告](nine-platform-checks.json) 与 [五平台实施说明](remaining-platforms-implementation.md)。
+
+原小时调度保持暂停，本轮由当前聊天直接接管完成。当前没有剩余平台代码待迁移；实际链接 PHP/Go 对照、必要浏览器保存与发布回滚门槛仍待验收，不自动合并、部署或重复大文件测试。
+
 ## 目标与授权
 
 维护者已授权在当前聊天中持续完成剩余平台的 Go 实现、审查和验证，不需要每完成一个平台再次请求“继续”。开发位置为独立仓库 `Brilliant666/DokiTool-Go`，目前公开用于协作。
@@ -39,11 +45,11 @@
 | --- | --- | --- |
 | 微博 | status/TV、访客、签名与续签、限定媒体 relay、Range/取消/可信错误 | **完整离线门禁通过**：签发后 35 场景/70 响应严格对拍，原前端 4 项默认/显式续签通过；真实平台和浏览器仍待验收 |
 | 今日头条 | 短链、ttwid、RENDER_DATA、作品身份、主备来源、author.description、共享预算 | **完整离线门禁通过**：48 场景/96 响应、86 上游步骤与 176 正式 HTTP 场景；真实平台仍待验收 |
-| 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | 当前聊天迁移中；独立 PHP producer/输入已准备 |
-| 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | 当前聊天迁移中；独立 PHP producer/输入已准备 |
-| 皮皮搞笑 | pid/mid 与固定 fetch_content POST、精确整数、完整 private_videos、多视频、原始索引身份及失败语义；不新增图集能力 | 当前聊天迁移中；独立 PHP producer/输入已准备 |
-| 最右 | pid/短链与固定 post/detail_h5、imgs 顺序、原 videos 映射键、缺失前项不改变后项身份、目标缺失明确拒绝 | 当前聊天迁移中；独立 PHP producer/输入已准备 |
-| 小红书 | rednote 优先及既有回退、SSR、stream/mediaV2/origin、多 CDN、Live 关联、已知零值、签名查询、实际 MOV/MP4 有界探测与已验证媒体事实 | 当前聊天迁移中；独立 PHP producer/输入已准备；新 TLS 指纹与 4K 端到端专项另列范围 |
+| 快手 | HEAD 短链、INIT_STATE/APOLLO、manifest、视频/图集、来源与实际规格、既有空 Cookie 行为；按 catalog 的能力实现，不自行新增 Live | **完整离线门禁通过**：40 场景/80 响应、202 正式 HTTP 场景；真实平台待验收 |
+| 皮皮虾 | 短链与 item ID、目标详情提取、大整数字符串、目标不匹配、排除评论媒体 | **完整离线门禁通过**：49 场景/98 响应、202 正式 HTTP 场景；真实平台待验收 |
+| 皮皮搞笑 | pid/mid 与固定 fetch_content POST、精确整数、完整 private_videos、多视频、原始索引身份及失败语义；不新增图集能力 | **完整离线门禁通过**：42 场景/84 响应、170 正式 HTTP 场景；真实平台待验收 |
+| 最右 | pid/短链与固定 post/detail_h5、imgs 顺序、原 videos 映射键、缺失前项不改变后项身份、目标缺失明确拒绝 | **完整离线门禁通过**：48 场景/96 实际网关响应及正式 HTTP，包含稳定身份与缺失目标；真实平台待验收 |
+| 小红书 | rednote 优先及既有回退、SSR、stream/mediaV2/origin、多 CDN、Live 关联、已知零值、签名查询、实际 MOV/MP4 有界探测与已验证媒体事实 | **完整离线门禁通过**：37 主场景/74 响应、10 wire/20 响应、170 正式 HTTP；真实平台、新 TLS 指纹和 4K 端到端专项待验收 |
 
 微博不能只把 JSON parser 注册为成功就关闭任务。现有 server 的 50 秒 WriteTimeout/关停窗口与媒体链路的 300 秒传输预算需一起审查并用受控测试证明相容；不得误把媒体响应包装为统一 JSON 成功体，HEAD 不写响应正文。若这要求公共 HTTP 层变更，要补相应回归并保留普通 API 预算。
 
