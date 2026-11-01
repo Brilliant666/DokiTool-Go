@@ -1,0 +1,4948 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "cases": [
+    {
+      "id": "pipigx/video/minimal",
+      "scenario": "Single complete video stays simple and request bytes remain fixed",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/video/three-with-invalid-middle",
+      "scenario": "Invalid URL leaves an index gap while all private video observations survive",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/one.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"javascript:alert(1)\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"https://media.example/three.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1280,\"height\":720,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "javascript:alert(1)",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/three.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1280,
+                "height": 720,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "javascript:alert(1)",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/three.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1280,
+                "height": 720,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-8ce70d9d5c2576dfcd8a9ef1",
+                  "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-64b0e457df6e51f99d33e630"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-64b0e457df6e51f99d33e630"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-8ce70d9d5c2576dfcd8a9ef1"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              },
+              {
+                "id": "video-3",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-908bc699318073fb2190c487",
+                  "url": "https://media.example/three.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-0a624dc8fd5f99c971b4fe7f"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/three.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-0a624dc8fd5f99c971b4fe7f"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1280,
+                      "height": 720,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-908bc699318073fb2190c487"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-3"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-8ce70d9d5c2576dfcd8a9ef1",
+                  "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-64b0e457df6e51f99d33e630"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/one.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-64b0e457df6e51f99d33e630"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-8ce70d9d5c2576dfcd8a9ef1"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              },
+              {
+                "id": "video-3",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-908bc699318073fb2190c487",
+                  "url": "https://media.example/three.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-0a624dc8fd5f99c971b4fe7f"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/three.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-0a624dc8fd5f99c971b4fe7f"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1280,
+                      "height": 720,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-908bc699318073fb2190c487"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-3&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/video/object-insertion-order",
+      "scenario": "Object videos preserve upstream JSON insertion order, never sorted Go map keys",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":{\"z-first\":{\"url\":\"https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},\"a-second\":{\"url\":\"https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}}}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-86b4d2dc87deab9537bb3e9b",
+                  "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-f491d3c83e1e9e249f4caaba"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-f491d3c83e1e9e249f4caaba"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-86b4d2dc87deab9537bb3e9b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              },
+              {
+                "id": "video-2",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-241c1b2f7eecdfa0b17dc951",
+                  "url": "https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-d06910dc5132e1b0d50202ad"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-d06910dc5132e1b0d50202ad"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-241c1b2f7eecdfa0b17dc951"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-2"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-86b4d2dc87deab9537bb3e9b",
+                  "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-f491d3c83e1e9e249f4caaba"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-f491d3c83e1e9e249f4caaba"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-86b4d2dc87deab9537bb3e9b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              },
+              {
+                "id": "video-2",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-241c1b2f7eecdfa0b17dc951",
+                  "url": "https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-d06910dc5132e1b0d50202ad"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-d06910dc5132e1b0d50202ad"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-241c1b2f7eecdfa0b17dc951"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-2&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/video/nonarray-skipped-before-indexing",
+      "scenario": "Non-array entries are discarded before the PHP private_videos list is indexed",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[\"not-an-array\",{\"url\":\"https://media.example/first.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},null,{\"url\":\"https://media.example/second.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/second.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/second.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-618c8dcc0fde8a0580f1757a",
+                  "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-20ec13d838abf8c0da0a6573"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-20ec13d838abf8c0da0a6573"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-618c8dcc0fde8a0580f1757a"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              },
+              {
+                "id": "video-2",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-bdc6df41041bdaef08710e0d",
+                  "url": "https://media.example/second.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-21f27108733052575524ea33"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/second.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-21f27108733052575524ea33"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-bdc6df41041bdaef08710e0d"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-2"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-618c8dcc0fde8a0580f1757a",
+                  "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-20ec13d838abf8c0da0a6573"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/first.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-20ec13d838abf8c0da0a6573"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-618c8dcc0fde8a0580f1757a"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              },
+              {
+                "id": "video-2",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-bdc6df41041bdaef08710e0d",
+                  "url": "https://media.example/second.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-21f27108733052575524ea33"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/second.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-21f27108733052575524ea33"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-bdc6df41041bdaef08710e0d"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-2&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/video/first-url-invalid",
+      "scenario": "Invalid first private video makes an explicit failure even if a later video is usable",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"javascript:alert(1)\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"https://media.example/later.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/video/preserves-duplicate-entries",
+      "scenario": "Private video entries remain distinct items even when media URL repeats",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/same.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"https://media.example/same.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              },
+              {
+                "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-5cc558f8e5b2900266d20d29",
+                  "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-4a7e747fbe8ffe244d9b7c30"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-4a7e747fbe8ffe244d9b7c30"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-5cc558f8e5b2900266d20d29"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              },
+              {
+                "id": "video-2",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-5cc558f8e5b2900266d20d29",
+                  "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-4a7e747fbe8ffe244d9b7c30"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-4a7e747fbe8ffe244d9b7c30"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-5cc558f8e5b2900266d20d29"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-2"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-5cc558f8e5b2900266d20d29",
+                  "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-4a7e747fbe8ffe244d9b7c30"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-4a7e747fbe8ffe244d9b7c30"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-5cc558f8e5b2900266d20d29"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              },
+              {
+                "id": "video-2",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-5cc558f8e5b2900266d20d29",
+                  "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-4a7e747fbe8ffe244d9b7c30"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/same.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-4a7e747fbe8ffe244d9b7c30"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-5cc558f8e5b2900266d20d29"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-2&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/video/upstream-private-identity",
+      "scenario": "Explicit upstream private_video_id uses the shared identity boundary",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/a.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_video_id\":\"resource-z\"},{\"url\":\"https://media.example/b.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_video_id\":\"resource-a\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_video_id": "resource-z"
+              },
+              {
+                "url": "https://media.example/b.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_video_id": "resource-a"
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_video_id": "resource-z"
+              },
+              {
+                "url": "https://media.example/b.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_video_id": "resource-a"
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-e1b56ce8099e66274a28affa",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-25bf2bfd799a4b394c4dbe75",
+                  "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-ca72c0a6d700e4c4df5f4384"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-ca72c0a6d700e4c4df5f4384"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-25bf2bfd799a4b394c4dbe75"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-e1b56ce8099e66274a28affa"
+              },
+              {
+                "id": "video-be49bedc2c4062a4416c89ee",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-2273b8793feed8780b49cb2b",
+                  "url": "https://media.example/b.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-0ea5ca72cf607bb3b41e10b0"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/b.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-0ea5ca72cf607bb3b41e10b0"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-2273b8793feed8780b49cb2b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-be49bedc2c4062a4416c89ee"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-e1b56ce8099e66274a28affa",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-e1b56ce8099e66274a28affa",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-25bf2bfd799a4b394c4dbe75",
+                  "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-ca72c0a6d700e4c4df5f4384"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/a.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-ca72c0a6d700e4c4df5f4384"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-25bf2bfd799a4b394c4dbe75"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-e1b56ce8099e66274a28affa&debug=1"
+              },
+              {
+                "id": "video-be49bedc2c4062a4416c89ee",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-2273b8793feed8780b49cb2b",
+                  "url": "https://media.example/b.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-0ea5ca72cf607bb3b41e10b0"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/b.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-0ea5ca72cf607bb3b41e10b0"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-2273b8793feed8780b49cb2b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-be49bedc2c4062a4416c89ee&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-e1b56ce8099e66274a28affa",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/video/no-invented-album",
+      "scenario": "Unrelated image fields never become an unsupported image album",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}],\"images\":[\"https://images.example/a.jpg\"],\"imgs\":[\"https://images.example/b.jpg\"]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/wire/numeric-text",
+      "scenario": "Flags480 convert numeric title, dimensions and metadata before adaptation",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"000123\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":\"1920\",\"height\":\"1080\",\"size\":\"12000000\",\"duration\":\"1.5005\",\"quality\":\"720\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "000123",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": "1920",
+                "height": "1080",
+                "size": "12000000",
+                "duration": "1.5005",
+                "quality": "720"
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": 123,
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 1.5005,
+                "quality": 720
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 1501,
+                      "evidence": "upstream"
+                    },
+                    "label": "720",
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "123",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 1501,
+                      "evidence": "upstream"
+                    },
+                    "label": "720",
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "123",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/wire/exponent-title",
+      "scenario": "Numeric exponent becomes double; PHP snapText does not invent a title from a float",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"1e3\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "1e3",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": 1000,
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "1000",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "1000",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/wire/large-json-token",
+      "scenario": "Default PHP JSON decoding keeps int64 tokens exact and uses doubles beyond its range",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":9007199254740993,\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_metadata_id\":9223372036854775808}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/9007199254740993",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 9007199254740993,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_metadata_id": 9.223372036854776e+18
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/9007199254740993",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 9007199254740993,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_metadata_id": 9.223372036854776e+18
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/9007199254740993"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/9007199254740993"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/wire/large-numeric-string",
+      "scenario": "JSON_NUMERIC_CHECK parses oversized numeric strings at the entry boundary",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_metadata_id\":\"9223372036854775808\",\"quality\":\"001080\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_metadata_id": "9223372036854775808",
+                "quality": "001080"
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345,
+                "private_metadata_id": 9.223372036854776e+18,
+                "quality": 1080
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080",
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080",
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fpp%2Fpost%2F1234567890123456789%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/mid-zero",
+      "scenario": "A zero mid is valid and remains zero in POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1&mid=0",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=1&mid=0",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D0&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D0",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=1&mid=0",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D0&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D0&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "31"
+            },
+            "body": "{\"pid\":1,\"mid\":0,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/mid-leading-zero",
+      "scenario": "Leading zero mid casts exactly once to integer",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=123&mid=0000123",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=123&mid=0000123",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D123%26mid%3D0000123&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D123%26mid%3D0000123",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=123&mid=0000123",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D123%26mid%3D0000123&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D123%26mid%3D0000123&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "35"
+            },
+            "body": "{\"pid\":123,\"mid\":123,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/duplicate-last-scalar",
+      "scenario": "PHP parse_str last scalar wins without double URL decoding",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1&mid=2&pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=1&mid=2&pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D2%26pid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D2%26pid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=1&mid=2&pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D2%26pid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D1%26mid%3D2%26pid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/array-then-scalar",
+      "scenario": "A later scalar replaces an earlier query array",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid[]=1&pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid[]=1&pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%5B%5D%3D1%26pid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%5B%5D%3D1%26pid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid[]=1&pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%5B%5D%3D1%26pid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%5B%5D%3D1%26pid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/ippzone-domain",
+      "scenario": "The registered alternate share domain uses the same fixed API",
+      "input": {
+        "url": "https://ippzone.com/share?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://ippzone.com/share?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fippzone.com%2Fshare%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fippzone.com%2Fshare%3Fpid%3D1234567890123456789%26mid%3D9876543210",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://ippzone.com/share?pid=1234567890123456789&mid=9876543210",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fippzone.com%2Fshare%3Fpid%3D1234567890123456789%26mid%3D9876543210&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fippzone.com%2Fshare%3Fpid%3D1234567890123456789%26mid%3D9876543210&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/integer/int64-max",
+      "scenario": "Preserve PHP float-boundary validation then exact numeric-string int conversion",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854775807&mid=9223372036854775807",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=9223372036854775807&mid=9223372036854775807",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775807%26mid%3D9223372036854775807&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775807%26mid%3D9223372036854775807",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=9223372036854775807&mid=9223372036854775807",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775807%26mid%3D9223372036854775807&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775807%26mid%3D9223372036854775807&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "67"
+            },
+            "body": "{\"pid\":9223372036854775807,\"mid\":9223372036854775807,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/integer/one-past-int64",
+      "scenario": "Preserve PHP float-boundary validation then exact numeric-string int conversion",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854775808&mid=9223372036854775808",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=9223372036854775808&mid=9223372036854775808",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775808%26mid%3D9223372036854775808&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775808%26mid%3D9223372036854775808",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=9223372036854775808&mid=9223372036854775808",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775808%26mid%3D9223372036854775808&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854775808%26mid%3D9223372036854775808&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "67"
+            },
+            "body": "{\"pid\":9223372036854775807,\"mid\":9223372036854775807,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/integer/float-rounded-above-int64",
+      "scenario": "Preserve PHP float-boundary validation then exact numeric-string int conversion",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854776831&mid=9223372036854776831",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": "1234567890",
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": "https://file.ippzone.com/img/frame/id/1234567890",
+            "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+            "private_videos": [
+              {
+                "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                "thumb": 1234567890,
+                "width": 1920,
+                "height": 1080,
+                "size": 12000000,
+                "duration": 12.345
+              }
+            ]
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=9223372036854776831&mid=9223372036854776831",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854776831%26mid%3D9223372036854776831&item_id=video-1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854776831%26mid%3D9223372036854776831",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "pipigx",
+            "source_url": "https://h5.pipigx.com/share?pid=9223372036854776831&mid=9223372036854776831",
+            "items": [
+              {
+                "id": "video-1",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-cf61463fa79e5c8dd688b842",
+                  "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                  "source_id": "s-e98a6f01d0363ac51d3f7e14"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://media.example/main.mp4?keep=a%2Bb+z&token=fixed",
+                          "size_bytes": 12000000,
+                          "id": "s-e98a6f01d0363ac51d3f7e14"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "duration_ms": 12345,
+                      "evidence": "upstream"
+                    },
+                    "id": "v-cf61463fa79e5c8dd688b842"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854776831%26mid%3D9223372036854776831&item_id=video-1&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fh5.pipigx.com%2Fshare%3Fpid%3D9223372036854776831%26mid%3D9223372036854776831&debug=1",
+            "title": "皮皮搞笑 A+B %25 中文😀",
+            "cover": {
+              "url": "https://file.ippzone.com/img/frame/id/1234567890"
+            },
+            "default_item_id": "video-1",
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "67"
+            },
+            "body": "{\"pid\":9223372036854775807,\"mid\":9223372036854775807,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-leading-zero-pid",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=01&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-zero-pid",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=0&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-negative",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=-1&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-escaped-plus",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=%2B1&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-array",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid[]=1&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-missing-mid",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-float",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1.0&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-exponent",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1e3&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-whitespace",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=%201&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-int64-too-large",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854777856&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-twenty-digits",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=10000000000000000000&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      },
+      "expected": {
+        "parser_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 400,
+          "msg": "提取参数出错",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "INVALID_INPUT",
+          "error": {
+            "code": "INVALID_INPUT",
+            "message": "提取参数出错"
+          }
+        },
+        "http_requests": [],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/http/403",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 403,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 403,
+          "msg": "HTTP 错误发生: HTTP 状态码 403",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 403,
+          "msg": "HTTP 错误发生: HTTP 状态码 403",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_BLOCKED",
+          "error": {
+            "code": "UPSTREAM_BLOCKED",
+            "message": "HTTP 错误发生: HTTP 状态码 403"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_BLOCKED",
+          "error": {
+            "code": "UPSTREAM_BLOCKED",
+            "message": "HTTP 错误发生: HTTP 状态码 403"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/http/404",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 404,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 404,
+          "msg": "HTTP 错误发生: HTTP 状态码 404",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 404,
+          "msg": "HTTP 错误发生: HTTP 状态码 404",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "HTTP 错误发生: HTTP 状态码 404"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "HTTP 错误发生: HTTP 状态码 404"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/http/429",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 429,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 429,
+          "msg": "HTTP 错误发生: HTTP 状态码 429",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 429,
+          "msg": "HTTP 错误发生: HTTP 状态码 429",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "RATE_LIMITED",
+          "error": {
+            "code": "RATE_LIMITED",
+            "message": "HTTP 错误发生: HTTP 状态码 429",
+            "retryable": true
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "RATE_LIMITED",
+          "error": {
+            "code": "RATE_LIMITED",
+            "message": "HTTP 错误发生: HTTP 状态码 429",
+            "retryable": true
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/http/500",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 500,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 500,
+          "msg": "HTTP 错误发生: HTTP 状态码 500",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 500,
+          "msg": "HTTP 错误发生: HTTP 状态码 500",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "HTTP 错误发生: HTTP 状态码 500",
+            "retryable": true
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "HTTP 错误发生: HTTP 状态码 500",
+            "retryable": true
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/http/transport-failure",
+      "scenario": "cURL errno becomes original HTTP500 wrapper before public error mapping",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 0,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false,
+            "error": "Synthetic transport failure",
+            "errno": 6
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 500,
+          "msg": "HTTP 错误发生: HTTP 状态码 500",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 500,
+          "msg": "HTTP 错误发生: HTTP 状态码 500",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "HTTP 错误发生: HTTP 状态码 500",
+            "retryable": true
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "HTTP 错误发生: HTTP 状态码 500",
+            "retryable": true
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/response/invalid-json",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{broken",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 502,
+          "msg": "响应内容不是有效的 JSON 数据",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 502,
+          "msg": "响应内容不是有效的 JSON 数据",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_INVALID_RESPONSE",
+          "error": {
+            "code": "UPSTREAM_INVALID_RESPONSE",
+            "message": "响应内容不是有效的 JSON 数据"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_INVALID_RESPONSE",
+          "error": {
+            "code": "UPSTREAM_INVALID_RESPONSE",
+            "message": "响应内容不是有效的 JSON 数据"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/response/null-json",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "null",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 502,
+          "msg": "响应内容不是有效的 JSON 数据",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 502,
+          "msg": "响应内容不是有效的 JSON 数据",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_INVALID_RESPONSE",
+          "error": {
+            "code": "UPSTREAM_INVALID_RESPONSE",
+            "message": "响应内容不是有效的 JSON 数据"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_INVALID_RESPONSE",
+          "error": {
+            "code": "UPSTREAM_INVALID_RESPONSE",
+            "message": "响应内容不是有效的 JSON 数据"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/response/missing-post",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 500,
+          "msg": "响应中缺少 data.post 字段",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 500,
+          "msg": "响应中缺少 data.post 字段",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "响应中缺少 data.post 字段",
+            "retryable": true
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "响应中缺少 data.post 字段",
+            "retryable": true
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/response/empty-post",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/response/empty-videos",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[]}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    },
+    {
+      "id": "pipigx/response/scalar-videos",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":\"bad\"}}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "expected": {
+        "parser_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "legacy_response": {
+          "code": 404,
+          "msg": "作品没有可用的视频地址",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "CONTENT_UNAVAILABLE",
+          "error": {
+            "code": "CONTENT_UNAVAILABLE",
+            "message": "作品没有可用的视频地址"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "headers": {
+              "content-type": "application/json",
+              "content-length": "58"
+            },
+            "body": "{\"pid\":1234567890123456789,\"mid\":9876543210,\"type\":\"post\"}",
+            "follow_redirects": false,
+            "timeout_seconds": 20
+          }
+        ],
+        "clock_calls": 0
+      }
+    }
+  ]
+}

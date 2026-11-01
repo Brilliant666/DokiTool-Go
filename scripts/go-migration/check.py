@@ -17,6 +17,13 @@ ROOT = Path(__file__).resolve().parents[2]
 BILIBILI = ROOT / "backend/internal/platform/bilibili/testdata/php-baseline.json"
 WEIBO = ROOT / "backend/internal/platform/weibo/testdata/php-signed-baseline.json"
 TOUTIAO = ROOT / "backend/internal/platform/toutiao/testdata/php-baseline.json"
+PLATFORM_ORACLES = {
+    "weibo": (WEIBO, "verify-weibo-signed.py"),
+    "toutiao": (TOUTIAO, "verify-toutiao.py"),
+    "xiaohongshu_wire": (ROOT / "backend/internal/platform/xiaohongshu/testdata/php-wire-baseline.json", "verify-xiaohongshu-wire.py"),
+    **{name: (ROOT / "backend/internal/platform" / name / "testdata/php-baseline.json", f"verify-{name}.py")
+       for name in ("kuaishou", "pipixia", "pipigx", "zuiyou", "xiaohongshu")},
+}
 
 
 def run(command, *, cwd=ROOT, env=None):
@@ -76,7 +83,7 @@ def main():
     parser.add_argument("--race", action="store_true")
     parser.add_argument("--check-php-source", action="store_true", help="Verify both versions' sources from the pinned Git objects, without executing PHP")
     parser.add_argument("--report", type=Path)
-    parser.add_argument("--frontend", action="store_true", help="Check actual Go outputs and the four existing frontend renewal tests (requires frontend npm dependencies)")
+    parser.add_argument("--frontend", action="store_true", help="Check all actual Go outputs and the existing four Douyin plus four Weibo renewal tests (requires frontend npm dependencies)")
     parser.add_argument("--node", default="node", help="Node executable for --frontend")
     args = parser.parse_args()
     provenance, douyin_provenance, integer_provenance = legacy_provenance(args.check_php_source)
@@ -89,7 +96,7 @@ def main():
         verify.append("--check-git-source")
     bilibili_provenance = json.loads(run(verify))
     platform_provenance = {}
-    for name, script in (("weibo", "verify-weibo-signed.py"), ("toutiao", "verify-toutiao.py")):
+    for name, (_, script) in PLATFORM_ORACLES.items():
         command = [sys.executable, "-X", "utf8", str(ROOT / "scripts/go-migration" / script)]
         if args.check_php_source:
             command.append("--check-git-source")
@@ -101,12 +108,11 @@ def main():
         integer_outputs = temp / "actual-go-integers.json"
         php25_outputs = temp / "actual-go-php25.json"
         bilibili_outputs = temp / "actual-go-bilibili.json"
-        weibo_outputs = temp / "actual-go-weibo.json"
-        toutiao_outputs = temp / "actual-go-toutiao.json"
+        platform_outputs = {name: temp / f"actual-go-{name}.json" for name in PLATFORM_ORACLES}
         environment = dict(os.environ, DOKITOOL_GO_BASELINE_OUTPUT=str(outputs), DOKITOOL_GO_DOUYIN_OUTPUT=str(douyin_outputs),
                            DOKITOOL_GO_INTEGER_OUTPUT=str(integer_outputs), DOKITOOL_GO_PHP25_OUTPUT=str(php25_outputs),
-                           DOKITOOL_GO_BILIBILI_OUTPUT=str(bilibili_outputs), DOKITOOL_GO_WEIBO_OUTPUT=str(weibo_outputs),
-                           DOKITOOL_GO_TOUTIAO_OUTPUT=str(toutiao_outputs))
+                           DOKITOOL_GO_BILIBILI_OUTPUT=str(bilibili_outputs))
+        environment.update({f"DOKITOOL_GO_{name.upper()}_OUTPUT": str(path) for name, path in platform_outputs.items()})
         command = [args.go, "test", "-json", "-count=1"]
         if args.race:
             command.append("-race")
@@ -136,7 +142,8 @@ def main():
             raise RuntimeError("Actual Go Bilibili provenance count mismatch")
         douyin["cases"].extend(bilibili["cases"])
         platform_comparisons = {}
-        for name, path, frozen_path in (("weibo", weibo_outputs, WEIBO), ("toutiao", toutiao_outputs, TOUTIAO)):
+        for name, (frozen_path, _) in PLATFORM_ORACLES.items():
+            path = platform_outputs[name]
             platform_comparisons[name] = verify_platform_exports(path, frozen_path, name)
             # Exact numeric comparison already completed above. Aggregate the
             # original JSON values like the existing groups; Decimal objects
@@ -178,6 +185,9 @@ def main():
                                       "failures": [{"id": labels[entry["index"]], "reason": entry["reason"]}
                                                    for entry in independent["checks"] if not entry["passed"]]},
         }
+        for name in ("kuaishou", "pipixia", "pipigx", "zuiyou", "xiaohongshu", "xiaohongshu_wire"):
+            result[f"php_{name}_baseline"] = platform_provenance[name]
+            result[f"{name}_exact_public_comparison"] = platform_comparisons[name]
         if args.frontend:
             frontend_report = temp / "frontend.json"
             frontend = reported_check([args.node, str(ROOT / "frontend/scripts/test-go-media-integration.mjs"),

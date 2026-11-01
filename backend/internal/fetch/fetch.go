@@ -35,6 +35,10 @@ type Policy struct {
 	MaxHeaderBytes     int64
 	StrictMediaHeaders bool
 	FollowRedirects    bool
+	AutoReferer        bool
+	// ReadRedirectBody retains bounded bodies only when redirects are not
+	// followed. It never authorizes a Location, and HEAD never reads a body.
+	ReadRedirectBody bool
 	MaxRedirects       int
 }
 
@@ -215,11 +219,8 @@ func (c *Client) Do(parent context.Context, in Request) (Response, error) {
 		}
 		out := Response{StatusCode: response.StatusCode, Header: response.Header.Clone(), URL: current, History: append([]string(nil), history...)}
 		isRedirect := response.StatusCode == 301 || response.StatusCode == 302 || response.StatusCode == 303 || response.StatusCode == 307 || response.StatusCode == 308
-		if isRedirect {
+		if isRedirect && p.FollowRedirects {
 			response.Body.Close()
-			if !p.FollowRedirects {
-				return out, nil
-			}
 			if hop >= p.MaxRedirects {
 				return Response{}, ErrRedirect
 			}
@@ -232,7 +233,15 @@ func (c *Client) Do(parent context.Context, in Request) (Response, error) {
 				return Response{}, ErrRedirect
 			}
 			next := u.ResolveReference(relative)
-			if !strings.EqualFold(next.Host, u.Host) {
+			if p.AutoReferer {
+				// Match libcurl AUTOREFERER, including cross-origin and HTTPS to
+				// HTTP redirects. Every target is still checked before DNS/IO.
+				// Userinfo and fragments must never enter the Referer header.
+				previous := *u
+				previous.User, previous.Fragment, previous.RawFragment = nil, "", ""
+				headers.Set("Referer", previous.String())
+			}
+			if !strings.EqualFold(next.Host, u.Host) || (p.AutoReferer && u.Scheme == "https" && next.Scheme == "http") {
 				headers.Del("Authorization")
 				headers.Del("Cookie")
 			}
@@ -244,7 +253,7 @@ func (c *Client) Do(parent context.Context, in Request) (Response, error) {
 			history = append(history, current)
 			continue
 		}
-		if method == http.MethodHead {
+		if method == http.MethodHead || (isRedirect && !p.ReadRedirectBody) {
 			response.Body.Close()
 			return out, nil
 		}

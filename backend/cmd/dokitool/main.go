@@ -23,8 +23,13 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/media/weibo"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/bilibili"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/kuaishou"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipigx"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipixia"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/toutiao"
 	weiboplatform "github.com/Brilliant666/DokiTool-Go/backend/internal/platform/weibo"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/xiaohongshu"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/zuiyou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
@@ -94,6 +99,11 @@ func run(args []string) error {
 		"bilibili": bilibili.New(executor),
 		"weibo":    weiboplatform.New(executor),
 		"toutiao":  toutiao.New(executor),
+		"kuaishou": kuaishou.New(executor),
+		"pipixia": pipixia.New(executor),
+		"pipigx": pipigx.New(executor),
+		"zuiyou": zuiyou.New(executor),
+		"xiaohongshu": xiaohongshu.New(executor),
 	}
 	handler, err := api.New(c, adapters, time.Now, weiboplatform.PreparePublic(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
 	if err != nil {

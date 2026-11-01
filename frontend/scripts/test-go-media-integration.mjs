@@ -19,7 +19,20 @@ const currentPhp = JSON.parse(await readFile(new URL("../../backend/testdata/php
 const bilibiliPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/bilibili/testdata/php-baseline.json", import.meta.url), "utf8"));
 const weiboPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/weibo/testdata/php-signed-baseline.json", import.meta.url), "utf8"));
 const toutiaoPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/toutiao/testdata/php-baseline.json", import.meta.url), "utf8"));
-const phpCases = new Map([...php.cases, ...integerPhp.cases, ...currentPhp.cases, ...bilibiliPhp.cases, ...weiboPhp.cases, ...toutiaoPhp.cases].map(entry => [entry.id, entry.expected]));
+const kuaishouPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/kuaishou/testdata/php-baseline.json", import.meta.url), "utf8"));
+const pipixiaPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/pipixia/testdata/php-baseline.json", import.meta.url), "utf8"));
+const pipigxPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/pipigx/testdata/php-baseline.json", import.meta.url), "utf8"));
+const zuiyouPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/zuiyou/testdata/php-baseline.json", import.meta.url), "utf8"));
+const xiaohongshuPhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/xiaohongshu/testdata/php-baseline.json", import.meta.url), "utf8"));
+const xiaohongshuWirePhp = JSON.parse(await readFile(new URL("../../backend/internal/platform/xiaohongshu/testdata/php-wire-baseline.json", import.meta.url), "utf8"));
+// Zuiyou's normal/debug are the final real gateway parse/resolve envelopes.
+// Consume them directly, just as the signed Weibo gateway fixture is consumed.
+const phpEntries = [...php.cases, ...integerPhp.cases, ...currentPhp.cases, ...bilibiliPhp.cases,
+  ...weiboPhp.cases, ...toutiaoPhp.cases, ...kuaishouPhp.cases, ...pipixiaPhp.cases,
+  ...pipigxPhp.cases, ...zuiyouPhp.cases, ...xiaohongshuPhp.cases, ...xiaohongshuWirePhp.cases];
+const phpCases = new Map(phpEntries.map(entry => [entry.id, entry.expected]));
+assert.equal(phpCases.size, phpEntries.length, "Duplicate frozen PHP output identities");
+assert.deepEqual([...cases.keys()].sort(), [...phpCases.keys()].sort(), "Actual Go frontend inventory must contain every frozen case");
 let accepted = 0, rejected = 0;
 const failures = [];
 const vite = await createServer({

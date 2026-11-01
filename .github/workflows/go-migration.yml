@@ -192,36 +192,34 @@ jobs:
           cp -r "$RUNNER_TEMP/weibo-signed-php" "$RUNNER_TEMP/toutiao-php" "$RUNNER_TEMP/bilibili-php/"
           cp "$RUNNER_TEMP/weibo-count-boundaries.json" "$RUNNER_TEMP/bilibili-php/"
 
-      - name: Bootstrap remaining platform PHP product oracles
+      - name: Reproduce all remaining frozen PHP platform oracles
         run: |
           export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
           export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
           export TMPDIR="$DOKITOOL_ORACLE_TMP"
-          python3 - <<'PY'
-          import base64,gzip,hashlib,json,os,pathlib,subprocess,sys
-          root=pathlib.Path(os.environ['RUNNER_TEMP'])
-          failed=[]
-          for platform in ('kuaishou','pipixia','pipigx','zuiyou','xiaohongshu'):
-              output=root/(platform+'-php')
-              result=subprocess.run([sys.executable,'-B','scripts/go-migration/produce-'+platform+'.py','--php',str(root/'dokitool-fixed-php'),'--output',str(output)],text=True,capture_output=True)
-              print(platform+' producer: '+result.stdout)
-              if result.returncode:
-                  print(result.stderr)
-                  failed.append(platform)
-                  continue
-              verifier=pathlib.Path('scripts/go-migration/verify-'+platform+'.py')
-              if verifier.is_file():
-                  verified=subprocess.run([sys.executable,'-B',str(verifier),'--directory',str(output),'--check-git-source'],text=True,capture_output=True)
-                  print(platform+' verifier: '+verified.stdout)
-                  if verified.returncode:
-                      print(verified.stderr)
-                      failed.append(platform)
-              payload={p.name:p.read_text() for p in sorted(output.glob('*.json'))}
-              raw=json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode()
-              print('REMAINING_ORACLE_'+platform+'_SHA256='+hashlib.sha256(raw).hexdigest())
-              print('REMAINING_ORACLE_'+platform+'_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
-          if failed: raise SystemExit('Failed independent oracles: '+', '.join(failed))
-          PY
+          for platform in kuaishou pipixia pipigx zuiyou xiaohongshu; do
+            python3 -B "scripts/go-migration/produce-$platform.py" --php "$RUNNER_TEMP/dokitool-fixed-php" --output "$RUNNER_TEMP/$platform-php"
+            python3 -B "scripts/go-migration/verify-$platform.py" --directory "$RUNNER_TEMP/$platform-php" --check-git-source
+            cmp "backend/internal/platform/$platform/testdata/php-baseline.json" "$RUNNER_TEMP/$platform-php/php-baseline.json"
+            cmp "backend/internal/platform/$platform/testdata/manifest.json" "$RUNNER_TEMP/$platform-php/manifest.json"
+            cp -r "$RUNNER_TEMP/$platform-php" "$RUNNER_TEMP/bilibili-php/"
+          done
+
+      - name: Bootstrap independent Xiaohongshu JSON output boundary
+        run: |
+          export DOKITOOL_ORACLE_IMAGE='php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9'
+          export DOKITOOL_ORACLE_TMP="$RUNNER_TEMP/bilibili-php-archives"
+          mkdir -p "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source"
+          git archive 25beaee107f8c1a208ced9deb3c637068445e316 | tar -x -C "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source"
+          "$RUNNER_TEMP/dokitool-fixed-php" -d 'disable_functions=time,curl_exec,curl_multi_exec,dns_get_record,fsockopen,pfsockopen,stream_socket_client' -d allow_url_fopen=0 scripts/go-migration/produce-xiaohongshu-wire.php "$DOKITOOL_ORACLE_TMP/xiaohongshu-wire-source" > "$RUNNER_TEMP/php-wire-baseline.json"
+          python3 -B scripts/go-migration/verify-xiaohongshu-wire.py --directory "$RUNNER_TEMP" --check-git-source
+          python3 - <<'PYWIRE'
+          import base64,gzip,hashlib,os,pathlib
+          raw=(pathlib.Path(os.environ['RUNNER_TEMP'])/'php-wire-baseline.json').read_bytes()
+          print('XHS_WIRE_ORACLE_SHA256='+hashlib.sha256(raw).hexdigest())
+          print('XHS_WIRE_ORACLE_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
+          PYWIRE
+          cp "$RUNNER_TEMP/php-wire-baseline.json" "$RUNNER_TEMP/bilibili-php/"
 
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -258,13 +256,18 @@ jobs:
 
       - name: Verify Go source formatting
         run: |
-          unformatted="$(gofmt -l backend/internal/platform/bilibili backend/internal/platform/weibo backend/internal/platform/toutiao backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
+          unformatted="$(gofmt -l backend/internal/platform backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool/main.go)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
-            # Show exact formatter repairs for review, without modifying the index.
-            while IFS= read -r filename; do
-              gofmt -d "$filename"
-            done <<< "$unformatted"
+            # Review-only export of gofmt output; no index/worktree mutation.
+            python3 - <<'PYFORMAT'
+          import base64,gzip,hashlib,json,subprocess
+          names=subprocess.check_output(['gofmt','-l','backend/internal/platform','backend/internal/media/weibo','backend/internal/fetch','backend/internal/api','backend/cmd/dokitool/main.go'],text=True).splitlines()
+          files={name:subprocess.check_output(['gofmt',name],text=True) for name in names}
+          raw=json.dumps(files,ensure_ascii=False,separators=(',',':')).encode()
+          print('GOFMT_REVIEW_SHA256='+hashlib.sha256(raw).hexdigest())
+          print('GOFMT_REVIEW_GZIP='+base64.b64encode(gzip.compress(raw,mtime=0)).decode())
+          PYFORMAT
             exit 1
           fi
 
@@ -295,6 +298,10 @@ jobs:
       - name: Verify Toutiao parser and real HTTP parity with focused diagnostics
         working-directory: backend
         run: go test -race -count=1 -v ./internal/api ./internal/platform/toutiao -run 'TestToutiao|TestPHPToutiao'
+
+      - name: Verify all five remaining parsers and real HTTP routes
+        working-directory: backend
+        run: go test -race -count=1 -v ./internal/platform/kuaishou ./internal/platform/pipixia ./internal/platform/pipigx ./internal/platform/zuiyou ./internal/platform/xiaohongshu ./internal/api ./internal/fetch -run 'TestPHPKuaishou|TestPHPPipixia|TestPHPPipigx|TestPHPZuiyou|TestPHPXiaohongshu|TestKuaishou|TestPipixia|TestPipigx|TestZuiyou|TestXiaohongshu|TestAutoReferer'
 
       - name: Run the complete offline migration gate
         run: |
