@@ -688,23 +688,32 @@ export function useMediaDownload({
   const snapshotItem = (
     item: MediaItem,
     choice = selection.selectionFor(item.id),
-  ): ItemSnapshot =>
-    freeze({
+  ): ItemSnapshot => {
+    let pinnedChoice = choice || (item.default
+      ? { variant_id: item.default.variant_id, source_id: item.default.source_id }
+      : null);
+    if (pinnedChoice && !pinnedChoice.source_id && readyItem(item)) {
+      const variant = item.variants.find(candidate => candidate.id === pinnedChoice!.variant_id);
+      if (readyVariant(variant) && variant.delivery.kind === "file") {
+        const sources = variant.delivery.sources;
+        // A quality-only choice uses the first current source, even if expired.
+        // Freeze its identity before resolve can reorder or replace the routes.
+        // A default without source_id is only unambiguous for one source.
+        if ((choice || sources.length === 1) && sources[0]?.id) {
+          pinnedChoice = { ...pinnedChoice, source_id: sources[0].id };
+        }
+      }
+    }
+    return freeze({
       item,
-      choice:
-        choice ||
-        (item.default
-          ? {
-              variant_id: item.default.variant_id,
-              ...(item.default.source_id
-                ? { source_id: item.default.source_id }
-                : {}),
-            }
-          : null),
+      choice: pinnedChoice,
+      // Keep the actual UI choice for concurrent-selection checks; task pinning
+      // must not change the user's selection or the displayed server default.
       selectionKey: JSON.stringify(choice),
       title: videoStore.resultData?.title,
       version: videoStore.resultVersion,
     });
+  };
   const filenameFor = (snapshot: ItemSnapshot, extension: string) =>
     buildMediaFilename({
       title: snapshot.item.title || snapshot.title,

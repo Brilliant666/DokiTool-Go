@@ -9,6 +9,7 @@ on:
       - codex/bilibili-go-migration
       - codex/remaining-platforms-go-migration
       - codex/xhs-page-transport
+      - codex/download-delivery-closeout
     paths:
       - backend/**
       - frontend/**

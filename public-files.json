@@ -298,6 +298,7 @@
     "docs/go-migration/php25-checks.json",
     "docs/go-migration/remaining-platforms-implementation.md",
     "docs/go-migration/remaining-platforms.md",
+    "docs/go-migration/renewal-selection-stability.md",
     "docs/go-migration/rollback.md",
     "docs/go-migration/takeover-toutiao-weibo-checks.json",
     "docs/go-migration/toutiao.md",

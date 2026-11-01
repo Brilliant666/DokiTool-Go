@@ -1593,6 +1593,42 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
       assert.equal(selection.currentTarget.value.url, renewed.url, 'refreshed UI resolves the same opaque selection');
     }
   });
+  for (const scenario of ['play-endpoint', 'cdn']) test(`Renewal stability integration: actual ${scenario} pins variant-only source`, async t => {
+    const envelopes = await readRenewalEnvelopes();
+    const pair = scenario === 'cdn' ? envelopes.cases.cdn : envelopes;
+    const before = mediaContract.validateMediaEnvelope(pair.before);
+    const after = mediaContract.validateMediaEnvelope(pair.after);
+    const original = before.items[0];
+    const chosen = original.variants.find(variant => variant.id === original.default.variant_id);
+    const source = chosen.delivery.sources[0];
+    const fresh = after.items.find(item => item.id === original.id);
+    const refreshedVariant = fresh.variants.find(variant => variant.id === chosen.id);
+    const route = candidate => scenario === 'cdn' ? new URL(candidate.url).hostname : new URL(candidate.url).searchParams.get('line');
+    const renewed = refreshedVariant.delivery.sources.find(candidate => route(candidate) === route(source));
+    assert.ok(renewed, 'independent route evidence identifies the renewed source');
+    assert.notEqual(renewed.url, source.url, 'credentials really changed');
+    // The endpoint tape changes route order; the CDN tape renews only the
+    // signature path. Keep both original tapes unmodified.
+    if (scenario === 'play-endpoint') assert.notEqual(refreshedVariant.delivery.sources[0].id, source.id, 'endpoint fixture actually reorders the first source');
+    assert.equal(renewed.id, source.id, 'the original adapter preserves this known route identity');
+    t.mock.method(Date, 'now', () => Date.parse(source.expires_at) + 1000);
+    assert.ok(Date.parse(renewed.expires_at) > Date.now());
+    let resolves = 0;
+    const { instance, store, selection } = harness(before, async item => {
+      resolves++;
+      assert.equal(item.id, original.id);
+      return fresh;
+    });
+    selection.choose({ variant_id: chosen.id });
+    const displayBefore = JSON.stringify(store.resultData);
+    globalThis.fetch = fixtureMediaFetch(renewed);
+    await instance.downloadMainVideo(); await settled(store.downloads[0]);
+    assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
+    assert.equal(resolves, 1);
+    assert.ok(fetched.length > 0 && fetched.every(url => url === renewed.url));
+    assert.deepEqual(selection.currentSelection.value, { variant_id: chosen.id });
+    assert.equal(JSON.stringify(store.resultData), displayBefore);
+  });
   for (const name of ['original', 'weibo']) test(`PR8 integration: actual ${name} refresh preserves explicit UI and download identity`, async t => {
     const exported = (await readRenewalEnvelopes()).cases[name];
     const before = mediaContract.validateMediaEnvelope(exported.before);
@@ -1801,6 +1837,55 @@ if (process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE) {
       store.replaceItem(fresh);
       assert.equal(selection.currentTarget.value.url, renewedURL);
       assert.deepEqual(selection.currentSelection.value, selectedBefore);
+    });
+  }
+}
+
+// A quality-only UI choice still resolves to one concrete source at the moment
+// the task is created. Renewal must not reinterpret it as the new first route.
+for (const mode of ['variant-only', 'default-without-source-ref']) {
+  for (const renewedSource of ['retained', 'removed']) {
+    test(`renewal snapshot: ${mode} keeps its original source when ${renewedSource}`, async () => {
+      const original = fixtureItem(base);
+      original.resolve_url = '/api/resolve?schema_version=1.0&item_id=item-1';
+      original.variants[0].delivery.sources[0].expires_at = '2000-01-01T00:00:00Z';
+      original.variants[0].delivery.sources[0].size_bytes = 4;
+      original.default.expires_at = '2000-01-01T00:00:00Z';
+      if (mode === 'default-without-source-ref') delete original.default.source_id;
+      const renewed = structuredClone(original);
+      const sameSource = { id: 's0', url: 'https://media.test/renewed.mp4?sig=a%2Bb&k=x+y', size_bytes: 7, expires_at: '2099-01-01T00:00:00Z' };
+      const otherSource = { id: 's1', url: 'https://other.test/replacement.mp4', size_bytes: 11, expires_at: '2099-01-01T00:00:00Z' };
+      renewed.variants[0].delivery.sources = renewedSource === 'retained' ? [otherSource, sameSource] : [otherSource];
+      renewed.default = { variant_id: 'v0', source_id: 's1', url: otherSource.url, expires_at: otherSource.expires_at };
+      let resolves = 0;
+      const { instance, store, selection } = harness({ items: [original], default_item_id: original.id }, async item => {
+        resolves++;
+        assert.equal(item.id, original.id);
+        return renewed;
+      });
+      if (mode === 'variant-only') selection.choose({ variant_id: 'v0' });
+      const selectionBefore = JSON.parse(JSON.stringify(selection.currentSelection.value));
+      const displayBefore = JSON.stringify(store.resultData);
+      globalThis.fetch = async url => {
+        fetched.push(url);
+        const bytes = new Uint8Array(url === sameSource.url ? 7 : 11);
+        return new Response(bytes, { headers: { 'content-type': 'video/mp4', 'content-length': String(bytes.length) } });
+      };
+      await instance.downloadMainVideo();
+      await settled(store.downloads[0]);
+      assert.equal(resolves, 1);
+      assert.equal(JSON.stringify(store.resultData), displayBefore, 'renewal does not rewrite the displayed result');
+      assert.deepEqual(selection.currentSelection.value, selectionBefore, 'task pinning does not overwrite the UI choice');
+      if (renewedSource === 'removed') {
+        assert.equal(store.downloads[0].status, 'failed', 'missing original source must not silently use the new first route');
+        assert.match(store.downloads[0].error, /已选来源不存在/);
+        assert.deepEqual(fetched, [], 'no media request is permitted after source identity disappeared');
+      } else {
+        assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
+        assert.ok(fetched.length > 0 && fetched.every(url => url === sameSource.url), 'use the original source ID and preserve renewed query bytes');
+        assert.equal(store.downloads[0].loaded, 7, 'use the renewed source size, not the old or another route size');
+        assert.equal(store.downloads[0].total, 7);
+      }
     });
   }
 }
