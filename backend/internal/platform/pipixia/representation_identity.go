@@ -11,29 +11,85 @@ import (
 var ppxObjectHost = regexp.MustCompile(`^v[0-9]+-cdn-tos\.ppxvod\.com$`)
 var ppxObjectPath = regexp.MustCompile(`^/[a-f0-9]{32}/[a-f0-9]{8}(/video/tos/cn/tos-cn-ve-[a-z0-9-]+/[A-Za-z0-9_-]+/?)$`)
 
-// representationIdentity recognizes the object shared by a rendition's CDN
-// mirrors. Every URL must agree: neither the first URL, the video-level URI nor
-// the resolution identifies a file. A changed/unknown raw query stays distinct.
-// This does NOT change source IDs, request URLs or explicit-source matching.
+// Fresh Pipixia pages renew ft/dy_q/l; a sampled btag change also yielded
+// byte-identical complete MP4s at the same TOS object. Preserve all other raw
+// query bytes, including ordering, encoding and duplicates. Missing/ambiguous
+// renewal fields keep the original exact-query identity.
+func ppxTransportQuery(raw string) (string, bool) {
+	seen := map[string]bool{}
+	btag := false
+	kept := make([]string, 0)
+	for _, part := range strings.Split(raw, "&") {
+		key, value, hasValue := strings.Cut(part, "=")
+		if key == "ft" || key == "dy_q" || key == "l" {
+			if !hasValue || value == "" || seen[key] {
+				return raw, false
+			}
+			seen[key] = true
+			continue
+		}
+		if key == "btag" {
+			if btag || !hasValue || len(value) != 14 || strings.Trim(value, "0123456789abcdefABCDEF") != "" {
+				return raw, false
+			}
+			btag = true
+			continue
+		}
+		kept = append(kept, part)
+	}
+	if len(seen) != 3 {
+		return raw, false
+	}
+	mode := "\x00pipixia-transport-v1:"
+	if btag {
+		mode = "\x00pipixia-transport-btag-v1:"
+	}
+	// Distinct marker prevents an exact query (including missing btag) from
+	// aliasing a normalized one. Literal NUL is invalid in a URL.
+	return mode + strings.Join(kept, "&"), true
+}
+
+func ppxObjectIdentity(raw string) (identity, host string, rotating bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" ||
+		(u.Port() != "" && u.Port() != "443") {
+		return "", "", false
+	}
+	host = strings.ToLower(u.Hostname())
+	if !ppxObjectHost.MatchString(host) {
+		return "", "", false
+	}
+	path := ppxObjectPath.FindStringSubmatch(u.EscapedPath())
+	if path == nil {
+		return "", "", false
+	}
+	query, rotating := ppxTransportQuery(u.RawQuery)
+	identity = "pipixia:tos:" + unified.PHPIdentityJSON(unified.Array{path[1], query, u.ForceQuery}, false)
+	return identity, host, rotating
+}
+
+// representationIdentity identifies one file across backup CDN membership and
+// the three observed transport-only query renewals, not across file changes.
+// An unrecognized or mixed object retains the previous source-set behavior.
 func representationIdentity(urls []string) string {
 	identity := ""
 	for _, raw := range urls {
-		u, err := url.Parse(raw)
-		if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" ||
-			(u.Port() != "" && u.Port() != "443") || !ppxObjectHost.MatchString(strings.ToLower(u.Hostname())) {
-			return ""
-		}
-		path := ppxObjectPath.FindStringSubmatch(u.EscapedPath())
-		if path == nil {
-			return ""
-		}
-		// Keep signed/unknown query bytes, duplicate parameters and encoding as
-		// observed. Only the known CDN host and signing-prefix path vary here.
-		key := "pipixia:tos:" + unified.PHPIdentityJSON(unified.Array{path[1], u.RawQuery, u.ForceQuery}, false)
-		if identity != "" && identity != key {
+		key, _, _ := ppxObjectIdentity(raw)
+		if key == "" || (identity != "" && identity != key) {
 			return ""
 		}
 		identity = key
 	}
 	return identity
+}
+
+// Keep a user's explicit CDN mirror choice when that same host and object
+// returns with fresh signing/query credentials. A missing mirror, changed file
+// or changed content-affecting query still has a different source ID.
+func ppxRenewedSourceIdentity(raw, group string) string {
+	key, host, rotating := ppxObjectIdentity(raw)
+	if !rotating || group == "" || group != key {
+		return ""
+	}
+	return "pipixia:cdn-source:" + unified.PHPIdentityJSON(unified.Array{host, key}, false)
 }

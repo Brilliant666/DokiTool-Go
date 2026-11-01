@@ -304,6 +304,7 @@
     "docs/go-migration/phase3-checks.json",
     "docs/go-migration/php25-checks.json",
     "docs/go-migration/pipixia-representation-checks.json",
+    "docs/go-migration/pipixia-transport-renewal-checks.json",
     "docs/go-migration/preflight-integrity-checks.json",
     "docs/go-migration/refresh-recovery-ci.json",
     "docs/go-migration/refresh-recovery-local-checks.json",

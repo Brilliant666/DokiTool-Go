@@ -179,12 +179,18 @@ func TestPipixiaRepresentationUnknownOrMixedSourcesKeepFallback(t *testing.T) {
 func TestPipixiaRepresentationExport(t *testing.T) {
 	urls := representationSources()
 	third := representationURL("v6-cdn-tos.ppxvod.com", strings.Repeat("c", 32), "FileObjectA", representationQuery)
+	freshTransport := transportSources(ppxNewTransportQuery, "c", "d")
+	freshTransport[0], freshTransport[1] = freshTransport[1], freshTransport[0]
 	cases := map[string]unified.Object{
-		"before":         representationPayload(t, urls),
-		"added":          representationPayload(t, append(append([]string{}, urls...), third)),
-		"removed":        representationPayload(t, urls[:1]),
-		"source-missing": representationPayload(t, urls[1:]),
-		"different-file": representationPayload(t, []string{strings.Replace(urls[0], "FileObjectA", "FileObjectB", 1)}),
+		"before":                   representationPayload(t, urls),
+		"added":                    representationPayload(t, append(append([]string{}, urls...), third)),
+		"removed":                  representationPayload(t, urls[:1]),
+		"source-missing":           representationPayload(t, urls[1:]),
+		"different-file":           representationPayload(t, []string{strings.Replace(urls[0], "FileObjectA", "FileObjectB", 1)}),
+		"transport-before":         representationPayload(t, transportSources(ppxOldTransportQuery, "a", "b")),
+		"transport-renewed":        representationPayload(t, freshTransport),
+		"transport-source-missing": representationPayload(t, freshTransport[:1]),
+		"transport-other-content":  representationPayload(t, []string{strings.Replace(freshTransport[1], "rc=opaque%2Bencode", "rc=other%2Bencode", 1)}),
 	}
 	if path := os.Getenv("DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT"); path != "" {
 		body, err := json.MarshalIndent(cases, "", "  ")
@@ -193,6 +199,101 @@ func TestPipixiaRepresentationExport(t *testing.T) {
 		}
 		if err := os.WriteFile(path, append(body, '\n'), 0600); err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+const ppxOldTransportQuery = "a=1319&br=704&mime_type=video_mp4&rc=opaque%2Bencode&btag=80000e00008000&ft=old_cdn_feature&dy_q=1793556183&l=2026110202030372865787CF2ED5DA6860"
+const ppxNewTransportQuery = "a=1319&br=704&mime_type=video_mp4&rc=opaque%2Bencode&btag=c0000e00008000&ft=new_cdn_feature&dy_q=1793556184&l=2026110202040389265787CF2ED5DA6861"
+
+func transportSources(query, a, b string) []string {
+	return []string{
+		representationURL("v3-cdn-tos.ppxvod.com", strings.Repeat(a, 32), "FileObjectA", query),
+		representationURL("v26-cdn-tos.ppxvod.com", strings.Repeat(b, 32), "FileObjectA", query),
+	}
+}
+
+func sourceIDsByHost(v unified.Object) map[string]string {
+	ids := map[string]string{}
+	for _, raw := range unified.Slice(unified.Map(v["delivery"])["sources"]) {
+		source := unified.Map(raw)
+		url := unified.Str(source["url"])
+		for _, host := range []string{"v3-cdn-tos.ppxvod.com", "v26-cdn-tos.ppxvod.com"} {
+			if strings.Contains(url, "https://"+host+"/") {
+				ids[host] = unified.Str(source["id"])
+			}
+		}
+	}
+	return ids
+}
+
+func TestPipixiaTransportRenewalRetainsExplicitHostSource(t *testing.T) {
+	beforeURLs := transportSources(ppxOldTransportQuery, "a", "b")
+	newURLs := transportSources(ppxNewTransportQuery, "c", "d")
+	newURLs[0], newURLs[1] = newURLs[1], newURLs[0] // real page changed source order
+	before := representationVariant(t, representationPayload(t, beforeURLs))
+	after := representationVariant(t, representationPayload(t, newURLs))
+	if before["id"] != after["id"] {
+		t.Fatal("same TOS object/encoding changed parent across observed transport renewal")
+	}
+	oldIDs, newIDs := sourceIDsByHost(before), sourceIDsByHost(after)
+	if len(oldIDs) != 2 || len(newIDs) != 2 ||
+		oldIDs["v3-cdn-tos.ppxvod.com"] != newIDs["v3-cdn-tos.ppxvod.com"] ||
+		oldIDs["v26-cdn-tos.ppxvod.com"] != newIDs["v26-cdn-tos.ppxvod.com"] {
+		t.Fatalf("explicit CDN mirror source identity was not renewed: before=%v after=%v", oldIDs, newIDs)
+	}
+	if oldIDs["v3-cdn-tos.ppxvod.com"] == oldIDs["v26-cdn-tos.ppxvod.com"] {
+		t.Fatal("distinct CDN source choices merged")
+	}
+	if !reflect.DeepEqual(representationSourceURLs(after), newURLs) {
+		t.Fatal("refreshed signed URL bytes or order were rewritten")
+	}
+	if unified.Map(representationItem(representationPayload(t, newURLs))["default"])["variant_id"] != after["id"] {
+		t.Fatal("server default lost")
+	}
+}
+
+func TestPipixiaTransportRenewalDoesNotGuessMissingSourceOrFile(t *testing.T) {
+	before := representationVariant(t, representationPayload(t, transportSources(ppxOldTransportQuery, "a", "b")))
+	oldIDs := sourceIDsByHost(before)
+	fresh := transportSources(ppxNewTransportQuery, "c", "d")
+	for name, urls := range map[string][]string{
+		"missing-host":              {fresh[1]},
+		"different-file":            {strings.Replace(fresh[0], "FileObjectA", "FileObjectB", 1)},
+		"changed-content-parameter": {strings.Replace(fresh[0], "rc=opaque%2Bencode", "rc=other%2Bencode", 1)},
+		"unknown-new-parameter":     {fresh[0] + "&watermark=1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			after := representationVariant(t, representationPayload(t, urls))
+			if name == "missing-host" {
+				if before["id"] != after["id"] {
+					t.Fatal("same file with remaining mirror changed parent")
+				}
+				if sourceIDsByHost(after)["v3-cdn-tos.ppxvod.com"] == oldIDs["v3-cdn-tos.ppxvod.com"] {
+					t.Fatal("missing explicit source was invented")
+				}
+			} else if before["id"] == after["id"] {
+				t.Fatal("distinct file/content parameter was incorrectly matched")
+			}
+		})
+	}
+}
+
+func TestPipixiaTransportPartialKeysStayDistinct(t *testing.T) {
+	oldURL := transportSources(ppxOldTransportQuery, "a", "b")[0]
+	for _, changed := range []string{
+		strings.Replace(ppxNewTransportQuery, "&ft=new_cdn_feature", "", 1),
+		strings.Replace(ppxNewTransportQuery, "&dy_q=1793556184", "", 1),
+		strings.Replace(ppxNewTransportQuery, "&l=2026110202040389265787CF2ED5DA6861", "", 1),
+		ppxNewTransportQuery + "&ft=duplicate",
+		strings.Replace(ppxNewTransportQuery, "&btag=c0000e00008000", "", 1),
+		strings.Replace(ppxNewTransportQuery, "btag=c0000e00008000", "btag=invalid-value", 1),
+		ppxNewTransportQuery + "&btag=duplicate",
+	} {
+		next := representationURL("v3-cdn-tos.ppxvod.com", strings.Repeat("c", 32), "FileObjectA", changed)
+		if representationVariant(t, representationPayload(t, []string{oldURL}))["id"] ==
+			representationVariant(t, representationPayload(t, []string{next}))["id"] {
+			t.Fatalf("partial/duplicate transport keys were loosely normalized")
 		}
 	}
 }

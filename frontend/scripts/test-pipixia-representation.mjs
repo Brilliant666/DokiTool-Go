@@ -52,8 +52,43 @@ try {
       assert.equal(selection.currentVideoUrl.value, "", "missing identity must not borrow that default");
     }
   }
-  assert.equal(calls, 4);
-  console.log("PIPIXIA_REPRESENTATION_CONSUMER_PASS: 4 actual Go responses through resolveItem/selection; no browser or media save");
+  const transportBefore = cases["transport-before"].data;
+  const transportItem = transportBefore.items[0];
+  const transportVariant = transportItem.variants[0];
+  const transportSource = transportVariant.delivery.sources.find(s => s.url.includes("v3-cdn-tos.ppxvod.com"));
+  assert.ok(transportSource, "original explicit CDN choice missing");
+  const transportExplicit = { variant_id: transportVariant.id, source_id: transportSource.id };
+  for (const [name, expectedKind] of [["transport-renewed", "file"], ["transport-source-missing", "invalid"], ["transport-other-content", "invalid"]]) {
+    const state = ref(structuredClone(transportBefore));
+    const videoStore = { get resultData() { return state.value; }, clearResult() {}, setResult(data) { state.value = data; } };
+    const selection = useVideoSelection({ videoStore });
+    selection.syncResult();
+    selection.choose(transportExplicit);
+    const parser = useVideoParser({ videoStore, locale: ref("zh-CN"), showToast() {} });
+    globalThis.fetch = async url => {
+      assert.ok(String(url).includes("/api/resolve?"));
+      calls++;
+      return new Response(JSON.stringify(cases[name]), { status: 200, headers: { "Content-Type": "application/json" } });
+    };
+    const resolved = await parser.resolveItem(transportItem);
+    assert.equal(resolved.id, transportItem.id);
+    const target = getDownloadTarget(resolved, transportExplicit);
+    assert.equal(target.kind, expectedKind, name);
+    state.value = { ...state.value, items: state.value.items.map(item => item.id === resolved.id ? resolved : item) };
+    assert.deepEqual(selection.currentSelection.value, transportExplicit, "renewal must retain exact choice");
+    assert.equal(selection.currentTarget.value.kind, expectedKind, name);
+    if (expectedKind === "file") {
+      assert.equal(target.source.id, transportSource.id, "old explicit host/source identity must match");
+      assert.notEqual(target.source.url, transportSource.url, "signed URL must refresh");
+      assert.ok(target.source.url.includes("v3-cdn-tos.ppxvod.com"), "source crossed CDN mirror");
+      assert.equal(selection.currentTarget.value.source.url, target.source.url);
+    } else {
+      assert.ok(resolved.default, "new response still has a default");
+      assert.equal(selection.currentVideoUrl.value, "", "lost source or file must not borrow default");
+    }
+  }
+  assert.equal(calls, 7);
+  console.log("PIPIXIA_RENEWAL_CONSUMER_PASS: 7 actual Go responses through resolveItem/selection; selected CDN renews in-place, missing source/content refuses; no browser or media save");
 } finally {
   globalThis.fetch = previousFetch;
   await vite.close();
