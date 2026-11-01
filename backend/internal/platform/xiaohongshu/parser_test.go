@@ -18,7 +18,7 @@ func (f requestFunc) Do(ctx context.Context, request fetch.Request) (fetch.Respo
 	return f(ctx, request)
 }
 
-const controlledNote = `<script>window.__INITIAL_STATE__={"note":{"noteDetailMap":{"abc123":{"note":{"noteId":"abc123","type":"video","title":"Synthetic note","video":{"media":{"stream":{"h264":[{"masterUrl":"https://sns-video-qn.xhscdn.com/synthetic/720.mp4","width":1280,"height":720}]}},"consumer":{"originVideoKey":"synthetic/original.mp4"}}}}}}};</script>`
+const controlledNote = `<script>window.__INITIAL_STATE__={"note":{"noteDetailMap":{"abc123":{"note":{"noteId":"abc123","type":"video","title":"Synthetic note","video":{"media":{"stream":{"h264":[{"masterUrl":"https://sns-video-qn.xhscdn.com/synthetic/720.mp4","width":1280,"height":720}]}},"consumer":{"originVideoKey":"synthetic/original"}}}}}}};</script>`
 
 func TestXiaohongshuCancellationStopsPageAndProbeFallbacks(t *testing.T) {
 	for _, phase := range []string{"before", "page", "probe"} {
