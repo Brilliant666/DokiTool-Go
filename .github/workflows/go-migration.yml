@@ -317,6 +317,22 @@ jobs:
         working-directory: backend
         run: go build -o "$RUNNER_TEMP/dokitool-go" ./cmd/dokitool
 
+      - name: Verify isolated Go candidate and fail-closed startup
+        run: |
+          python3 -B scripts/go-migration/test_preflight_release.py
+          python3 -B scripts/go-migration/preflight_release.py \
+            --go "$(command -v go)" \
+            --output-dir "$RUNNER_TEMP/dokitool-release-preflight"
+
+      - name: Retain the isolated Go preflight manifest
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: go-preflight-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/dokitool-release-preflight/preflight-manifest.json
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Retain the migration report
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

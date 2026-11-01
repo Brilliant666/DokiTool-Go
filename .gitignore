@@ -162,6 +162,7 @@
 !/docs/go-migration/refresh-recovery-ci.json
 !/docs/go-migration/refresh-recovery-local-checks.json
 !/docs/go-migration/refresh-recovery.md
+!/docs/go-migration/release-preflight.md
 !/docs/go-migration/remaining-platforms-implementation.md
 !/docs/go-migration/remaining-platforms.md
 !/docs/go-migration/renewal-selection-checks.json
@@ -241,6 +242,7 @@
 !/ops/examples/snap.caddy
 /scripts/go-migration/*
 !/scripts/go-migration/check.py
+!/scripts/go-migration/preflight_release.py
 !/scripts/go-migration/produce-bilibili.php
 !/scripts/go-migration/produce-bilibili.py
 !/scripts/go-migration/produce-douyin.php
@@ -277,6 +279,7 @@
 !/scripts/go-migration/produce.py
 !/scripts/go-migration/public_projection.py
 !/scripts/go-migration/test-public-projection.py
+!/scripts/go-migration/test_preflight_release.py
 !/scripts/go-migration/verify-bilibili.py
 !/scripts/go-migration/verify-kuaishou.py
 !/scripts/go-migration/verify-php-25beaee.py
