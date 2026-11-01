@@ -12,7 +12,11 @@ export interface DownloadRequest {
   id: string;
   url: string;
   routes: string[];
+  /** Decoded file size declared for the exact source URL, never for a sibling route. */
+  sourceSizes?: Record<string, number>;
   filename: string;
+  /** From the selected file's evidenced format, independent of the CDN's Content-Type. */
+  formatMime?: string;
   startedAt?: number;
   probe?: SourceProbe;
 }

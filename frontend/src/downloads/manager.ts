@@ -1,7 +1,7 @@
 import { probeNative, handoffNative } from "./native";
 import { downloadBlob } from "./blob";
 import { downloadStreaming } from "./streaming";
-import { mediaUrl } from "./file";
+import { extensionOf, extensionsFor, mediaUrl } from "./file";
 import { StreamingUnavailableError, type DownloadObserver, type DownloadRequest, type DownloadSnapshot } from "./types";
 
 const transports = { probeNative, handoffNative, downloadStreaming, downloadBlob };
@@ -52,7 +52,8 @@ export function createDownloadManager(implementations: Transports = transports) 
       const attachment = request.probe?.url === mediaUrl(request.url)
         ? request.probe.attachment : await implementations.probeNative(request, signal);
       signal.throwIfAborted();
-      if (attachment) {
+      // A native handoff can't change the CDN's filename after the browser takes over.
+      if (attachment && (!request.formatMime || extensionsFor(request.formatMime).includes(extensionOf(attachment.filename)))) {
         implementations.handoffNative(attachment.url, attachment.filename);
         const result: DownloadSnapshot = { ...snapshot, ...attachment, transport: "browser_native", status: "handed-off" };
         publish(result);

@@ -391,6 +391,29 @@ test('file download retries at most three matching-quality routes and synchroniz
   assert.equal(clicked.length, 1); assert.match(clicked[0].href, /^blob:/);
 });
 
+test('each ordinary download checks its declared file bytes on the route actually read', async () => {
+  const data = fixture(retryData());
+  const sources = data.items[0].variants[0].delivery.sources;
+  sources[0].size_bytes = 3;
+  sources[1].size_bytes = 4;
+  const transferred = [];
+  mockFileTransfer(async url => {
+    transferred.push(url);
+    const response = new Response(new Uint8Array([1, 2, 3, 4]), {
+      headers: { 'content-type': 'video/mp4', 'content-length': '2' },
+    });
+    Object.defineProperty(response, 'type', { value: 'cors' });
+    return response;
+  });
+  const { instance, store } = harness(data);
+  await instance.downloadMainVideo();
+  await settled(store.downloads[0]);
+  assert.deepEqual(transferred, [sources[0].url, sources[1].url]);
+  assert.equal(store.downloads[0].status, 'completed');
+  assert.equal(store.downloads[0].loaded, 4);
+  assert.equal(store.downloads[0].total, 4);
+});
+
 test('failed routes do not open popups; a deliberate browser handoff stays distinct from completion', async () => {
   const { instance, store } = harness(retryData());
   const transfers = [];
@@ -410,6 +433,21 @@ test('failed routes do not open popups; a deliberate browser handoff stays disti
   assert.match(html, /浏览器处理 1/); assert.match(html, /完成 1/); assert.match(html, /失败 1/); assert.match(html, /取消 1/);
   assert.match(html, /本站无法追踪/);
   instance.handleClearCompleted('all'); assert.equal(store.downloads.length, 0);
+});
+
+test('the resolved file format reaches the download even when the CDN offers an MP4 filename', async () => {
+  for (const [evidence, transport, suffix] of [['probe', 'browser_blob', 'mov'], ['unknown', 'browser_native', 'mp4']]) {
+    const data = fixture(base);
+    data.items[0].variants[0].metadata = { container: 'mov', extension: 'mov', mime_type: 'video/quicktime', evidence };
+    const { instance, store } = harness(data);
+    globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3, 4]), { headers: {
+      'content-type': 'video/mp4', 'content-length': '4', 'content-disposition': 'attachment; filename="upstream.mp4"',
+    } });
+    await instance.downloadMainVideo(); await settled(store.downloads[0]);
+    assert.equal(store.downloads[0].transport, transport);
+    assert.ok(store.downloads[0].filename.endsWith('.' + suffix));
+    if (evidence === 'probe') assert.equal(blobs.at(-1).type, 'video/quicktime');
+  }
 });
 
 test('eligible native attachment hands off once without Blob progress or a false completed state', async () => {
@@ -1495,6 +1533,16 @@ test('PR8 review: unexposed Content-Encoding on a CORS response is not proof of 
   assert.deepEqual(await Object.values(zip.files)[0].async('uint8array'), decoded);
 });
 
+// Only the transport bytes are synthetic; keep the exported source and its
+// actual size contract intact when exercising the real renewal/download path.
+function fixtureMediaFetch(source) {
+  const bytes = new Uint8Array(source.size_bytes ?? 4);
+  return async url => {
+    fetched.push(url);
+    return new Response(bytes, { headers: { 'content-type': 'video/mp4', 'content-length': String(bytes.length) } });
+  };
+}
+
 // Explicit cross-language suite: ordinary npm test remains frontend-only.
 if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
   const readRenewalEnvelopes = async () => {
@@ -1533,6 +1581,7 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
     if (explicit) selection.choose({ variant_id: chosen.id, source_id: source.id });
     const selectedBefore = JSON.parse(JSON.stringify(selection.currentSelection.value));
     const domainBefore = JSON.stringify(store.resultData);
+    globalThis.fetch = fixtureMediaFetch(renewed);
     await instance.downloadMainVideo(); await settled(store.downloads[0]);
     assert.equal(store.downloads[0].status, 'completed', JSON.stringify({ oldVariant: chosen.id, oldSource: source.id, error: store.downloads[0].error, fetched }));
     assert.equal(resolves, 1);
@@ -1555,6 +1604,7 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
     const choice = { variant_id: original.default.variant_id, source_id: original.default.source_id };
     selection.choose(choice);
     store.replaceItem(fresh);
+    globalThis.fetch = fixtureMediaFetch(source);
     await instance.downloadMainVideo(); await settled(store.downloads[0]);
     assert.equal(store.downloads[0].status, 'completed', JSON.stringify({ oldChoice: choice, nextDefault: fresh.default, error: store.downloads[0].error, fetched }));
     assert.deepEqual(selection.currentSelection.value, choice);
@@ -1721,7 +1771,7 @@ if (process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE) {
       if (explicit) assert.notEqual(chosen.id, fresh.default.variant_id, 'explicit 1080p must not silently switch to server default 4K');
       t.mock.method(Date, 'now', () => scenario === 'expired-renewal' ? Date.parse(source.expires_at) + 1000 : Date.parse(renewed.expires_at) - 1000);
       assert.ok(Date.parse(renewed.expires_at) > Date.now());
-      const mediaFetch = globalThis.fetch, resolveRequests = [];
+      const mediaFetch = fixtureMediaFetch(renewed), resolveRequests = [];
       globalThis.fetch = async (url, options) => {
         const target = new URL(url, 'https://snap.dokitool.com');
         if (target.pathname === '/api/resolve') {

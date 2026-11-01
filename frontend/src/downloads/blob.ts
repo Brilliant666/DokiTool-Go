@@ -1,6 +1,8 @@
 import type { DownloadObserver, DownloadRequest, DownloadSnapshot } from "./types";
-import { mediaCredentials, mediaFilename, mediaUrl, mimeType, networkWait, throwIfAborted } from "./file";
+import { mediaCredentials, mediaUrl, networkWait, throwIfAborted } from "./file";
+import { attachmentFormat } from "../../public/downloads/media-format.js";
 import { openSource } from "./native";
+import { decodedLength } from "../../public/downloads/decoded-length.js";
 
 const IDLE_TIMEOUT_MS = 30000;
 let queue: Promise<void> = Promise.resolve();
@@ -58,13 +60,8 @@ export async function downloadBlob(request: DownloadRequest, signal: AbortSignal
         response = await networkWait(fetch(url, { method: "GET", mode: "cors", credentials: mediaCredentials(url), referrerPolicy: "no-referrer", signal: controller.signal }), controller, IDLE_TIMEOUT_MS);
         throwIfAborted(signal);
         if (response.status !== 200 || response.type === "opaque" || response.headers.has("content-range") || !response.body) throw new Error(`资源不是完整文件响应（HTTP ${response.status}）`);
-        const length = Number(response.headers.get("content-length"));
-        // Fetch exposes decoded bytes. Compressed or missing lengths remain unknown,
-        // rather than refusing an otherwise readable media file.
-        const encoding = response.headers.get("content-encoding")?.toLowerCase();
-        const total = Number.isSafeInteger(length) && length > 0 && (!encoding || encoding === "identity") ? length : 0;
-        const type = mimeType(response.headers.get("content-type"));
-        const filename = mediaFilename(request.filename, type);
+        const total = decodedLength(response, request.sourceSizes?.[url]);
+        const { filename, mime: type } = attachmentFormat(request.filename, response.headers.get("content-type"), request.formatMime);
         reader = response.body.getReader();
         let loaded = 0, sampleBytes = 0, sampleTime = Date.now();
         let lastReceivedAt = 0;

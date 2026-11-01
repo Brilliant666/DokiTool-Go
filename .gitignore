@@ -65,6 +65,7 @@
 !/scripts/check-upstream-updates.py
 !/scripts/go-migration/
 !/scripts/requirements-validation.txt
+!/scripts/test-download-browser.mjs
 !/scripts/test-unified-schema.py
 !/scripts/tests/
 !/scripts/third-party-notices.py
@@ -149,6 +150,7 @@
 !/docs/go-migration/acceptance.md
 !/docs/go-migration/bilibili-checks.json
 !/docs/go-migration/bilibili.md
+!/docs/go-migration/download-delivery-closeout.md
 !/docs/go-migration/frontend-checks.json
 !/docs/go-migration/known-issues.md
 !/docs/go-migration/mapping.md
@@ -215,6 +217,7 @@
 !/frontend/tests/download-streaming.test.mjs
 !/frontend/tests/download-transports.test.mjs
 !/frontend/tests/download-worker.test.mjs
+!/frontend/tests/fixtures/
 !/frontend/tests/helpers/
 !/frontend/tests/icons.test.mjs
 !/frontend/tests/media-delivery.test.mjs
@@ -396,6 +399,8 @@
 !/frontend/brand-originals/platforms/zuiyou.png
 /frontend/public/downloads/*
 !/frontend/public/downloads/bridge.html
+!/frontend/public/downloads/decoded-length.js
+!/frontend/public/downloads/media-format.js
 !/frontend/public/downloads/task-store.js
 !/frontend/public/downloads/worker.js
 /frontend/public/licenses/*
@@ -471,6 +476,8 @@
 !/frontend/src/utils/rateLimit.js
 !/frontend/src/utils/segmentDownload.ts
 !/frontend/src/utils/videoFilename.ts
+/frontend/tests/fixtures/*
+!/frontend/tests/fixtures/download/
 /frontend/tests/helpers/*
 !/frontend/tests/helpers/download-idb.mjs
 /backend/internal/media/weibo/*
@@ -626,6 +633,9 @@
 !/frontend/src/assets/platforms/weibo.svg
 !/frontend/src/assets/platforms/xhs.ico
 !/frontend/src/assets/platforms/zuiyou.png
+/frontend/tests/fixtures/download/*
+!/frontend/tests/fixtures/download/one-frame.mov
+!/frontend/tests/fixtures/download/one-frame.mp4
 /backend/internal/media/weibo/testdata/*
 !/backend/internal/media/weibo/testdata/php-media-baseline.json.gz
 !/backend/internal/media/weibo/testdata/php-prepare-baseline.json
