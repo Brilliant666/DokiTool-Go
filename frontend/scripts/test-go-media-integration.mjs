@@ -193,7 +193,7 @@ try {
   }));
   const result = spawnSync(process.execPath, [
     "--test", "--test-reporter=tap", "--test-concurrency=1",
-    "--test-name-pattern=^(PR8 integration: actual (play-endpoint|cdn) adapter renewal preserves|Go Weibo integration:)",
+    "--test-name-pattern=^(PR8 integration: actual (play-endpoint|cdn) adapter renewal preserves|Go Weibo integration:|Renewal stability integration:)",
     "tests/ui-download-contract.test.mjs",
   ], {
     cwd: root, encoding: "utf8", maxBuffer: 8 * 1024 * 1024,
@@ -205,14 +205,17 @@ try {
   assert.equal(passes.length, 4, "All four existing renewal tests must execute and pass");
   const weiboPasses = [...result.stdout.matchAll(/^ok \d+ - Go Weibo integration: (?:expired-renewal|applied-refresh) preserves (?:explicit|default) signed download identity\s*$/gm)];
   assert.equal(weiboPasses.length, 4, "All four signed Weibo selection/renewal tests must execute and pass");
+  const pinnedPasses = [...result.stdout.matchAll(/^ok \d+ - Renewal stability integration: actual (?:play-endpoint|cdn) pins variant-only source\s*$/gm)];
+  assert.equal(pinnedPasses.length, 2, "Both quality-only source-pinning tests must execute and pass");
   const outcome = {
     passed: failures.length === 0, responses: accepted + rejected + failures.length, valid_successes: accepted,
     expected_errors: rejected, unchanged_renewal_tests: passes.length,
+    variant_only_renewal_tests: pinnedPasses.length,
     weibo_signed_renewal_tests: weiboPasses.length,
     selection_coverage: selectionCoverage,
     snapshot_scope: "Same-response object replacement only; not a platform network renewal or browser save",
     rejected_successes: failures.length, failures,
-    evidence: "Actual Go envelopes consumed by unchanged frontend validator, selection and download composables; mocked transfer bytes, no browser/file-save claim",
+    evidence: "Actual Go envelopes consumed by existing frontend validation/selection and the source-pinned download snapshot; mocked transfer bytes, no browser/file-save claim",
   };
   if (report) await writeFile(report, JSON.stringify(outcome, null, 2) + "\n");
   console.log(JSON.stringify(outcome, null, 2));
