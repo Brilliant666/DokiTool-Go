@@ -150,6 +150,7 @@
 !/docs/go-migration/acceptance.md
 !/docs/go-migration/bilibili-checks.json
 !/docs/go-migration/bilibili.md
+!/docs/go-migration/download-delivery-closeout.md
 !/docs/go-migration/frontend-checks.json
 !/docs/go-migration/known-issues.md
 !/docs/go-migration/mapping.md
