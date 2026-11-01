@@ -12,8 +12,12 @@ import (
 // source order or the full candidate inventory. PublicView remains shared.
 func PreparePublic(key string) func(context.Context, string, unified.Object, int64) (unified.Object, error) {
 	return func(ctx context.Context, platform string, payload unified.Object, now int64) (unified.Object, error) {
-		if platform != "weibo" || payload["code"] != "OK" { return payload, nil }
-		if err := ctx.Err(); err != nil { return nil, err }
+		if platform != "weibo" || payload["code"] != "OK" {
+			return payload, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if len(key) < 32 || len(key) > 512 {
 			return unified.ContractError("SERVICE_NOT_CONFIGURED", "微博播放服务尚未配置，请联系站点维护者", false), nil
 		}
@@ -23,7 +27,9 @@ func PreparePublic(key string) func(context.Context, string, unified.Object, int
 			item := unified.Map(rawItem)
 			for _, rawVariant := range unified.Slice(item["variants"]) {
 				variant := unified.Map(rawVariant)
-				if variant["state"] != nil && variant["state"] != "ready" { continue }
+				if variant["state"] != nil && variant["state"] != "ready" {
+					continue
+				}
 				signDeliverySources(unified.Map(variant["delivery"]), key, now, &recognized)
 			}
 		}
@@ -37,7 +43,9 @@ func PreparePublic(key string) func(context.Context, string, unified.Object, int
 // Apply to file, segments, mux and pair sources. Every invalid source is marked
 // unavailable, never redirected to an arbitrary fetch proxy.
 func signDeliverySources(delivery unified.Object, key string, now int64, recognized *int) {
-	if delivery == nil { return }
+	if delivery == nil {
+		return
+	}
 	for _, value := range unified.Slice(delivery["sources"]) {
 		signSource(unified.Map(value), key, now, recognized)
 	}
@@ -57,14 +65,18 @@ func signDeliverySources(delivery unified.Object, key string, now int64, recogni
 }
 
 func signSource(source unified.Object, key string, now int64, recognized *int) {
-	if source == nil { return }
+	if source == nil {
+		return
+	}
 	raw := unified.Str(source["url"])
 	if !media.AllowedURL(raw) {
 		source["availability"] = "unavailable"
 		return
 	}
 	*recognized = *recognized + 1
-	if !unified.SourceUsable(source, now) { return }
+	if !unified.SourceUsable(source, now) {
+		return
+	}
 	expiry := now + media.TicketTTL
 	if previous, ok := source["expires_at"]; ok && previous != nil {
 		t, err := time.Parse(time.RFC3339Nano, unified.Str(previous))
@@ -72,7 +84,9 @@ func signSource(source unified.Object, key string, now int64, recognized *int) {
 			source["availability"] = "unavailable"
 			return
 		}
-		if t.Unix() < expiry { expiry = t.Unix() }
+		if t.Unix() < expiry {
+			expiry = t.Unix()
+		}
 	}
 	ticket, ok := media.Sign(raw, key, now, &expiry)
 	if !ok {
