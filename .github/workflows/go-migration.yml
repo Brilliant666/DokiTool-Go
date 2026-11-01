@@ -171,10 +171,7 @@ jobs:
           done
           "$RUNNER_TEMP/dokitool-fixed-php" scripts/go-migration/produce-weibo-public.php > "$RUNNER_TEMP/weibo-public-baseline.json"
           cp "$RUNNER_TEMP/weibo-public-baseline.json" "$RUNNER_TEMP/bilibili-php/weibo-public-baseline.json"
-          # Temporary review transport: the cases are wholly synthetic and carry no private URLs,
-          # credentials, cookies or media. The next commit will freeze this baseline and remove
-          # these logged chunks in favor of strict byte-for-byte cmp.
-          base64 -w76 "$RUNNER_TEMP/weibo-public-baseline.json" | sed 's/^/WEIBO_PUBLIC_ORACLE_B64_CHUNK=/'
+          cmp backend/internal/platform/weibo/testdata/php-public-baseline.json "$RUNNER_TEMP/weibo-public-baseline.json"
 
       - name: Retain the PHP oracle and provenance
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
