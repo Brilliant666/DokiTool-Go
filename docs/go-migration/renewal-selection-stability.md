@@ -1,5 +1,25 @@
 # 续签与选源保持：下载任务快照
 
+## 已执行的完整 CI
+
+产品提交 **`9eab8701d5eeb287d6642c78d4396fcbf3e11b63`** 的
+[CI #41280075374](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41280075374)
+三个 job 均 completed/success：`bilibili-php-oracle`（124770023869）、
+`offline-contract`（124770023953）、`xhs-dependency-review`（124770023712）。
+
+Go **4117** 叶场景、race/vet/gofmt/build、固定 PHP 8.3.6 重放、来源核验、
+独立 Schema/语义 **1230/1230** 均通过。两轮前端响应消费各 **918/918**；
+每轮分别执行原抖音 **4**、微博 **4**、新增版本选择固定来源 **2** 项续签。
+工作流还完整执行了前端全套测试及原 17 项受控 Chromium 下载矩阵。
+这不是新增真实平台、真实媒体下载或用户日常浏览器验收。
+
+[完整机器报告](renewal-selection-checks.json) 原样来自该运行 artifact
+**13073071599**，内容 SHA-256 为
+`db179285b818557e72397f91a16a7bc825a9be4b1dd298c3e78f65af501aea19`。
+复制后已在 Windows 核对相同哈希；原九平台和小红书机器报告没有覆盖。
+归档提交只更新文档、报告与入库清单，最终 Head 的 CI 状态在 PR #7 单独核对，
+不能用此产品提交的成功替代更晚提交的结果。
+
 ## 范围和接续
 
 本专项从 PR #6 的 `e7aa494c6de43c2824553595513a1e81ade8ee19` 接出
