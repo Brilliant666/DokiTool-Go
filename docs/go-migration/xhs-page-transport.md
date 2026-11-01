@@ -1,5 +1,25 @@
 # 小红书页面传输专项（PR #5）
 
+## 已执行结果：受控传输与完整回归通过
+
+产品代码与依赖锁检查点 **`50fa63ca15d220154ec5a536e8f2aa9d4cb1b524`**，[Actions #41270778447](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41270778447) 三个 job 均 **completed/success**：`bilibili-php-oracle`、`offline-contract`、`xhs-dependency-review`。下面的结果是固定运行环境本轮执行，不沿用历史通过数；不是 XHS 真实在线或浏览器验收。
+
+| 检查 | 本轮结果 |
+| --- | --- |
+| 固定 Go 全包 / race / vet / gofmt / build | **4116** 叶场景、4598 含父级通过事件；全部通过，计数不相加 |
+| 原 PHP 页面 oracle 经真实 TLS、HTTP/1.1 与 HTTP/2、正式 Go API | **25** 旧输入、**236** parse/resolve/缺失目标响应逐字段通过 |
+| 独立 Schema＋语义 | **1230/1230**，包括全部原输出和新增传输输出 |
+| 原前端完整消费 | 原九平台 **918/918**；以实际 H2 页面 Parse 替换其中 50 份后再跑 **918/918**，非 1836 个独立样本 |
+| 原默认／显式续签 | 两轮各保留抖音 **4/4**、微博 **4/4** |
+| 既有公共投影差异 | 原 **10** 项继续精确消费，不扩宽 |
+| 固定 PHP / 来源 / 入库清单 / 模块锁 | 全部通过；513 个文件，`go.mod/go.sum` 与 Go 1.27.3 重新 tidy 输出一致 |
+
+原始完整机器报告位于该运行 artifact **13068714670**，内容 SHA-256 **`ef4f99ac43804f570b09e29197f89f6492a248269762283ac36c709f23e2c679`**。下方机器回执从其实际字段和 job 结果抽取，不冒充原报告逐字节副本；原始 JSON 另作为交付附件提供。原九平台 `nine-platform-checks.json` 未覆盖。
+
+首次实现 `9a9f102` 的 [CI #41270532789](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41270532789) 已通过 PHP、真实 TLS/API 和完整 Go/前端门禁，但独立模块锁 `cmp` 失败：`go get` 的锁未包含 tidy 增加的依赖测试摘要，且 require 分组不同。后续只采用同一固定 Go 1.27.3 在临时副本生成的 `go.mod/go.sum`，没有升级依赖版本、改产品或减弱检查。`50fa63c` 三个 job 完整重跑成功，机器报告与首次代码运行逐字节一致。
+
+静态范围复核确认运行时代码只修改 CLI 接线并新增 `fetch/xhs_pages.go`。PHP、前端产品、schema、平台 formatter、旧基线输入/expected/生产器全部不变。本文收尾提交只归档已执行证据；最终分支 Head 的状态另以 PR 和相应 CI 为准。
+
 ## 授权、分支与证据层次
 
 维护者在提供 Grok bot 的 `RESULT.md` 后授权继续实施。本专项从九平台迁移 PR #4 的 `f3650a07d289a90dda44c0ebc36f3032bda58256` 接出 `codex/xhs-page-transport`，PR #5 以原迁移分支为 base。原任务对新增 TLS 传输的排除仍适用于原 PR #4；这里是独立增量授权，不追溯改写旧验收。未合并、未部署，不修改公开 PHP 仓库与生产。
@@ -50,3 +70,87 @@ XHS 媒体探测与所有非页面用途仍为 `standardRoundTrip`；严格媒�
 复用 Grok 已保存的源代码、依赖、成功 HTML、媒体探测结果与哈希；不要为补摘要再次下载 bd/qn 两份原画。对同一保存 HTML先检验原 parser 兼容，再在获准环境用正式 Go 服务的显式开关检验页面获取。图集、视频、Live 分开记录；截图/图片/视频成功不替代 Live。
 
 如果真实入口仍受阻，记录精确 HTTP/页面阶段及构建/profile，不归因 token 过期，不循环 profile 或换网络。新传输工作不能关闭已有跨调用显式 source ID 漂移、其他平台稳定性、旧生产恢复和回滚门槛。代表性原前端播放/文件保存另列，不能以本地合成 TLS 或 Grok 独立下载替代。
+
+## 机器回执（本轮摘要）
+
+```json
+{
+  "scope": "XHS page-only Chrome131 implementation and controlled offline acceptance; not online acceptance",
+  "code_head": "50fa63ca15d220154ec5a536e8f2aa9d4cb1b524",
+  "base_head": "f3650a07d289a90dda44c0ebc36f3032bda58256",
+  "ci_run": 41270778447,
+  "ci_jobs": {
+    "bilibili-php-oracle": {
+      "id": 124742926015,
+      "conclusion": "success"
+    },
+    "offline-contract": {
+      "id": 124742926171,
+      "conclusion": "success"
+    },
+    "xhs-dependency-review": {
+      "id": 124742926190,
+      "conclusion": "success"
+    }
+  },
+  "source_report_artifact": 13068714670,
+  "source_report_sha256": "ef4f99ac43804f570b09e29197f89f6492a248269762283ac36c709f23e2c679",
+  "passed": true,
+  "toolchain": "go version go1.27.3 linux/amd64",
+  "php_runtime": "8.3.6",
+  "php_baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "dependencies": {
+    "tls-client": "v1.18.0",
+    "fhttp": "v0.7.3",
+    "module_lock_tidy_exact": true
+  },
+  "xhs_page_transport": {
+    "passed": true,
+    "frozen_page_cases": 25,
+    "http_responses": 236,
+    "protocols": [
+      "HTTP/1.1 over TLS",
+      "HTTP/2 over TLS"
+    ],
+    "parse_envelopes_for_frontend": 50,
+    "evidence": "Controlled local TLS servers with original PHP response tapes, not online platform access"
+  },
+  "go": {
+    "leaf_scenarios": 4116,
+    "passed_test_events": 4598,
+    "race": true,
+    "vet": true
+  },
+  "independent_responses": {
+    "total": 1230,
+    "passed": 1230,
+    "failures": []
+  },
+  "frontend_original": {
+    "passed": true,
+    "responses": 918,
+    "valid_successes": 584,
+    "expected_errors": 334,
+    "unchanged_renewal_tests": 4,
+    "weibo_signed_renewal_tests": 4,
+    "rejected_successes": 0
+  },
+  "frontend_with_actual_h2_pages": {
+    "passed": true,
+    "responses": 918,
+    "valid_successes": 584,
+    "expected_errors": 334,
+    "unchanged_renewal_tests": 4,
+    "weibo_signed_renewal_tests": 4,
+    "rejected_successes": 0
+  },
+  "consumed_existing_public_differences": 10,
+  "source_inventory_files": 513,
+  "product_php_frontend_schema_oracles_unchanged": true,
+  "online_platform_requests": false,
+  "browser_save": false,
+  "production_changed": false,
+  "default_mode": "standard",
+  "opt_in_mode": "chrome131"
+}
+```
