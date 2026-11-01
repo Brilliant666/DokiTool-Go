@@ -31,4 +31,6 @@ PR #5 的原画文件已有完整保存证据，70,759,716 B，QuickTime `qt  `�
 
 本机前端测试 317/317，类型检查、生产构建、SSG 和加载预算通过。完整 PHP、Schema、前端消费与 CI 浏览器测试见本 PR 最终 Head 对应的 Actions 运行。Live 整体保存及其他平台跨调用身份仍单列待验。
 
+[首轮 CI](https://github.com/Brilliant666/DokiTool-Go/actions/runs/41274637153) 的六个续签用例触发了新的长度校验。它们使用真实适配器响应，但模拟传输恒定返回 4 B，而相应来源声明的大小分别为 2,500,000、8,000,000 或 16,000,000 B。测试传输现按所选来源提供对应字节，冻结响应和身份断言均保留。修正后本地实际 Go 续签对照 8/8，PHP 8.3.6 与前端集成 13/13。此修正只涉及测试夹具，浏览器实测对应的产品代码相同。
+
 受限证据位于独立仓库的 `.local/download-delivery-closeout/private/`。其中 `original/real-image-acceptance.json` 是真实前后对照，`original/new/outcome.private.json` 保留实际文件路径，`browser-control-final/browser-results.json` 是受控浏览器的逐项回执。签名、真实标题、媒体文件与原始网络记录均仅保存在本机。
