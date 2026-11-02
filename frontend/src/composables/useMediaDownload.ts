@@ -67,8 +67,11 @@ export function useMediaDownload({
   const freeze = <T>(value: T): T => JSON.parse(JSON.stringify(value));
   const effectiveSelectedUrl = () => selection.currentVideoUrl.value;
   const archiveRetries = new Map<number, () => Promise<void>>();
-  const videoRetries = new Map<number, () => Promise<boolean>>();
+  const videoRetries = new Map<number, (refresh?: boolean) => Promise<boolean>>();
   const pendingTaskActions = new Set<number>();
+  // Page-owned, exact selections survive the URL-free resolve/acknowledgement
+  // window. Never infer these identities from restored URL-only history.
+  const fileTaskSelections = new Map<number, string>();
   const sourceContexts = new Map<
     number,
     {
@@ -340,6 +343,7 @@ export function useMediaDownload({
       videoStore.removeDownload(downloadId);
       archiveRetries.delete(downloadId);
       videoRetries.delete(downloadId);
+      fileTaskSelections.delete(downloadId);
       sourceContexts.delete(downloadId);
       showToast("该资源已有下载任务", "info");
       return;
@@ -714,6 +718,42 @@ export function useMediaDownload({
       version: videoStore.resultVersion,
     });
   };
+  function refreshable(snapshot: ItemSnapshot): boolean {
+    if (snapshot.resource || !readyItem(snapshot.item) || !snapshot.item.resolve_url || !snapshot.choice?.source_id) return false;
+    const variant = snapshot.item.variants.find(candidate => candidate.id === snapshot.choice!.variant_id);
+    return readyVariant(variant) && variant.delivery.kind === "file" &&
+      variant.delivery.sources.some(source => source.id === snapshot.choice!.source_id);
+  }
+  function fileSelectionKey(snapshot: ItemSnapshot): string | undefined {
+    if (snapshot.resource || !readyItem(snapshot.item) || !snapshot.choice?.source_id)
+      return;
+    const variants = snapshot.item.variants.filter(candidate => candidate.id === snapshot.choice!.variant_id);
+    if (variants.length !== 1 || !readyVariant(variants[0])) return;
+    const delivery = variants[0].delivery;
+    if (delivery.kind !== "file" ||
+        delivery.sources.filter(source => source.id === snapshot.choice!.source_id).length !== 1)
+      return;
+    return JSON.stringify([snapshot.version, snapshot.item.id, snapshot.item.type,
+      snapshot.choice.variant_id, snapshot.choice.source_id]);
+  }
+  function selectionInFlight(key: string | undefined, exceptId?: number): boolean {
+    if (!key) return false;
+    for (const [id, selected] of fileTaskSelections) {
+      const task = taskFor(id);
+      if (!task) {
+        fileTaskSelections.delete(id);
+        continue;
+      }
+      if (id !== exceptId && selected === key &&
+          (pendingTaskActions.has(id) || task.observation === "unknown" ||
+           ["queued", "preparing", "downloading"].includes(task.status)))
+        return true;
+    }
+    return false;
+  }
+  function selectionBusyNotice(): void {
+    showToast("该版本和来源已有任务正在处理，请在下载列表查看进度", "info");
+  }
   const filenameFor = (snapshot: ItemSnapshot, extension: string) =>
     buildMediaFilename({
       title: snapshot.item.title || snapshot.title,
@@ -785,11 +825,14 @@ export function useMediaDownload({
         : {}),
     });
   }
-  async function resolvedTarget(snapshot: ItemSnapshot, signal: AbortSignal) {
+  async function resolvedTarget(snapshot: ItemSnapshot, signal: AbortSignal, refresh = false) {
     checkAbort(signal);
     let item = snapshot.item;
     let target = snapshotTarget(snapshot, item);
-    if (target.kind === "needs_resolve" || target.kind === "needs_refresh") {
+    if (refresh || target.kind === "needs_resolve" || target.kind === "needs_refresh") {
+      // Explicit user recovery is not an inference that a 403 means expiry.
+      // Each invocation performs at most one resolve, never a retry loop.
+      if (refresh && !refreshable(snapshot)) throw new Error("原任务缺少可核对的刷新入口，请重新解析并选择");
       const deadline = new AbortController();
       const timeout = setTimeout(
         () => deadline.abort(new Error("解析准备超过 30 秒，请重试")),
@@ -806,7 +849,11 @@ export function useMediaDownload({
         clearTimeout(timeout);
       }
       checkAbort(signal);
+      if (item.id !== snapshot.item.id || item.type !== snapshot.item.type)
+        throw new Error("刷新响应与原作品不一致，请重新解析并选择");
       target = snapshotTarget(snapshot, item);
+      if (refresh && target.kind !== "file" && "variant" in target)
+        throw new Error("原版本不再是完整文件，请重新选择");
     }
     // Never substitute a different variant when an explicit choice disappeared.
     if (!("variant" in target)) throw new Error(target.message);
@@ -815,13 +862,20 @@ export function useMediaDownload({
   async function enqueueItem(
     snapshot: ItemSnapshot,
     retryId?: number,
+    refresh = false,
   ): Promise<boolean> {
+    const selected = fileSelectionKey(snapshot);
+    if (selectionInFlight(selected, retryId)) {
+      selectionBusyNotice();
+      return false;
+    }
     const id =
       retryId ??
       videoStore.addDownload({
         filename: filenameFor(snapshot, "bin"),
         statusText: "准备下载...",
       });
+    if (selected) fileTaskSelections.set(id, selected);
     const controller = new AbortController(),
       startedAt = Date.now();
     videoStore.updateDownload(id, {
@@ -839,15 +893,24 @@ export function useMediaDownload({
       averageSpeed: 0,
       percent: 0,
     });
-    videoRetries.set(id, () => enqueueItem(snapshot, id));
+    videoStore.updateDownload(id, { refreshAvailable: refreshable(snapshot) });
+    // A settled old attempt is already acknowledged before this recovery starts.
+    // Do not expose its URL or delivery identity while awaiting a new response.
+    if (refresh) {
+      sourceContexts.delete(id);
+      videoStore.updateDownload(id, { url: undefined, deliveryId: undefined, transport: undefined });
+    }
+    videoRetries.set(id, (forceRefresh = false) => enqueueItem(snapshot, id, forceRefresh));
     try {
       const { item, target } = await resolvedTarget(
         snapshot,
         controller.signal,
+        refresh,
       );
       if (!ownsTask(id, controller)) return false;
       const prepared = preparedSnapshot(snapshot, item, target);
-      videoRetries.set(id, () => enqueueItem(prepared, id));
+      videoRetries.set(id, (forceRefresh = false) => enqueueItem(prepared, id, forceRefresh));
+      videoStore.updateDownload(id, { refreshAvailable: refreshable(prepared) });
       const delivery = target.variant.delivery;
       if (target.kind === "pair") {
         if (delivery.kind !== "pair") throw new Error("实况资源不完整");
@@ -1176,7 +1239,10 @@ export function useMediaDownload({
     if (currentAttempt()) videoStore.cancelDownload(id);
   }
 
-  async function handleRetryDownload(id: number): Promise<void> {
+  function handleRefreshDownload(id: number): Promise<void> {
+    return handleRetryDownload(id, true);
+  }
+  async function handleRetryDownload(id: number, refresh = false): Promise<void> {
     const current = taskFor(id);
     if (
       !current ||
@@ -1185,6 +1251,14 @@ export function useMediaDownload({
       ["queued", "preparing", "downloading"].includes(current.status)
     )
       return;
+    // Only an owned, settled file task has the frozen identity required for refresh.
+    // Restored Worker history does not reconstruct that identity from a stale URL.
+    if (refresh && (!current.refreshAvailable || !videoRetries.has(id) ||
+        !["failed", "interrupted"].includes(current.status))) return;
+    if (selectionInFlight(fileTaskSelections.get(id), id)) {
+      selectionBusyNotice();
+      return;
+    }
     // Retry and clear share the old attempt's acknowledgement; only one may act.
     const task = { ...current };
     pendingTaskActions.add(id);
@@ -1208,15 +1282,16 @@ export function useMediaDownload({
       if (!matchesSettledAttempt(task)) return;
       if (task.deliveryId) deliveryTasks.delete(task.deliveryId);
       const retryArchive = archiveRetries.get(id);
-      if (retryArchive) {
+      if (!refresh && retryArchive) {
         await retryArchive();
         return;
       }
       const retryVideo = videoRetries.get(id);
       if (retryVideo) {
-        await retryVideo();
+        await retryVideo(refresh);
         return;
       }
+      if (refresh) return;
       // 分片任务重试：重走合并下载，避免退化成只下首片
       const rawSegments = task.segments;
       if (Array.isArray(rawSegments) && rawSegments.length > 0) {
@@ -1308,6 +1383,7 @@ export function useMediaDownload({
         if (task.deliveryId) deliveryTasks.delete(task.deliveryId);
         archiveRetries.delete(task.id);
         videoRetries.delete(task.id);
+        fileTaskSelections.delete(task.id);
         sourceContexts.delete(task.id);
         // Clearing a confirmed-gone execution is history cleanup, not a new
         // cancellation intent. Pinia's removeDownload aborts a saved controller.
@@ -1336,6 +1412,7 @@ export function useMediaDownload({
     downloadAllImages,
     handleCancelDownload,
     handleRetryDownload,
+    handleRefreshDownload,
     handleQueryDownload,
     handleBrowserDownload,
     handleClearCompleted,

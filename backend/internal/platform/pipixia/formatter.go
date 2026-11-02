@@ -83,6 +83,7 @@ func itemResponse(item any, expected string) unified.Object {
 	}
 	for _, source := range representations {
 		urls := mediaURLs(source)
+		mediaIdentity := representationIdentity(urls)
 		identity := append([]string{}, urls...)
 		sort.Strings(identity)
 		encoded, err := unified.PHPJSON(identity, false)
@@ -96,6 +97,12 @@ func itemResponse(item any, expected string) unified.Object {
 			}
 			seen[url] = true
 			candidate := unified.Object{"url": url, "quality": "unknown", "private_representation_id": hex.EncodeToString(digest[:])}
+			if mediaIdentity != "" {
+				candidate["private_media_identity"] = mediaIdentity
+				if sourceIdentity := ppxRenewedSourceIdentity(url, mediaIdentity); sourceIdentity != "" {
+					candidate["private_source_identity"] = sourceIdentity
+				}
+			}
 			for _, key := range []string{"width", "height"} {
 				value := field(source, key)
 				if number, ok := unified.Numeric(value); ok && number > 0 {
@@ -154,7 +161,7 @@ func itemResponse(item any, expected string) unified.Object {
 		cover = unified.Str(images[0])
 	}
 	data := unified.Object{"id": expected, "type": kind, "title": title, "author": plain(first(field(author, "name"), "")), "avatar": firstURL(field(author, "avatar")), "cover": cover, "url": unified.Str(selected["url"]), "images": images, "imgurl": unified.CloneValue(images), "video_backup": backup}
-	for _, key := range []string{"width", "height", "quality", "private_representation_id"} {
+	for _, key := range []string{"width", "height", "quality", "private_representation_id", "private_media_identity", "private_source_identity"} {
 		if value, ok := selected[key]; ok {
 			data[key] = value
 		}

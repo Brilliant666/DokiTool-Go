@@ -3,7 +3,7 @@ import AppIcon from './AppIcon.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({ downloads: { type: Array, default: () => [] } })
-const emit = defineEmits(['cancel', 'retry', 'query', 'handoff', 'clear-completed'])
+const emit = defineEmits(['cancel', 'retry', 'refresh', 'query', 'handoff', 'clear-completed'])
 const formatBytes = (bytes) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -174,6 +174,12 @@ onBeforeUnmount(stopCollapseTimer)
               class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
               title="打开源文件，由浏览器处理；本站不再显示该次下载速度">
               打开源链接
+            </button>
+            <button v-if="item.refreshAvailable && !item.observation && ['failed', 'interrupted'].includes(item.status)"
+              type="button" @click="emit('refresh', item.id)"
+              class="block mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+              title="重新解析一次并核对原版本与来源；不会改用新的默认版本">
+              刷新链接并重试
             </button>
             <div v-if="['failed', 'interrupted', 'cancelled'].includes(item.status) && item.error" class="text-xs mt-1"
               :class="item.status === 'cancelled' ? 'text-slate-500 dark:text-slate-400' : 'text-red-500'">

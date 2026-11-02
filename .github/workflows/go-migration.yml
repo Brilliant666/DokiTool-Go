@@ -10,6 +10,7 @@ on:
       - codex/remaining-platforms-go-migration
       - codex/xhs-page-transport
       - codex/download-delivery-closeout
+      - codex/renewal-selection-stability
     paths:
       - backend/**
       - frontend/**
@@ -311,6 +312,12 @@ jobs:
           "$RUNNER_TEMP/dokitool-validation/bin/python" -B -X utf8 scripts/go-migration/check.py \
             --race --frontend --check-php-source \
             --report "$RUNNER_TEMP/dokitool-go-checks.json"
+
+      - name: Verify Pipixia representation changes through the original frontend
+        run: |
+          export DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT="$RUNNER_TEMP/pipixia-representation.json"
+          (cd backend && go test -count=1 ./internal/platform/pipixia -run TestPipixiaRepresentation)
+          node frontend/scripts/test-pipixia-representation.mjs "$DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT"
 
       - name: Build the Go executable
         working-directory: backend
