@@ -163,6 +163,7 @@
 !/docs/go-migration/renewal-selection-checks.json
 !/docs/go-migration/renewal-selection-stability.md
 !/docs/go-migration/rollback.md
+!/docs/go-migration/same-host-credential-recovery.md
 !/docs/go-migration/takeover-toutiao-weibo-checks.json
 !/docs/go-migration/toutiao.md
 !/docs/go-migration/weibo-candidates-checks.json
@@ -197,6 +198,7 @@
 !/frontend/scripts/prerender.mjs
 !/frontend/scripts/test-go-media-integration.mjs
 !/frontend/scripts/test-media-integration.mjs
+!/frontend/scripts/test-pipixia-credentials.mjs
 !/frontend/scripts/test-pipixia-representation.mjs
 /frontend/src/*
 !/frontend/src/App.vue
@@ -355,6 +357,7 @@
 /backend/internal/unified/*
 !/backend/internal/unified/baseline_test.go
 !/backend/internal/unified/contract_test.go
+!/backend/internal/unified/credential_fallback_test.go
 !/backend/internal/unified/generate_schema.go
 !/backend/internal/unified/identity.go
 !/backend/internal/unified/identity_test.go
@@ -531,6 +534,7 @@
 !/backend/internal/platform/pipigx/wire.go
 /backend/internal/platform/pipixia/*
 !/backend/internal/platform/pipixia/baseline_test.go
+!/backend/internal/platform/pipixia/credential_fallback_test.go
 !/backend/internal/platform/pipixia/formatter.go
 !/backend/internal/platform/pipixia/parser.go
 !/backend/internal/platform/pipixia/php.go

@@ -131,6 +131,7 @@ func itemResponse(item any, expected string) unified.Object {
 		return w * h
 	}
 	sort.SliceStable(candidates, func(i, j int) bool { return area(candidates[i]) > area(candidates[j]) })
+	preserveCredentialFallbacks(candidates)
 	images := unified.Array{}
 	imageSeen := map[string]bool{}
 	for _, image := range values(field(field(item, "note"), "multi_image")) {
@@ -161,7 +162,7 @@ func itemResponse(item any, expected string) unified.Object {
 		cover = unified.Str(images[0])
 	}
 	data := unified.Object{"id": expected, "type": kind, "title": title, "author": plain(first(field(author, "name"), "")), "avatar": firstURL(field(author, "avatar")), "cover": cover, "url": unified.Str(selected["url"]), "images": images, "imgurl": unified.CloneValue(images), "video_backup": backup}
-	for _, key := range []string{"width", "height", "quality", "private_representation_id", "private_media_identity", "private_source_identity"} {
+	for _, key := range []string{"width", "height", "quality", "private_representation_id", "private_media_identity", "private_source_identity", "fallback_urls"} {
 		if value, ok := selected[key]; ok {
 			data[key] = value
 		}

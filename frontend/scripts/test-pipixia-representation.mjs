@@ -93,3 +93,7 @@ try {
   globalThis.fetch = previousFetch;
   await vite.close();
 }
+
+// The existing actual-Go consumer CI gate also exercises credential recovery.
+const { verifyCredentialRecovery } = await import('./test-pipixia-credentials.mjs');
+await verifyCredentialRecovery(cases);

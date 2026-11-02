@@ -192,6 +192,14 @@ func TestPipixiaRepresentationExport(t *testing.T) {
 		"transport-source-missing": representationPayload(t, freshTransport[:1]),
 		"transport-other-content":  representationPayload(t, []string{strings.Replace(freshTransport[1], "rc=opaque%2Bencode", "rc=other%2Bencode", 1)}),
 	}
+	oldCredential := transportSources(ppxOldTransportQuery, "a", "b")[0]
+	freshCredential := transportSources(ppxNewTransportQuery, "c", "d")[0]
+	cases["credential-before"] = representationPayload(t, []string{oldCredential})
+	cases["credential-stale-first"] = representationPayload(t, []string{oldCredential, freshCredential})
+	cases["credential-fresh-first"] = representationPayload(t, []string{freshCredential, oldCredential})
+	cases["credential-host-changed"] = representationPayload(t, []string{strings.Replace(freshCredential, "v3-", "v26-", 1)})
+	cases["credential-object-changed"] = representationPayload(t, []string{strings.Replace(freshCredential, "FileObjectA", "OtherObject", 1)})
+	cases["credential-content-changed"] = representationPayload(t, []string{freshCredential + "&watermark=1"})
 	if path := os.Getenv("DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT"); path != "" {
 		body, err := json.MarshalIndent(cases, "", "  ")
 		if err != nil {

@@ -2,6 +2,7 @@ package unified
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -42,6 +43,25 @@ func ValidateSource(source Object, generatedAt *int64) error {
 		parsed, ok := splitRawURL(raw)
 		if !ok || parsed.userInfo || MediaURL(raw) != raw {
 			return fmt.Errorf("absolute direct URL required")
+		}
+	}
+	if alternatives, exists := source["fallback_urls"]; exists {
+		values := Slice(alternatives)
+		base, err := url.Parse(raw)
+		if len(values) < 1 || len(values) > 2 || err != nil || base.Scheme != "https" || Str(source["access"]) == "relay" {
+			return fmt.Errorf("invalid credential fallback list")
+		}
+		seen := map[string]bool{raw: true}
+		for _, value := range values {
+			alternate, ok := value.(string)
+			parsed, parseErr := url.Parse(alternate)
+			if !ok || parseErr != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Fragment != "" || strings.TrimSuffix(strings.ToLower(parsed.Host), ":443") != strings.TrimSuffix(strings.ToLower(base.Host), ":443") || seen[alternate] {
+				return fmt.Errorf("invalid credential fallback origin or duplicate")
+			}
+			if err := ValidateSource(Object{"url": alternate}, nil); err != nil {
+				return err
+			}
+			seen[alternate] = true
 		}
 	}
 	if nonNullField(source, "expires_at") {
