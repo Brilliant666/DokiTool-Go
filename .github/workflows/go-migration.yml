@@ -11,6 +11,8 @@ on:
       - codex/xhs-page-transport
       - codex/download-delivery-closeout
       - codex/renewal-selection-stability
+      - chat/product-refresh-closeout
+      - dot/same-host-credential-recovery-product
     paths:
       - backend/**
       - frontend/**

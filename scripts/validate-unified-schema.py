@@ -80,6 +80,21 @@ def sources_valid(sources):
     require(len(sources) == 1 or len(ids) == len(sources), 'multiple sources require IDs')
     for source in sources:
         validate_url(source['url'], source.get('access', 'direct') == 'relay')
+        if 'fallback_urls' in source:
+            primary = urlsplit(source['url'])
+            require(source.get('access', 'direct') != 'relay' and primary.scheme == 'https',
+                    'credential fallbacks require a direct HTTPS source')
+            # Host case and an explicit default port do not change the origin.
+            origin = (primary.hostname, primary.port if primary.port is not None else 443)
+            seen = {source['url']}
+            for alternate in source['fallback_urls']:
+                validate_url(alternate)
+                parsed = urlsplit(alternate)
+                require(parsed.scheme == 'https' and
+                        (parsed.hostname, parsed.port if parsed.port is not None else 443) == origin,
+                        'credential fallback must have the same HTTPS origin')
+                require(alternate not in seen, 'duplicate credential fallback URL')
+                seen.add(alternate)
 
 
 def requirements(delivery):
