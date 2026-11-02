@@ -13,9 +13,9 @@ import (
 var renditionPath = regexp.MustCompile(`^/[A-Za-z0-9]{2}/[A-Za-z0-9_-]+\.mp4$`)
 var numericMediaID = regexp.MustCompile(`^[0-9]+$`)
 
-// For this signed rendition URL shape, a refresh can change lp while serving
-// identical file bytes. Keep the lp-bearing route separate from the route
-// without it. Preserve the exact path and other content-query bytes.
+// For this signed rendition, repeated responses have delivered identical file
+// bytes across changes to lp, uid and ab. Preserve the route shape, path, and
+// every other raw query field. This key is never used as a delivery URL.
 func renewableFileKey(raw string) string {
 	if !media.AllowedURL(raw) {
 		return ""
@@ -40,14 +40,27 @@ func renewableFileKey(raw string) string {
 	if !numericMediaID.MatchString(values.Get("media_id")) {
 		return ""
 	}
-	fields := strings.Split(query, "&")
-	for i, field := range fields {
-		if strings.HasPrefix(field, "lp=") {
-			fields[i] = "lp"
-			return "weibo-file:" + base + "?" + strings.Join(fields, "&")
+	for _, name := range []string{"uid", "ab"} {
+		if vs, ok := values[name]; ok && (len(vs) != 1 || vs[0] == "") {
+			return "" // Don't interpret ambiguous or empty client fields.
 		}
 	}
-	return ""
+	fields := strings.Split(query, "&")
+	hasLP := false
+	for i, field := range fields {
+		name, _, _ := strings.Cut(field, "=")
+		switch name {
+		case "lp":
+			hasLP = true
+			fields[i] = name
+		case "uid", "ab":
+			fields[i] = name
+		}
+	}
+	if !hasLP {
+		return ""
+	}
+	return "weibo-file:" + base + "?" + strings.Join(fields, "&")
 }
 
 // Never merge distinct routes present together just because removing their

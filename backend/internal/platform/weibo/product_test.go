@@ -154,27 +154,33 @@ func TestWeiboLPRefreshPreservesExplicitFile(t *testing.T) {
 		}
 		return got
 	}
-	const old = "&lp=oldRoute&Expires=1900000010&ssig=old&KID=k"
-	const fresh = "&lp=newRoute&Expires=1900000020&ssig=new&KID=k"
+	const old = "&lp=oldRoute&uid=oldGuest&ab=trial-a&Expires=1900000010&ssig=old&KID=k"
+	const fresh = "&lp=newRoute&uid=nextGuest&ab=trial-b&Expires=1900000020&ssig=new&KID=k"
 	const plain = "&Expires=1900000010&ssig=other&KID=k"
 	first := publicChoices(file+plain, file+old)
 	next := publicChoices(file+fresh, file+plain)
 	if first[1] != next[0] || first[0] != next[1] {
 		t.Fatalf("refresh changed a choice: before %v, reordered after %v", first, next)
 	}
+	if publicChoices(file + strings.Replace(fresh, "newRoute", "oldRoute", 1))[0] != first[1] {
+		t.Fatal("client query changes with an unchanged lp lost the explicit file")
+	}
 	for _, raw := range []string{
 		strings.Replace(file, "object540", "other540", 1) + fresh,
 		strings.Replace(file, "12345", "12346", 1) + fresh,
 		strings.Replace(file, "540p", "other", 1) + fresh,
 		file + "&extra=content" + fresh,
+		file + strings.Replace(fresh, "&uid=nextGuest", "", 1),
 	} {
 		if publicChoices(raw)[0] == first[1] {
 			t.Fatal("unrelated content inherited explicit choice")
 		}
 	}
-	ambiguous := publicChoices(file+old, file+fresh)
-	if ambiguous[0] == ambiguous[1] || ambiguous[0] == first[1] || ambiguous[1] == first[1] {
-		t.Fatal("two simultaneously distinct observations must remain distinct from the unambiguous choice")
+	for _, other := range []string{fresh, strings.Replace(fresh, "newRoute", "oldRoute", 1)} {
+		ambiguous := publicChoices(file+old, file+other)
+		if ambiguous[0] == ambiguous[1] || ambiguous[0] == first[1] || ambiguous[1] == first[1] {
+			t.Fatal("two simultaneously distinct observations must remain distinct from the unambiguous choice")
+		}
 	}
 	for _, unproven := range []string{
 		strings.Replace(file, "/ab/object540.mp4", "/other/shape", 1),
