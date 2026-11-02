@@ -1,0 +1,502 @@
+{
+  "scope": "Offline frozen PHP inputs through actual Go code; no real platform or browser evidence",
+  "passed": true,
+  "toolchain": "go version go1.27.3 linux/amd64",
+  "php_baseline": {
+    "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+    "cases": 208,
+    "catalog": 1,
+    "passed": true,
+    "source_bytes_checked": true,
+    "source_files": 40,
+    "tickets": 21
+  },
+  "php_douyin_baseline": {
+    "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+    "numeric_round_cases": 72,
+    "parse_cases": 70,
+    "passed": true,
+    "probe_metadata_cases": 13,
+    "probe_transport_cases": 10,
+    "public_envelopes": 140,
+    "source_bytes_checked": true,
+    "source_files": 17
+  },
+  "php_integer_baseline": {
+    "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+    "fixture_sha256": "725412ca898a7ae20d632395c80803716b05865e9e01908520caa2a6c96e1046",
+    "parse_cases": 13,
+    "passed": true,
+    "private_cases": 12,
+    "public_envelopes": 26,
+    "source_bytes_checked": true,
+    "source_files": 12
+  },
+  "php_25beaee_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "runtime": "8.3.6",
+    "cases": 12,
+    "public_envelopes": 24,
+    "changed_cases": 6,
+    "reused_groups": 7,
+    "git_source_checked": true,
+    "known_contract_conflicts": [
+      "live/direct-and-still fragment (normal/debug)",
+      "integer size_bytes above JavaScript safe integer (8 public responses)"
+    ]
+  },
+  "php_bilibili_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 55,
+    "parse_cases": 55,
+    "public_envelopes": 110,
+    "success_cases": 29,
+    "http_requests": 81,
+    "git_source_checked": true
+  },
+  "bilibili_exact_public_comparison": {
+    "passed": true,
+    "cases": 55,
+    "public_envelopes": 110,
+    "declared_differences": 0
+  },
+  "php_weibo_signed_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 35,
+    "parse_cases": 35,
+    "public_envelopes": 70,
+    "success_cases": 19,
+    "http_requests": 45,
+    "signed_sources": 80,
+    "git_source_checked": true
+  },
+  "weibo_signed_exact_public_comparison": {
+    "passed": true,
+    "cases": 35,
+    "public_envelopes": 70,
+    "declared_differences": 0
+  },
+  "php_toutiao_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 48,
+    "parse_cases": 48,
+    "public_envelopes": 96,
+    "success_cases": 20,
+    "http_requests": 86,
+    "git_source_checked": true
+  },
+  "toutiao_exact_public_comparison": {
+    "passed": true,
+    "cases": 48,
+    "public_envelopes": 96,
+    "declared_differences": 0
+  },
+  "intentional_public_differences": {
+    "passed": true,
+    "compared_responses": 166,
+    "consumed": 10,
+    "differences": [
+      {
+        "fixture": "backend/testdata/php-douyin/cases.json",
+        "case_id": "live/direct-and-still",
+        "view": "normal",
+        "path": "/data/items/2/variants/0/delivery/resources/1/delivery/sources/0/url",
+        "operation": "replace",
+        "before": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4#fragment",
+        "after": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4",
+        "reason": "Direct media fragments are not part of the HTTP request target and the public media contract rejects them; preserve every preceding signed URL byte."
+      },
+      {
+        "fixture": "backend/testdata/php-douyin/cases.json",
+        "case_id": "live/direct-and-still",
+        "view": "debug",
+        "path": "/data/items/2/variants/0/delivery/resources/1/delivery/sources/0/url",
+        "operation": "replace",
+        "before": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4#fragment",
+        "after": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4",
+        "reason": "Direct media fragments are not part of the HTTP request target and the public media contract rejects them; preserve every preceding signed URL byte."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9007199254740993/integer",
+        "view": "normal",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9007199254740993,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9007199254740993/integer",
+        "view": "debug",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9007199254740993,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9007199254740993/string",
+        "view": "normal",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9007199254740993,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9007199254740993/string",
+        "view": "debug",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9007199254740993,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9223372036854775800/integer",
+        "view": "normal",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9223372036854775800,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9223372036854775800/integer",
+        "view": "debug",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9223372036854775800,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9223372036854775800/string",
+        "view": "normal",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9223372036854775800,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      },
+      {
+        "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+        "case_id": "source-size/9223372036854775800/string",
+        "view": "debug",
+        "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+        "operation": "remove",
+        "before": 9223372036854775800,
+        "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+      }
+    ]
+  },
+  "xhs_page_transport": {
+    "passed": true,
+    "frozen_page_cases": 25,
+    "http_responses": 236,
+    "protocols": [
+      "HTTP/1.1 over TLS",
+      "HTTP/2 over TLS"
+    ],
+    "parse_envelopes_for_frontend": 50,
+    "evidence": "Controlled local TLS servers with original PHP response tapes, not online platform access"
+  },
+  "go": {
+    "leaf_scenarios": 4117,
+    "passed_test_events": 4599,
+    "race": true,
+    "vet": true
+  },
+  "independent_responses": {
+    "total": 1230,
+    "passed": 1230,
+    "failures": []
+  },
+  "php_kuaishou_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 40,
+    "parse_cases": 40,
+    "public_envelopes": 80,
+    "success_cases": 30,
+    "http_requests": 79,
+    "git_source_checked": true
+  },
+  "kuaishou_exact_public_comparison": {
+    "passed": true,
+    "cases": 40,
+    "public_envelopes": 80,
+    "declared_differences": 0
+  },
+  "php_pipixia_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 49,
+    "parse_cases": 49,
+    "public_envelopes": 98,
+    "success_cases": 24,
+    "http_requests": 55,
+    "git_source_checked": true
+  },
+  "pipixia_exact_public_comparison": {
+    "passed": true,
+    "cases": 49,
+    "public_envelopes": 98,
+    "declared_differences": 0
+  },
+  "php_pipigx_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 42,
+    "parse_cases": 42,
+    "public_envelopes": 84,
+    "success_cases": 19,
+    "http_requests": 31,
+    "git_source_checked": true
+  },
+  "pipigx_exact_public_comparison": {
+    "passed": true,
+    "cases": 42,
+    "public_envelopes": 84,
+    "declared_differences": 0
+  },
+  "php_zuiyou_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 48,
+    "parse_cases": 48,
+    "public_envelopes": 96,
+    "success_cases": 31,
+    "http_requests": 47,
+    "public_sources": 96,
+    "git_source_checked": true
+  },
+  "zuiyou_exact_public_comparison": {
+    "passed": true,
+    "cases": 48,
+    "public_envelopes": 96,
+    "declared_differences": 0
+  },
+  "php_xiaohongshu_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 37,
+    "parse_cases": 37,
+    "public_envelopes": 74,
+    "success_cases": 23,
+    "http_requests": 66,
+    "media_range_requests": 15,
+    "git_source_checked": true
+  },
+  "xiaohongshu_exact_public_comparison": {
+    "passed": true,
+    "cases": 37,
+    "public_envelopes": 74,
+    "declared_differences": 0
+  },
+  "php_xiaohongshu_wire_baseline": {
+    "passed": true,
+    "baseline": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "php_version": "8.3.6",
+    "cases": 10,
+    "parse_cases": 10,
+    "public_envelopes": 20,
+    "success_cases": 10,
+    "page_callbacks": 10,
+    "media_requests": 0,
+    "output_sha256": "9b0204739889de490d933c4d3f4583571af0a25eb035069e98f08d220710afd1",
+    "git_source_checked": true
+  },
+  "xiaohongshu_wire_exact_public_comparison": {
+    "passed": true,
+    "cases": 10,
+    "public_envelopes": 20,
+    "declared_differences": 0
+  },
+  "frontend_go_integration": {
+    "passed": true,
+    "responses": 918,
+    "valid_successes": 584,
+    "expected_errors": 334,
+    "unchanged_renewal_tests": 4,
+    "variant_only_renewal_tests": 2,
+    "weibo_signed_renewal_tests": 4,
+    "selection_coverage": {
+      "douyin": {
+        "responses": 174,
+        "defaults": 170,
+        "explicit_sources": 224,
+        "rejected_missing_choices": 400,
+        "snapshot_replacements": 410,
+        "non_file_defaults": 16
+      },
+      "bilibili": {
+        "responses": 58,
+        "defaults": 42,
+        "explicit_sources": 84,
+        "rejected_missing_choices": 94,
+        "snapshot_replacements": 196,
+        "non_file_defaults": 70
+      },
+      "weibo": {
+        "responses": 38,
+        "defaults": 38,
+        "explicit_sources": 84,
+        "rejected_missing_choices": 122,
+        "snapshot_replacements": 122,
+        "non_file_defaults": 0
+      },
+      "toutiao": {
+        "responses": 40,
+        "defaults": 40,
+        "explicit_sources": 52,
+        "rejected_missing_choices": 88,
+        "snapshot_replacements": 92,
+        "non_file_defaults": 0
+      },
+      "xiaohongshu": {
+        "responses": 66,
+        "defaults": 76,
+        "explicit_sources": 142,
+        "rejected_missing_choices": 176,
+        "snapshot_replacements": 222,
+        "non_file_defaults": 4
+      },
+      "kuaishou": {
+        "responses": 60,
+        "defaults": 58,
+        "explicit_sources": 112,
+        "rejected_missing_choices": 144,
+        "snapshot_replacements": 174,
+        "non_file_defaults": 4
+      },
+      "pipixia": {
+        "responses": 48,
+        "defaults": 56,
+        "explicit_sources": 68,
+        "rejected_missing_choices": 120,
+        "snapshot_replacements": 124,
+        "non_file_defaults": 0
+      },
+      "pipigx": {
+        "responses": 38,
+        "defaults": 48,
+        "explicit_sources": 48,
+        "rejected_missing_choices": 96,
+        "snapshot_replacements": 96,
+        "non_file_defaults": 0
+      },
+      "zuiyou": {
+        "responses": 62,
+        "defaults": 90,
+        "explicit_sources": 92,
+        "rejected_missing_choices": 184,
+        "snapshot_replacements": 186,
+        "non_file_defaults": 4
+      }
+    },
+    "snapshot_scope": "Same-response object replacement only; not a platform network renewal or browser save",
+    "rejected_successes": 0,
+    "failures": [],
+    "evidence": "Actual Go envelopes consumed by existing frontend validation/selection and the source-pinned download snapshot; mocked transfer bytes, no browser/file-save claim"
+  },
+  "frontend_xhs_transport_integration": {
+    "passed": true,
+    "responses": 918,
+    "valid_successes": 584,
+    "expected_errors": 334,
+    "unchanged_renewal_tests": 4,
+    "variant_only_renewal_tests": 2,
+    "weibo_signed_renewal_tests": 4,
+    "selection_coverage": {
+      "douyin": {
+        "responses": 174,
+        "defaults": 170,
+        "explicit_sources": 224,
+        "rejected_missing_choices": 400,
+        "snapshot_replacements": 410,
+        "non_file_defaults": 16
+      },
+      "bilibili": {
+        "responses": 58,
+        "defaults": 42,
+        "explicit_sources": 84,
+        "rejected_missing_choices": 94,
+        "snapshot_replacements": 196,
+        "non_file_defaults": 70
+      },
+      "weibo": {
+        "responses": 38,
+        "defaults": 38,
+        "explicit_sources": 84,
+        "rejected_missing_choices": 122,
+        "snapshot_replacements": 122,
+        "non_file_defaults": 0
+      },
+      "toutiao": {
+        "responses": 40,
+        "defaults": 40,
+        "explicit_sources": 52,
+        "rejected_missing_choices": 88,
+        "snapshot_replacements": 92,
+        "non_file_defaults": 0
+      },
+      "xiaohongshu": {
+        "responses": 66,
+        "defaults": 76,
+        "explicit_sources": 142,
+        "rejected_missing_choices": 176,
+        "snapshot_replacements": 222,
+        "non_file_defaults": 4
+      },
+      "kuaishou": {
+        "responses": 60,
+        "defaults": 58,
+        "explicit_sources": 112,
+        "rejected_missing_choices": 144,
+        "snapshot_replacements": 174,
+        "non_file_defaults": 4
+      },
+      "pipixia": {
+        "responses": 48,
+        "defaults": 56,
+        "explicit_sources": 68,
+        "rejected_missing_choices": 120,
+        "snapshot_replacements": 124,
+        "non_file_defaults": 0
+      },
+      "pipigx": {
+        "responses": 38,
+        "defaults": 48,
+        "explicit_sources": 48,
+        "rejected_missing_choices": 96,
+        "snapshot_replacements": 96,
+        "non_file_defaults": 0
+      },
+      "zuiyou": {
+        "responses": 62,
+        "defaults": 90,
+        "explicit_sources": 92,
+        "rejected_missing_choices": 184,
+        "snapshot_replacements": 186,
+        "non_file_defaults": 4
+      }
+    },
+    "snapshot_scope": "Same-response object replacement only; not a platform network renewal or browser save",
+    "rejected_successes": 0,
+    "failures": [],
+    "evidence": "Actual Go envelopes consumed by existing frontend validation/selection and the source-pinned download snapshot; mocked transfer bytes, no browser/file-save claim"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "scope": "Offline frozen PHP inputs through actual Go code; no real platform or browser evidence",
+  "passed": true,
+  "toolchain": "go version go1.27.3 linux/amd64",
+  "php_baseline": {
+    "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+    "cases": 208,
+    "catalog": 1,
+    "passed": true,
+    "source_bytes_checked": true,
+    "source_files": 40,
+    "tickets": 21
+  },
+  "go": {
+    "leaf_scenarios": 345,
+    "passed_test_events": 355,
+    "race": true,
+    "vet": true
+  },
+  "independent_responses": {
+    "total": 76,
+    "passed": 76
+  },
+  "milestone": "phase-2-before-douyin"
+}

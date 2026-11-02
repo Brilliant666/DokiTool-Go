@@ -1,0 +1,1382 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "cases": [
+    {
+      "id": "bilibili/file/playback-quality-not-upload-dimensions",
+      "scenario": "Requested qn=112 and view 4K dimensions cannot invent current stream dimensions; actual play quality is 720p, zero statistics survive",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/parts/p2-only",
+      "scenario": "Only P2 cid is fetched; other parts stay deferred with stable item IDs and exact resolve URLs",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2&x=a%26b",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/parts/missing-target",
+      "scenario": "A missing requested P fails before any play request",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=4",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/parts/missing-cid",
+      "scenario": "A selected page without a usable cid fails without substituting another part",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":0,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/zero",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=0",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/leading-zero",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=02",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/signed",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=%2B2",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/too-long",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=1000000",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/array",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2&p[]=3",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/nested",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2&p[x]=3",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/empty",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/invalid-p/fraction",
+      "scenario": "PHP parse_str and the exact positive one-to-six-digit p grammar reject malformed selection",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=1.5",
+        "now": 1793361600,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "bilibili/entry/duplicate-p-last-wins",
+      "scenario": "PHP parse_str takes the final scalar p; the parser still requests only that cid",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=1&p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/query-unclosed-bracket",
+      "scenario": "An unclosed bracket is normalized as a different PHP query key and must not overwrite scalar p",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2&p[=3",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/query-nul-key",
+      "scenario": "PHP truncates a decoded NUL in the query key; the resulting p still selects P2",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p%00=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/query-array-then-scalar",
+      "scenario": "A later scalar p replaces an earlier array p under PHP parse_str semantics",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2&p[x]=3&p=1",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/mobile-host",
+      "scenario": "The allowed mobile host retains the same BVID and selected-P identity",
+      "input": {
+        "url": "https://m.bilibili.com/video/BV1234567890?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/short-target-p",
+      "scenario": "A short-link target p remains selected when the original has no p",
+      "input": {
+        "url": "https://b23.tv/synthetic",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "HEAD",
+            "url": "https://b23.tv/synthetic",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "",
+            "follow_redirects": true,
+            "final_url": "https://www.bilibili.com/video/BV1234567890/?p=3"
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=103&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/short-source-p-wins",
+      "scenario": "An explicit p on the original short URL overrides the redirected target p",
+      "input": {
+        "url": "https://b23.tv/synthetic?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "HEAD",
+            "url": "https://b23.tv/synthetic?p=2",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "",
+            "follow_redirects": true,
+            "final_url": "https://www.bilibili.com/video/BV1234567890/?p=3&track=a%26b#discard"
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/short-invalid-source-p",
+      "scenario": "An array p on the original short URL is preserved and rejected after redirect, never converted to P1",
+      "input": {
+        "url": "https://b23.tv/synthetic?p[]=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "HEAD",
+            "url": "https://b23.tv/synthetic?p[]=2",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "",
+            "follow_redirects": true,
+            "final_url": "https://www.bilibili.com/video/BV1234567890/?p=1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/short-failure",
+      "scenario": "A failed short-link HEAD maps to the actual parser error",
+      "input": {
+        "url": "https://b23.tv/synthetic",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "HEAD",
+            "url": "https://b23.tv/synthetic",
+            "status": 0,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "",
+            "follow_redirects": true,
+            "error": "Synthetic connection failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/short-html-source-p-wins",
+      "scenario": "An explicit original short-link p survives both target query rebuilding and the av-page HTML BV fallback",
+      "input": {
+        "url": "https://b23.tv/synthetic?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "HEAD",
+            "url": "https://b23.tv/synthetic?p=2",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "",
+            "follow_redirects": true,
+            "final_url": "https://www.bilibili.com/video/av123456/?p=3&track=a%26b#discard"
+          },
+          {
+            "method": "GET",
+            "url": "https://www.bilibili.com/video/av123456/?p=2&track=a%26b",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "<html><meta itemprop=\"url\" content=\"https://www.bilibili.com/video/BV1234567890/\"></html>",
+            "follow_redirects": true
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/html-bvid",
+      "scenario": "The actual legacy meta itemprop=url fallback resolves a BV ID while retaining P2",
+      "input": {
+        "url": "https://www.bilibili.com/video/av123456/?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://www.bilibili.com/video/av123456/?p=2",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "<html><meta itemprop=\"url\" content=\"https://www.bilibili.com/video/BV1234567890/\"></html>",
+            "follow_redirects": true
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/html-no-bvid",
+      "scenario": "A page without the supported BV meta field fails explicitly",
+      "input": {
+        "url": "https://www.bilibili.com/video/av123456/?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://www.bilibili.com/video/av123456/?p=2",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "<html>No usable BV meta</html>",
+            "follow_redirects": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/html-transport-failure",
+      "scenario": "A failed HTML fallback produces no output noise or guessed BV",
+      "input": {
+        "url": "https://www.bilibili.com/video/av123456/?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://www.bilibili.com/video/av123456/?p=2",
+            "status": 0,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "",
+            "follow_redirects": true,
+            "error": "Synthetic connection failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/http-401",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 401,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/http-403",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 403,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":-403}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/http-412",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 412,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":-412}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/http-429-html",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 429,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "<html>restricted</html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/http-404",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 404,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":-404}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/negative-restricted",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":-101}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/deleted",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":62002}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/invalid-json",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/missing-code",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/string-success-code",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":\"0\",\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/float-success-code",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0.0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/view/transport-failure",
+      "scenario": "Preserve the PHP view-stage business/transport classification and retryable flag",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 0,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "null",
+            "follow_redirects": false,
+            "error": "Synthetic connection failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/play/http-412",
+      "scenario": "A failing selected play response leaves top-level success and only the selected item unavailable; other parts remain deferred",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 412,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":-412}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/play/invalid-json",
+      "scenario": "A failing selected play response leaves top-level success and only the selected item unavailable; other parts remain deferred",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/play/empty-sources",
+      "scenario": "A failing selected play response leaves top-level success and only the selected item unavailable; other parts remain deferred",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":3,\"cid\":103,\"part\":\"章节 3\",\"duration\":123,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":80,\"durl\":[]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/file/measured-facts",
+      "scenario": "Explicit playback dimensions, fractional FPS, SDR and audio facts are retained without borrowing view metadata",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000,\"width\":1280,\"height\":720,\"fps\":\"30000/1001\",\"hdr_type\":\"sdr\",\"has_audio\":true,\"audio_channels\":2,\"audio_language\":\"zh-CN\"}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/segments/two-pieces",
+      "scenario": "Multiple durl entries remain ordered segments requiring remux; no concatenated file is invented",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":80,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/segment-1.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/segment-1.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":1000},{\"url\":\"https://upos-fixture.bilivideo.com/segment-2.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/segment-2.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":2000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/dash/two-video-two-audio",
+      "scenario": "Every legal video/audio pairing remains an independent mux candidate with its own identity",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"},{\"id\":80,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-1080.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-1080.m4s\"],\"width\":1920,\"height\":1080,\"codecs\":\"avc1.640028\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"}],\"audio\":[{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-main.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-main.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"},{\"id\":30216,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-aac-lower.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-aac-lower.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":64000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/dash/missing-audio",
+      "scenario": "Missing audio is unknown completeness, not proof of silence; each video remains deferred",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"}],\"audio\":[]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/dash/invalid-audio",
+      "scenario": "An audio entry with no valid source cannot form a supposedly complete mux pair",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"}],\"audio\":[{\"baseUrl\":\"invalid\",\"backupUrl\":[]}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/policy/complete-file-covers-mux",
+      "scenario": "Ordinary view removes covered mux while debug preserves it and the complete default remains unchanged",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000,\"width\":3840,\"height\":2160,\"fps\":\"30000/1001\",\"hdr_type\":\"sdr\",\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}],\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\",\"hdr_type\":\"sdr\"}],\"audio\":[{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-main.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-main.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/policy/higher-mux-retained",
+      "scenario": "A higher-resolution mux remains discoverable and is referenced without becoming the direct-download default",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000,\"width\":1280,\"height\":720}],\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"}],\"audio\":[{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-main.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-main.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/policy/hdr-catalogue-profiles",
+      "scenario": "Explicit catalogue IDs 125 and 126 retain HDR capabilities even when a same-size complete file exists",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000,\"width\":3840,\"height\":2160,\"hdr_type\":\"sdr\"}],\"dash\":{\"video\":[{\"id\":125,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-hdr.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-hdr.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"},{\"id\":126,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-dolby.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-dolby.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"}],\"audio\":[{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-main.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-main.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/policy/high-fps",
+      "scenario": "Explicit high FPS protects a mux despite a complete file of the same dimensions",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000,\"width\":3840,\"height\":2160,\"fps\":30}],\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"60000/1001\"}],\"audio\":[{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-main.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-main.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/policy/alternate-language-and-channels",
+      "scenario": "Known alternate language and multichannel audio protect the actual paired mux resources",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000,\"width\":3840,\"height\":2160,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\",\"audio_channels\":2}],\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"}],\"audio\":[{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-ja.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-ja.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"ja\",\"audio_language_role\":\"alternate\"},{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-surround.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-surround.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":6,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/dash/expired-alternative",
+      "scenario": "An explicit expired source object accepted by the legacy normalizer does not invalidate the other complete audio pairing (synthetic accepted shape, not observed platform output)",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"dash\":{\"video\":[{\"id\":120,\"baseUrl\":\"https://upos-fixture.bilivideo.com/video-4k.m4s\",\"backupUrl\":[\"https://upos-backup.bilivideo.com/video-4k.m4s\"],\"width\":3840,\"height\":2160,\"codecs\":\"hev1.1.6.L150.90\",\"bandwidth\":6000000,\"frameRate\":\"30000/1001\"}],\"audio\":[{\"id\":30280,\"base_url\":\"\",\"backup_url\":[{\"url\":\"https://upos-fixture.bilivideo.com/audio-expired.m4s\",\"expires_at\":\"2000-01-01T00:00:00Z\"}],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"},{\"id\":30280,\"base_url\":\"https://upos-fixture.bilivideo.com/audio-main.m4s\",\"backup_url\":[\"https://upos-backup.bilivideo.com/audio-main.m4s\"],\"codecs\":\"mp4a.40.2\",\"bandwidth\":128000,\"audio_channels\":2,\"audio_language\":\"zh-CN\",\"audio_language_role\":\"main\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/collection/deduplicated-members",
+      "scenario": "Collection membership deduplicates per section, existing P1 is shared, other works stay deferred, completeness remains false",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":102,\"part\":\"章节 2\",\"duration\":122,\"dimension\":{\"width\":3840,\"height\":2160}}],\"ugc_season\":{\"sections\":[{\"title\":\"合辑 A\",\"episodes\":[{\"bvid\":\"BV1234567890\",\"title\":\"Existing work\"},{\"bvid\":\"BVabcdefghij\",\"title\":\"Related work\",\"arc\":{\"pic\":\"//images.example/related.jpg\"}},{\"bvid\":\"BVabcdefghij\",\"title\":\"Repeated episode\"},{\"bvid\":\"invalid\"}]},{\"title\":\"合辑 B\",\"episodes\":[{\"arc\":{\"bvid\":\"BVabcdefghij\",\"title\":\"Fallback title\"}}]}]}}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":2500000,\"length\":121000}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/entry/numeric-wire-boundary",
+      "scenario": "The real parser entry uses json_encode flags 480 including JSON_NUMERIC_CHECK before gateway decoding; numeric strings keep the resulting PHP types",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/?p=2",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"00123\",\"desc\":\"00042\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":\"1700000000\",\"owner\":{\"name\":\"+00123\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":\"0\",\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":\"1e3\"},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}},{\"page\":2,\"cid\":\"00102\",\"part\":\"0002\",\"duration\":\"1.5005\",\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=00102&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/complete.mp4?deadline=4102444800&upsig=synthetic&keep=1\",\"backup_url\":[\"https://upos-backup.bilivideo.com/complete.mp4?deadline=4102444800&upsig=backup&keep=1\"],\"size\":\"2500000\",\"length\":121000,\"width\":\"1280\",\"height\":\"720\",\"fps\":\"29.97\"}]}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "bilibili/renewal/before",
+      "scenario": "Bilibili credential renewal and reversed primary/backup order preserve media/source identity while the new server default follows the current source order",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-fixture.bilivideo.com/stable-bilibili.mp4?deadline=4102444800&upsig=signed-before&keep=a%2Bb&duplicate=one&duplicate=two\",\"backup_url\":[\"https://upos-backup.bilivideo.com/stable-bilibili.mp4?deadline=4102444800&upsig=signed-before&keep=a%2Bb&duplicate=one&duplicate=two\"],\"size\":2500000,\"length\":121000,\"width\":1280,\"height\":720}]}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "group": {
+        "id": "renewal/bilibili",
+        "role": "before",
+        "fixed_now": 1793361600,
+        "frontend_renewal_pair": true
+      }
+    },
+    {
+      "id": "bilibili/renewal/after",
+      "scenario": "Bilibili credential renewal and reversed primary/backup order preserve media/source identity while the new server default follows the current source order",
+      "input": {
+        "url": "https://www.bilibili.com/video/BV1234567890/",
+        "now": 1793361600,
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/web-interface/view?bvid=BV1234567890",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"bvid\":\"BV1234567890\",\"title\":\"B站迁移 fixture 中文😀\",\"desc\":\"Synthetic selected-part fixture\",\"pic\":\"//images.example/bili-cover.jpg\",\"pubdate\":1700000000,\"owner\":{\"name\":\"Fixture author\",\"face\":\"https://images.example/bili-avatar.jpg\"},\"stat\":{\"view\":0,\"reply\":\"7\",\"favorite\":2,\"share\":0,\"like\":12},\"pages\":[{\"page\":1,\"cid\":101,\"part\":\"章节 1\",\"duration\":121,\"dimension\":{\"width\":3840,\"height\":2160}}]}}",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://api.bilibili.com/x/player/playurl?otype=json&fnver=0&fnval=3&player=3&qn=112&bvid=BV1234567890&cid=101&platform=html5&high_quality=1",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"code\":0,\"data\":{\"quality\":64,\"durl\":[{\"url\":\"https://upos-backup.bilivideo.com/stable-bilibili.mp4?deadline=4133980800&upsig=signed-after&keep=a%2Bb&duplicate=one&duplicate=two\",\"backup_url\":[\"https://upos-fixture.bilivideo.com/stable-bilibili.mp4?deadline=4133980800&upsig=signed-after&keep=a%2Bb&duplicate=one&duplicate=two\"],\"size\":2500000,\"length\":121000,\"width\":1280,\"height\":720}]}}",
+            "follow_redirects": false
+          }
+        ]
+      },
+      "group": {
+        "id": "renewal/bilibili",
+        "role": "after",
+        "fixed_now": 1793361600,
+        "frontend_renewal_pair": true
+      }
+    }
+  ]
+}

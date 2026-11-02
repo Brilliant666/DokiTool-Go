@@ -1,0 +1,119 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "php_version": "8.3.6",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "parse_case_count": 40,
+  "public_envelope_count": 80,
+  "entry_json_flags": 480,
+  "evidence_scope": "Synthetic HTML through immutable PHP KuaishouSpider, native request configuration, bounded writer, 480 entry JSON, adapter and public functions. No Go-generated expectations or live platform/media evidence.",
+  "files": {
+    "php-baseline.json": "079488c0d5b1dec6d81abe993a29d3971dab0adc0a3838d236aee7efb41be849"
+  },
+  "input_files": [
+    {
+      "path": "backend/internal/platform/kuaishou/testdata/inputs.json",
+      "sha256": "3b135e612c46193bb9c12d5818968488529df89618c6685c20567d2cebb14682"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "backend/api/kuaishou/KuaishouSpider.php",
+      "sha256": "23d3379849b0ba9431ec141742749325e55617ba9c7a3efc6d2e95e65d7d9645"
+    },
+    {
+      "path": "backend/api/kuaishou/ksjx.php",
+      "sha256": "2bd7531109d534c0b1a2649224b65f3694e05993aba856ed3673456c32f2bab9"
+    },
+    {
+      "path": "backend/lib/runtime.php",
+      "sha256": "0c90dca5e4e90498e904a69bb891625c7f66cbcf0723c15fedd72524d8134358"
+    },
+    {
+      "path": "backend/lib/gateway.php",
+      "sha256": "74f150b294220fd0c63e9851b31830c4ba2d11a8f8b58b1bf603c6a674e7a970"
+    },
+    {
+      "path": "backend/lib/media-adapters.php",
+      "sha256": "0257081ef5f4fe40bf1f288145405a56e05dfff6c887d2e73b117c6f27ea27db"
+    },
+    {
+      "path": "backend/lib/media-contract.php",
+      "sha256": "39e2e218917ad2ddc329cfbd2d7b4e6130e240bced8e4af6526656ad6b243817"
+    },
+    {
+      "path": "backend/lib/media-metadata.php",
+      "sha256": "d96a408e91029580085ef530cb99511887e165dd11063570dbb75fee58a3483e"
+    },
+    {
+      "path": "backend/lib/media-policy.php",
+      "sha256": "ccc523c6c8e53c4f8af18f51c2204a4ba14c124ed9aeb86448dafa7cf30840d9"
+    },
+    {
+      "path": "backend/lib/platforms.php",
+      "sha256": "5b82407a1fb6a1b7a849154fd65a44f030b2298466561dc289b60b182c359074"
+    },
+    {
+      "path": "backend/lib/weibo-media.php",
+      "sha256": "5530988ce434497251aef118af2dc0833b45640da84ad32450657aa7b86adb18"
+    },
+    {
+      "path": "backend/config/platforms.json",
+      "sha256": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487"
+    },
+    {
+      "path": "backend/tests/unified-contract.php",
+      "sha256": "71c7eb6030b13fafbca5fbb801e807bb040a06e7ea107983b097fc1a84e3cf4d"
+    },
+    {
+      "path": "docs/schema/unified-v1/unified-v1.schema.json",
+      "sha256": "bde334422f63488da67b8a5a40f3081f143e031f9849f2df282a175a8df6165a"
+    }
+  ],
+  "producer_files": [
+    {
+      "path": "scripts/go-migration/produce-kuaishou.py",
+      "sha256": "f4096a951c60dc33414cac1d52c8f38eb27efd7a65a9d8a8cc89bb6528698a79"
+    },
+    {
+      "path": "scripts/go-migration/produce-kuaishou.php",
+      "sha256": "2a7ef6c1d73be39c4bd9c0d4b712722b10668ae7ad369e7623b0e7df8a9d375b"
+    }
+  ],
+  "transport_substitution": {
+    "disabled_native_functions": [
+      "curl_init",
+      "curl_setopt_array",
+      "curl_setopt",
+      "curl_exec",
+      "curl_getinfo",
+      "curl_close",
+      "curl_error",
+      "curl_errno",
+      "get_headers"
+    ],
+    "mechanism": "Only cURL IO substituted; actual HEAD/GET configuration and bounded writer run. Each response includes the effective URL of native following; unknown/reordered/unused requests fail.",
+    "captured_request_fields": [
+      "method",
+      "url",
+      "headers",
+      "body",
+      "follow_redirects",
+      "auto_referer",
+      "timeout_seconds",
+      "max_redirects"
+    ]
+  },
+  "comparison_rules": [
+    "Entry JSON_NUMERIC_CHECK is preserved before adaptation; numeric strings may change type exactly as PHP 480 does.",
+    "Successful data re-finalized at the explicit public fixture clock; only JSON object key order and equivalent numeric spelling are non-semantic.",
+    "Array/representation/source order, URL bytes, default and stable identities remain exact; no metadata exclusions.",
+    "PHP records explicit cURL options; Go declares libcurl's implicit HEAD Accept: */* explicitly. That sole HEAD header is added only to comparison views.",
+    "The configured empty GET Cookie is retained. Both requests follow at most five redirects within a 20-second request deadline; only GET enables automatic Referer.",
+    "Go additionally applies fixed platform URL, DNS/public-IP and cancellation policy before every outbound hop; unauthorized redirects are tested separately and cannot be authorized by PHP fixture parity."
+  ]
+}

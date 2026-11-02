@@ -1,0 +1,1546 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "cases": [
+    {
+      "id": "toutiao/file/minimal",
+      "scenario": "Single actual complete video remains a simple item/default and preserves zero counts and author description",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/file/all-versions-backups",
+      "scenario": "Highest actual dimensions win regardless of input order; all legal backup sources, music and priority author survive",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22lower_first%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tLzcyMC5tcDQ%2Fa2VlcD1hJTJCYit6JmRlYWRsaW5lPTQxMDI0NDQ4MDAmc2lnbmF0dXJlPWZpeHR1cmU%3D%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1280%2C%22vheight%22%3A720%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%2C%22highest_second%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tLzRrLm1wND9rZWVwPWElMkJiK3omZGVhZGxpbmU9NDEwMjQ0NDgwMCZzaWduYXR1cmU9Zml4dHVyZQ%3D%3D%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A3840%2C%22vheight%22%3A2160%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%2C%22backup_url%22%3A%22https%3A%2F%2Fmirror.example%2F4k.mp4%3Fkeep%3Da%252Bb%2Bz%22%2C%22backup_url_1%22%3A%22Ly9taXJyb3IyLmV4YW1wbGUvNGsubXA0%22%7D%2C%22unknown%22%3A%7B%22main_url%22%3A%22https%3A%2F%2Fmedia.example%2Funknown.mp4%22%7D%2C%22unsafe%22%3A%7B%22main_url%22%3A%22ZmlsZTovLy9ldGMvcGFzc3dk%22%7D%7D%7D%2C%22itemCell%22%3A%7B%22userInfo%22%3A%7B%22name%22%3A%22%E4%BC%98%E5%85%88%E4%BD%9C%E8%80%85%22%2C%22userID%22%3A%2290071992547409930013%22%2C%22avatarURL%22%3A%22%2F%2Fimages.example%2Fpriority.jpg%22%2C%22description%22%3A%22%E4%BC%98%E5%85%88%E8%B7%AF%E5%BE%84%E7%AE%80%E4%BB%8B%22%7D%2C%22videoAbility%22%3A%7B%22music%22%3A%7B%22title%22%3A%22%E5%90%88%E6%88%90%E9%9F%B3%E4%B9%90%22%2C%22author%22%3A%22%E5%90%88%E6%88%90%E6%AD%8C%E6%89%8B%22%2C%22url%22%3A%22https%3A%2F%2Fmedia.example%2Fmusic.mp3%22%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/entry/bigint-and-numeric-strings",
+      "scenario": "JSON_BIGINT_AS_STRING preserves oversized numeric IDs; entry flags do not coerce textual title/author",
+      "input": {
+        "url": "https://www.toutiao.com/video/900719925474099300123/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/900719925474099300123/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22000123%22%2C%22itemId%22%3A900719925474099300123%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%2B0012%22%2C%22userId%22%3A900719925474099300123%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A%221.5005%22%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A%221920%22%2C%22vheight%22%3A%221080%22%2C%22real_bitrate%22%3A%222.5e6%22%2C%22size%22%3A%2212000000%22%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A900719925474099300123%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/raw-json",
+      "scenario": "Raw object JSON uses the same parser path without percent decoding",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">{\"data\":{\"initialVideo\":{\"title\":\"头条迁移 A+B %25 😀\",\"itemId\":\"7501991960077500979\",\"coverUrl\":\"//images.example/toutiao-cover.jpg\",\"userInfo\":{\"name\":\"合成作者\",\"userId\":\"90071992547409930012\",\"avatarUrl\":\"https://images.example/avatar.jpg\",\"description\":\"作者简介保留\"},\"publishTime\":1746700800,\"diggCount\":0,\"commentCount\":\"16\",\"repinCount\":2,\"playCount\":0,\"videoPlayInfo\":{\"video_duration\":149.718,\"video_list\":{\"video_1\":{\"main_url\":\"aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl\",\"video_meta\":{\"vwidth\":1920,\"vheight\":1080,\"real_bitrate\":2500000,\"size\":12000000,\"codec_type\":\"h264\"}}}}},\"itemId\":\"7501991960077500979\"}}</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/raw-plus",
+      "scenario": "rawurldecode keeps plus in percent-encoded script text rather than converting it to a space",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A+B%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/single-quote-uppercase-script",
+      "scenario": "Supported script tag case, attribute order, single quotes and whitespace",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><SCRIPT data-test='yes' id = 'RENDER_DATA' type='application/json'>%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</SCRIPT ></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/optional-item-identities",
+      "scenario": "Absent root/video IDs do not invent a mismatch; requested ID remains work identity",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/metadata/fallback-and-unknown",
+      "scenario": "Fallback poster/duration and invalid author/statistics use exact PHP absence semantics",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A42%2C%22itemId%22%3A%227501991960077500979%22%2C%22userInfo%22%3A%22not-an-object%22%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A-1%2C%22commentCount%22%3A%22invalid%22%2C%22repinCount%22%3Anull%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%2C%22poster%22%3A%22https%3A%2F%2Fimages.example%2Ffallback.jpg%22%2C%22duration%22%3A%2212.25%22%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/candidates/tie-keeps-json-order",
+      "scenario": "An object video_list retains insertion order on equal dimensions/bitrate/size, not sorted Go map keys",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22z-first%22%3A%7B%22main_url%22%3A%22https%3A%2F%2Fmedia.example%2Fz.mp4%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1280%2C%22vheight%22%3A720%2C%22real_bitrate%22%3A1000000%2C%22size%22%3A1000%7D%7D%2C%22a-second%22%3A%7B%22main_url%22%3A%22https%3A%2F%2Fmedia.example%2Fa.mp4%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1280%2C%22vheight%22%3A720%2C%22real_bitrate%22%3A1000000%2C%22size%22%3A1000%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/candidates/first-observation-and-backup-only",
+      "scenario": "URL de-duplication retains first observed metadata; legal backup-only representation and definition fallback remain",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%5B%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL2R1cGxpY2F0ZS5tcDQ%2Fa2VlcD1hJTJCYit6JmRlYWRsaW5lPTQxMDI0NDQ4MDAmc2lnbmF0dXJlPWZpeHR1cmU%3D%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1280%2C%22vheight%22%3A720%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%2C%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL2R1cGxpY2F0ZS5tcDQ%2Fa2VlcD1hJTJCYit6JmRlYWRsaW5lPTQxMDI0NDQ4MDAmc2lnbmF0dXJlPWZpeHR1cmU%3D%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A3840%2C%22vheight%22%3A2160%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%2C%7B%22backup_url_2%22%3A%22aHR0cHM6Ly9tZWRpYS5leGFtcGxlL2JhY2t1cC1vbmx5Lm1wNA%3D%3D%22%2C%22definition%22%3A%22576p%22%2C%22codec_type%22%3A%22h265%22%7D%2C%7B%22main_url%22%3A%22%25%25%25invalid-base64%25%25%25%22%7D%2C%22not-a-representation%22%5D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/entry/path-group",
+      "scenario": "PHP path/query ID extraction preserves exact canonical target and source URL",
+      "input": {
+        "url": "https://m.toutiao.com/group/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/entry/path-mobile-i",
+      "scenario": "PHP path/query ID extraction preserves exact canonical target and source URL",
+      "input": {
+        "url": "https://m.toutiao.com/i7501991960077500979/?wid=1765247684252",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/entry/query-group-priority",
+      "scenario": "PHP path/query ID extraction preserves exact canonical target and source URL",
+      "input": {
+        "url": "https://m.toutiao.com/share/?item_id=123456&group_id=7501991960077500979",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/entry/query-final-scalar",
+      "scenario": "PHP path/query ID extraction preserves exact canonical target and source URL",
+      "input": {
+        "url": "https://m.toutiao.com/share/?group_id=123456&group_id=7501991960077500979",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/entry/query-array-falls-back",
+      "scenario": "PHP path/query ID extraction preserves exact canonical target and source URL",
+      "input": {
+        "url": "https://m.toutiao.com/share/?group_id[]=7501991960077500979&item_id=7501991960077500979",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/short/absolute",
+      "scenario": "Share redirects finish before anonymous registration; share cookies are not forwarded",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 302,
+            "headers": {
+              "Location": "https://www.toutiao.com/video/7501991960077500979/?wid=1765247684252",
+              "Set-Cookie": "ttwid=share-cookie; Path=/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/short/relative",
+      "scenario": "Relative redirect stays on current host and resolves the requested video ID",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 307,
+            "headers": {
+              "Location": "/video/7501991960077500979/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/short/protocol-relative",
+      "scenario": "Protocol-relative Location uses HTTPS and remains platform scoped",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 301,
+            "headers": {
+              "Location": "//www.toutiao.com/video/7501991960077500979/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/budget/five-requests-shared",
+      "scenario": "Three redirects, registration and page consume one 35-second budget: 20/20/19/11/7 seconds",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100,
+          100,
+          108,
+          116,
+          124,
+          128
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 302,
+            "headers": {
+              "Location": "https://m.toutiao.com/is/next/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/next/",
+            "status": 302,
+            "headers": {
+              "Location": "https://m.toutiao.com/is/third/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/third/",
+            "status": 302,
+            "headers": {
+              "Location": "https://www.toutiao.com/video/7501991960077500979/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/budget/page-not-started",
+      "scenario": "Exhausted registration budget never requests page",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100,
+          100,
+          135
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/budget/subsecond-share-remainder",
+      "scenario": "Less than one second remaining refuses the next redirect",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100,
+          100,
+          134.5
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 302,
+            "headers": {
+              "Location": "https://m.toutiao.com/is/next/"
+            },
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/budget/session-not-started",
+      "scenario": "A fully consumed total budget refuses initial registration",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100,
+          135
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "toutiao/short/foreign-target",
+      "scenario": "An external redirect is rejected without following it",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 302,
+            "headers": {
+              "Location": "https://example.com/video/7501991960077500979/"
+            },
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/short/loop-limit",
+      "scenario": "Exactly three unresolved redirects; no registration or fourth request",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 302,
+            "headers": {
+              "Location": "https://m.toutiao.com/is/synthetic/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 302,
+            "headers": {
+              "Location": "https://m.toutiao.com/is/synthetic/"
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 302,
+            "headers": {
+              "Location": "https://m.toutiao.com/is/synthetic/"
+            },
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/short/nonredirect-without-id",
+      "scenario": "A normal page at an unsupported ID location cannot be interpreted as another work",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 200,
+            "headers": {},
+            "body": "<html>share landing</html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/short/transport-failure",
+      "scenario": "Share transport error is distinct from budget exhaustion",
+      "input": {
+        "url": "https://m.toutiao.com/is/synthetic/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://m.toutiao.com/is/synthetic/",
+            "status": 0,
+            "headers": {},
+            "body": "",
+            "follow_redirects": false,
+            "error": "Synthetic connection failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/entry/reject-foreign-host",
+      "scenario": "Invalid initial URL fails without any request",
+      "input": {
+        "url": "https://toutiao.com.example/video/7501991960077500979",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "toutiao/entry/reject-userinfo",
+      "scenario": "Invalid initial URL fails without any request",
+      "input": {
+        "url": "https://user@www.toutiao.com/video/7501991960077500979",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "toutiao/entry/reject-nonstandard-port",
+      "scenario": "Invalid initial URL fails without any request",
+      "input": {
+        "url": "https://www.toutiao.com:8080/video/7501991960077500979",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "toutiao/session/transport",
+      "scenario": "Anonymous session failure never starts page request and never leaks cookie",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 0,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false,
+            "error": "Synthetic connection failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/session/http-error",
+      "scenario": "Anonymous session failure never starts page request and never leaks cookie",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 500,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/session/missing-cookie",
+      "scenario": "Anonymous session failure never starts page request and never leaks cookie",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {},
+            "body": "{}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/session/zero-cookie",
+      "scenario": "Anonymous session failure never starts page request and never leaks cookie",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=0; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/session/last-ttwid-header",
+      "scenario": "Exact last ttwid value is used once for canonical page; other cookies are discarded",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "ttwid=first; Path=/",
+                "other=ignored; Path=/",
+                "ttwid=last%2Bvalue; Path=/"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/page/http-403",
+      "scenario": "Page HTTP classification preserves original retry/error contract",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 403,
+            "headers": {},
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/page/http-429",
+      "scenario": "Page HTTP classification preserves original retry/error contract",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 429,
+            "headers": {},
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/page/http-404",
+      "scenario": "Page HTTP classification preserves original retry/error contract",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 404,
+            "headers": {},
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/page/http-500",
+      "scenario": "Page HTTP classification preserves original retry/error contract",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 500,
+            "headers": {},
+            "body": "",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/page/transport-failure",
+      "scenario": "Page transport error remains explicit",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 0,
+            "headers": {},
+            "body": "",
+            "follow_redirects": false,
+            "error": "Synthetic connection failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/missing-script",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html>No video metadata</html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/challenge",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html>验证码 __ac_signature</html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/data-id-not-id",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" data-id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/invalid-json",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<script id=\"RENDER_DATA\">%7Bbad</script>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/root-id-mismatch",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%22123456%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/video-id-mismatch",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%22123456%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/root-id-nonscalar",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_duration%22%3A149.718%2C%22video_list%22%3A%7B%22video_1%22%3A%7B%22main_url%22%3A%22aHR0cHM6Ly92My1zaWduLnRvdXRpYW92b2QuY29tL21haW4ubXA0P2tlZXA9YSUyQmIreiZkZWFkbGluZT00MTAyNDQ0ODAwJnNpZ25hdHVyZT1maXh0dXJl%22%2C%22video_meta%22%3A%7B%22vwidth%22%3A1920%2C%22vheight%22%3A1080%2C%22real_bitrate%22%3A2500000%2C%22size%22%3A12000000%2C%22codec_type%22%3A%22h264%22%7D%7D%7D%7D%7D%2C%22itemId%22%3A%5B%5D%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/missing-video",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<script id=\"RENDER_DATA\">{\"data\":{\"itemId\":\"7501991960077500979\"}}</script>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "toutiao/render/no-valid-media",
+      "scenario": "Invalid/mismatched work or media is an explicit failure, never empty success",
+      "input": {
+        "url": "https://www.toutiao.com/video/7501991960077500979/",
+        "now": 1793361600,
+        "clock_ticks": [
+          100.0
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://ttwid.bytedance.com/ttwid/union/register/",
+            "status": 200,
+            "headers": {
+              "Set-Cookie": [
+                "unrelated=ignored; Path=/",
+                "ttwid=synthetic-ttwid; Domain=.bytedance.com; Path=/; Secure"
+              ]
+            },
+            "body": "",
+            "follow_redirects": false
+          },
+          {
+            "method": "GET",
+            "url": "https://www.toutiao.com/video/7501991960077500979/",
+            "status": 200,
+            "headers": {},
+            "body": "<html><script type=\"application/json\" id=\"RENDER_DATA\">%7B%22data%22%3A%7B%22initialVideo%22%3A%7B%22title%22%3A%22%E5%A4%B4%E6%9D%A1%E8%BF%81%E7%A7%BB%20A%2BB%20%2525%20%F0%9F%98%80%22%2C%22itemId%22%3A%227501991960077500979%22%2C%22coverUrl%22%3A%22%2F%2Fimages.example%2Ftoutiao-cover.jpg%22%2C%22userInfo%22%3A%7B%22name%22%3A%22%E5%90%88%E6%88%90%E4%BD%9C%E8%80%85%22%2C%22userId%22%3A%2290071992547409930012%22%2C%22avatarUrl%22%3A%22https%3A%2F%2Fimages.example%2Favatar.jpg%22%2C%22description%22%3A%22%E4%BD%9C%E8%80%85%E7%AE%80%E4%BB%8B%E4%BF%9D%E7%95%99%22%7D%2C%22publishTime%22%3A1746700800%2C%22diggCount%22%3A0%2C%22commentCount%22%3A%2216%22%2C%22repinCount%22%3A2%2C%22playCount%22%3A0%2C%22videoPlayInfo%22%3A%7B%22video_list%22%3A%7B%22bad%22%3A%7B%22main_url%22%3A%22amF2YXNjcmlwdDphbGVydCgxKQ%3D%3D%22%7D%7D%7D%7D%2C%22itemId%22%3A%227501991960077500979%22%7D%7D</script></html>",
+            "follow_redirects": false
+          }
+        ]
+      }
+    }
+  ]
+}

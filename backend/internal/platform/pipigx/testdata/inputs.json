@@ -1,0 +1,796 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "cases": [
+    {
+      "id": "pipigx/video/minimal",
+      "scenario": "Single complete video stays simple and request bytes remain fixed",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/video/three-with-invalid-middle",
+      "scenario": "Invalid URL leaves an index gap while all private video observations survive",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/one.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"javascript:alert(1)\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"https://media.example/three.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1280,\"height\":720,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/video/object-insertion-order",
+      "scenario": "Object videos preserve upstream JSON insertion order, never sorted Go map keys",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":{\"z-first\":{\"url\":\"https://media.example/z-first.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},\"a-second\":{\"url\":\"https://media.example/a-second.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}}}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/video/nonarray-skipped-before-indexing",
+      "scenario": "Non-array entries are discarded before the PHP private_videos list is indexed",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[\"not-an-array\",{\"url\":\"https://media.example/first.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},null,{\"url\":\"https://media.example/second.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/video/first-url-invalid",
+      "scenario": "Invalid first private video makes an explicit failure even if a later video is usable",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"javascript:alert(1)\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"https://media.example/later.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/video/preserves-duplicate-entries",
+      "scenario": "Private video entries remain distinct items even when media URL repeats",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/same.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345},{\"url\":\"https://media.example/same.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/video/upstream-private-identity",
+      "scenario": "Explicit upstream private_video_id uses the shared identity boundary",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/a.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_video_id\":\"resource-z\"},{\"url\":\"https://media.example/b.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_video_id\":\"resource-a\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/video/no-invented-album",
+      "scenario": "Unrelated image fields never become an unsupported image album",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}],\"images\":[\"https://images.example/a.jpg\"],\"imgs\":[\"https://images.example/b.jpg\"]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/wire/numeric-text",
+      "scenario": "Flags480 convert numeric title, dimensions and metadata before adaptation",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"000123\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":\"1920\",\"height\":\"1080\",\"size\":\"12000000\",\"duration\":\"1.5005\",\"quality\":\"720\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/wire/exponent-title",
+      "scenario": "Numeric exponent becomes double; PHP snapText does not invent a title from a float",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"1e3\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/wire/large-json-token",
+      "scenario": "Default PHP JSON decoding keeps int64 tokens exact and uses doubles beyond its range",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":9007199254740993,\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_metadata_id\":9223372036854775808}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/wire/large-numeric-string",
+      "scenario": "JSON_NUMERIC_CHECK parses oversized numeric strings at the entry boundary",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345,\"private_metadata_id\":\"9223372036854775808\",\"quality\":\"001080\"}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/entry/mid-zero",
+      "scenario": "A zero mid is valid and remains zero in POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1&mid=0",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/entry/mid-leading-zero",
+      "scenario": "Leading zero mid casts exactly once to integer",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=123&mid=0000123",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/entry/duplicate-last-scalar",
+      "scenario": "PHP parse_str last scalar wins without double URL decoding",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1&mid=2&pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/entry/array-then-scalar",
+      "scenario": "A later scalar replaces an earlier query array",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid[]=1&pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/entry/ippzone-domain",
+      "scenario": "The registered alternate share domain uses the same fixed API",
+      "input": {
+        "url": "https://ippzone.com/share?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/integer/int64-max",
+      "scenario": "Preserve PHP float-boundary validation then exact numeric-string int conversion",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854775807&mid=9223372036854775807",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/integer/one-past-int64",
+      "scenario": "Preserve PHP float-boundary validation then exact numeric-string int conversion",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854775808&mid=9223372036854775808",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/integer/float-rounded-above-int64",
+      "scenario": "Preserve PHP float-boundary validation then exact numeric-string int conversion",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854776831&mid=9223372036854776831",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-leading-zero-pid",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=01&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-zero-pid",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=0&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-negative",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=-1&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-escaped-plus",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=%2B1&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-array",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid[]=1&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-missing-mid",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-float",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1.0&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-exponent",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=1e3&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-whitespace",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=%201&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-int64-too-large",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=9223372036854777856&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/entry/reject-twenty-digits",
+      "scenario": "Invalid parameter shape never sends POST",
+      "input": {
+        "url": "https://h5.pipigx.com/share?pid=10000000000000000000&mid=1",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": []
+      }
+    },
+    {
+      "id": "pipigx/http/403",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 403,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/http/404",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 404,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/http/429",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 429,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/http/500",
+      "scenario": "Legacy HTTP error mapping preserves retryability and public status",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 500,
+            "headers": {},
+            "body": "not JSON",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/http/transport-failure",
+      "scenario": "cURL errno becomes original HTTP500 wrapper before public error mapping",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 0,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[{\"url\":\"https://media.example/main.mp4?keep=a%2Bb+z&token=fixed\",\"thumb\":\"1234567890\",\"width\":1920,\"height\":1080,\"size\":12000000,\"duration\":12.345}]}}}",
+            "follow_redirects": false,
+            "error": "Synthetic transport failure",
+            "errno": 6
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/response/invalid-json",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{broken",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/response/null-json",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "null",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/response/missing-post",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/response/empty-post",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/response/empty-videos",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":[]}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipigx/response/scalar-videos",
+      "scenario": "Malformed or empty upstream payload remains explicit failure",
+      "input": {
+        "url": "https://h5.pipigx.com/pp/post/1234567890123456789?pid=1234567890123456789&mid=9876543210",
+        "now": 1793361600,
+        "clock_ticks": [
+          100
+        ],
+        "http_responses": [
+          {
+            "method": "POST",
+            "url": "https://h5.pipigx.com/ppapi/share/fetch_content",
+            "status": 200,
+            "headers": {},
+            "body": "{\"data\":{\"post\":{\"content\":\"皮皮搞笑 A+B %25 中文😀\",\"videos\":\"bad\"}}}",
+            "follow_redirects": false
+          }
+        ]
+      }
+    }
+  ]
+}

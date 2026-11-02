@@ -373,3 +373,16 @@ test('statistics distinguish a verified zero from an unverified count without pl
   try { await view.click('数据'); assert.deepEqual(view.elements('rs-stat-num').map(view.textOf), ['—', '0']); assert.match(view.text(), /未将缺失值当作 0/); }
   finally { view.app.unmount(); }
 });
+
+test('credential alternatives stay within the chosen source and precede mirror routes', () => {
+  const value = item();
+  value.variants[0].delivery.sources[1].fallback_urls = [url('b-renewed'), url('b-other')];
+  const target = contract.getDownloadTarget(value, {variant_id:'hd',source_id:'b'});
+  assert.equal(target.url, url('b'));
+  assert.equal(target.source.id, 'b');
+  assert.deepEqual(target.routes.slice(0,3), [url('b'),url('b-renewed'),url('b-other')]);
+  for (const fallback of [[], [url('b')], [url('b-renewed'),url('b-renewed')], [url('1'),url('2'),url('3')], ['https://other.test/b.mp4'], ['http://media.example.test/b.mp4'], ['https://user:pass@media.example.test/b.mp4']]) {
+    value.variants[0].delivery.sources[1].fallback_urls = fallback;
+    assert.equal(contract.getDownloadTarget(value, {variant_id:'hd',source_id:'b'}).kind, 'invalid');
+  }
+});

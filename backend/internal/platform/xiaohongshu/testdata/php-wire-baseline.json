@@ -1,0 +1,1975 @@
+{
+    "format_version": 1,
+    "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+    "php_version": "8.3.6",
+    "entry_json_flags": 2097472,
+    "fixed_clock": {
+        "unix_seconds": 1793361600,
+        "rfc3339": "2026-10-30T12:00:00Z"
+    },
+    "source_files": [
+        {
+            "path": "backend/api/xiaohongshu/XiaohongshuParser.php",
+            "sha256": "2940a55c57ac104565331cdda86af1c1a358a3b454b40c2af835f37af3dbc426"
+        },
+        {
+            "path": "backend/api/xiaohongshu/XiaohongshuMediaProbe.php",
+            "sha256": "9447cb8c3fd5d03086a5f6e66de8136b9c7ca82763bfceaebcaeba51ccd58769"
+        },
+        {
+            "path": "backend/api/xiaohongshu/xhsjx.php",
+            "sha256": "d7d2e6e1653ef74ff7e71c2f3e9d3867ddef79ee58c134b669503787df20a2f2"
+        },
+        {
+            "path": "backend/lib/runtime.php",
+            "sha256": "0c90dca5e4e90498e904a69bb891625c7f66cbcf0723c15fedd72524d8134358"
+        },
+        {
+            "path": "backend/lib/media-probe.php",
+            "sha256": "ad4265e3e86b6d3fb2138c8e9c717cbfb17da1b11cb4d1326ea61aac8fbb1703"
+        },
+        {
+            "path": "backend/lib/media-adapters.php",
+            "sha256": "0257081ef5f4fe40bf1f288145405a56e05dfff6c887d2e73b117c6f27ea27db"
+        },
+        {
+            "path": "backend/lib/media-contract.php",
+            "sha256": "39e2e218917ad2ddc329cfbd2d7b4e6130e240bced8e4af6526656ad6b243817"
+        },
+        {
+            "path": "backend/lib/media-policy.php",
+            "sha256": "ccc523c6c8e53c4f8af18f51c2204a4ba14c124ed9aeb86448dafa7cf30840d9"
+        },
+        {
+            "path": "backend/lib/media-metadata.php",
+            "sha256": "d96a408e91029580085ef530cb99511887e165dd11063570dbb75fee58a3483e"
+        },
+        {
+            "path": "backend/lib/platforms.php",
+            "sha256": "5b82407a1fb6a1b7a849154fd65a44f030b2298466561dc289b60b182c359074"
+        },
+        {
+            "path": "backend/lib/weibo-media.php",
+            "sha256": "5530988ce434497251aef118af2dc0833b45640da84ad32450657aa7b86adb18"
+        },
+        {
+            "path": "backend/lib/gateway.php",
+            "sha256": "74f150b294220fd0c63e9851b31830c4ba2d11a8f8b58b1bf603c6a674e7a970"
+        },
+        {
+            "path": "backend/config/platforms.json",
+            "sha256": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487"
+        },
+        {
+            "path": "docs/schema/unified-v1/unified-v1.schema.json",
+            "sha256": "bde334422f63488da67b8a5a40f3081f143e031f9849f2df282a175a8df6165a"
+        }
+    ],
+    "producer_files": [
+        {
+            "path": "scripts/go-migration/produce-xiaohongshu-wire.php",
+            "sha256": "286df31aeebf067bf288aec212bb2a1fd078d373eb531cfdd6af1d2e96aa7547"
+        }
+    ],
+    "transport_substitution": {
+        "mechanism": "Only the immutable parser constructor page callback is supplied with reviewed literal HTML. Original parse/format/output, JSON decode, adapter and public views execute. Any media callback or native network use fails.",
+        "disabled_native_functions": [
+            "time",
+            "curl_exec",
+            "curl_multi_exec",
+            "dns_get_record",
+            "fsockopen",
+            "pfsockopen",
+            "stream_socket_client"
+        ],
+        "recorded_fields": [
+            "page URL sequence"
+        ]
+    },
+    "evidence_scope": "Offline JSON wire and formatter compatibility only; no live platform, CDN or media evidence and no Go-generated expected values.",
+    "parse_case_count": 10,
+    "public_envelope_count": 20,
+    "cases": [
+        {
+            "id": "xiaohongshu-wire/integral-numbers",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":1e3,\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":12.0,\"userId\":\"007\"},\"imageList\":[{\"url\":\"https://images.example/wire-cover.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":1000,\"desc\":\"PHP wire boundary\",\"author\":{\"name\":12,\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"https://images.example/wire-cover.jpg\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": 1000,
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": 12,
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "https://images.example/wire-cover.jpg",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "title": "1000",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "12"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "title": "1000",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "12"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/negative-zero",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":-0.0,\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":-0,\"userId\":\"007\"},\"imageList\":[{\"url\":\"https://images.example/wire-cover.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":-0,\"desc\":\"PHP wire boundary\",\"author\":{\"name\":0,\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"https://images.example/wire-cover.jpg\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": 0,
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": 0,
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "https://images.example/wire-cover.jpg",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "0"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "0"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/fractional-numbers",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":1.25,\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":12.5,\"userId\":\"007\"},\"imageList\":[{\"url\":\"https://images.example/wire-cover.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":1.25,\"desc\":\"PHP wire boundary\",\"author\":{\"name\":12.5,\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"https://images.example/wire-cover.jpg\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": 1.25,
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": 12.5,
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "https://images.example/wire-cover.jpg",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/exponent-numbers",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":1e-5,\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":1e21,\"userId\":\"007\"},\"imageList\":[{\"url\":\"https://images.example/wire-cover.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":1.0e-5,\"desc\":\"PHP wire boundary\",\"author\":{\"name\":1.0e+21,\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"https://images.example/wire-cover.jpg\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": 1.0e-5,
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": 1.0e+21,
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "https://images.example/wire-cover.jpg",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/numeric-strings",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":\"1e3\",\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":\"12.0\",\"userId\":\"007\"},\"imageList\":[{\"url\":\"https://images.example/wire-cover.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":\"1e3\",\"desc\":\"PHP wire boundary\",\"author\":{\"name\":\"12.0\",\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"https://images.example/wire-cover.jpg\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": "1e3",
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": "12.0",
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "https://images.example/wire-cover.jpg",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "title": "1e3",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "12.0"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "title": "1e3",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "12.0"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/large-integers",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":9007199254740993,\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":9223372036854775808,\"userId\":\"007\"},\"imageList\":[{\"url\":\"https://images.example/wire-cover.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":9007199254740993,\"desc\":\"PHP wire boundary\",\"author\":{\"name\":9.223372036854776e+18,\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"https://images.example/wire-cover.jpg\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": 9007199254740993,
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": 9.223372036854776e+18,
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "https://images.example/wire-cover.jpg",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "title": "9007199254740993",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1",
+                                "cover": {
+                                    "url": "https://images.example/wire-cover.jpg"
+                                }
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "title": "9007199254740993",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/wire-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/empty-array-cover",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":\"empty array\",\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":\"author\",\"userId\":\"007\"},\"imageList\":[{\"urlPre\":[],\"urlDefault\":\"https://images.example/fallback.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":\"empty array\",\"desc\":\"PHP wire boundary\",\"author\":{\"name\":\"author\",\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": "empty array",
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": "author",
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "title": "empty array",
+                        "description": "PHP wire boundary",
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "title": "empty array",
+                        "description": "PHP wire boundary",
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/empty-object-cover",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"video\",\"title\":\"empty object\",\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":\"author\",\"userId\":\"007\"},\"imageList\":[{\"urlPre\":{},\"urlDefault\":\"https://images.example/fallback.jpg\"}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"video\",\"title\":\"empty object\",\"desc\":\"PHP wire boundary\",\"author\":{\"name\":\"author\",\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"\",\"images\":[],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "video",
+                        "title": "empty object",
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": "author",
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "",
+                        "images": [],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "title": "empty object",
+                        "description": "PHP wire boundary",
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "title": "empty object",
+                        "description": "PHP wire boundary",
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/empty-image-live",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"normal\",\"title\":\"live association\",\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":\"author\",\"userId\":\"007\"},\"imageList\":[{\"url\":[],\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}},{\"url\":\"https://images.example/static.jpg\"},{\"url\":\"https://images.example/live.jpg\",\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}],\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"live\",\"title\":\"live association\",\"desc\":\"PHP wire boundary\",\"author\":{\"name\":\"author\",\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"\",\"images\":[\"https://images.example/static.jpg\",\"https://images.example/live.jpg\"],\"live_photo\":[{\"image\":\"https://images.example/live.jpg\",\"video\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}]}],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "live",
+                        "title": "live association",
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": "author",
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "",
+                        "images": [
+                            "https://images.example/static.jpg",
+                            "https://images.example/live.jpg"
+                        ],
+                        "live_photo": [
+                            {
+                                "image": "https://images.example/live.jpg",
+                                "video": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "video_candidates": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                        "metadata_source": "upstream",
+                                        "sources": [
+                                            {
+                                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                            }
+                                        ],
+                                        "width": 1920,
+                                        "height": 1080,
+                                        "bit_rate": 5000000,
+                                        "size": 7715625,
+                                        "duration": 12.345,
+                                        "codec": "h264"
+                                    }
+                                ]
+                            }
+                        ],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video"
+                            },
+                            {
+                                "id": "image-1",
+                                "type": "image",
+                                "index": 1,
+                                "default": {
+                                    "variant_id": "main",
+                                    "url": "https://images.example/static.jpg"
+                                },
+                                "variants": [
+                                    {
+                                        "id": "main",
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://images.example/static.jpg"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=image-1"
+                            },
+                            {
+                                "id": "live-2",
+                                "type": "live_photo",
+                                "index": 2,
+                                "default": null,
+                                "variants": [
+                                    {
+                                        "id": "pair-v-8b19f11c5d69f348c43e9716",
+                                        "delivery": {
+                                            "kind": "pair",
+                                            "resources": [
+                                                {
+                                                    "id": "image",
+                                                    "role": "image",
+                                                    "delivery": {
+                                                        "kind": "file",
+                                                        "sources": [
+                                                            {
+                                                                "url": "https://images.example/live.jpg"
+                                                            }
+                                                        ]
+                                                    }
+                                                },
+                                                {
+                                                    "id": "motion",
+                                                    "role": "motion",
+                                                    "delivery": {
+                                                        "kind": "file",
+                                                        "sources": [
+                                                            {
+                                                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                                "id": "s-c6f32ea4722f345f575098e8",
+                                                                "size_bytes": 7715625
+                                                            }
+                                                        ]
+                                                    },
+                                                    "metadata": {
+                                                        "width": 1920,
+                                                        "height": 1080,
+                                                        "bitrate_bps": 5000000,
+                                                        "duration_ms": 12345,
+                                                        "video_codec": "h264",
+                                                        "evidence": "upstream"
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        }
+                                    }
+                                ],
+                                "cover": {
+                                    "url": "https://images.example/live.jpg"
+                                },
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=live-2",
+                                "default_unavailable_reason": "processing_required"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "title": "live association",
+                        "description": "PHP wire boundary",
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "default_item_id": "video",
+                        "groups": [
+                            {
+                                "id": "album",
+                                "kind": "album",
+                                "item_ids": [
+                                    "image-1",
+                                    "live-2"
+                                ],
+                                "complete": true
+                            }
+                        ],
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "video",
+                                "type": "video",
+                                "default": {
+                                    "variant_id": "v-8b19f11c5d69f348c43e9716",
+                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                    "source_id": "s-c6f32ea4722f345f575098e8"
+                                },
+                                "variants": [
+                                    {
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                    "id": "s-c6f32ea4722f345f575098e8",
+                                                    "size_bytes": 7715625
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        },
+                                        "id": "v-8b19f11c5d69f348c43e9716"
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=video&debug=1"
+                            },
+                            {
+                                "id": "image-1",
+                                "type": "image",
+                                "index": 1,
+                                "default": {
+                                    "variant_id": "main",
+                                    "url": "https://images.example/static.jpg"
+                                },
+                                "variants": [
+                                    {
+                                        "id": "main",
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://images.example/static.jpg"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=image-1&debug=1"
+                            },
+                            {
+                                "id": "live-2",
+                                "type": "live_photo",
+                                "index": 2,
+                                "default": null,
+                                "variants": [
+                                    {
+                                        "id": "pair-v-8b19f11c5d69f348c43e9716",
+                                        "delivery": {
+                                            "kind": "pair",
+                                            "resources": [
+                                                {
+                                                    "id": "image",
+                                                    "role": "image",
+                                                    "delivery": {
+                                                        "kind": "file",
+                                                        "sources": [
+                                                            {
+                                                                "url": "https://images.example/live.jpg"
+                                                            }
+                                                        ]
+                                                    }
+                                                },
+                                                {
+                                                    "id": "motion",
+                                                    "role": "motion",
+                                                    "delivery": {
+                                                        "kind": "file",
+                                                        "sources": [
+                                                            {
+                                                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                                                "id": "s-c6f32ea4722f345f575098e8",
+                                                                "size_bytes": 7715625
+                                                            }
+                                                        ]
+                                                    },
+                                                    "metadata": {
+                                                        "width": 1920,
+                                                        "height": 1080,
+                                                        "bitrate_bps": 5000000,
+                                                        "duration_ms": 12345,
+                                                        "video_codec": "h264",
+                                                        "evidence": "upstream"
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        "metadata": {
+                                            "width": 1920,
+                                            "height": 1080,
+                                            "bitrate_bps": 5000000,
+                                            "duration_ms": 12345,
+                                            "video_codec": "h264",
+                                            "evidence": "upstream"
+                                        }
+                                    }
+                                ],
+                                "cover": {
+                                    "url": "https://images.example/live.jpg"
+                                },
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=live-2&debug=1",
+                                "default_unavailable_reason": "processing_required"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "title": "live association",
+                        "description": "PHP wire boundary",
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "default_item_id": "video",
+                        "groups": [
+                            {
+                                "id": "album",
+                                "kind": "album",
+                                "item_ids": [
+                                    "image-1",
+                                    "live-2"
+                                ],
+                                "complete": true
+                            }
+                        ],
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        },
+        {
+            "id": "xiaohongshu-wire/associative-image-key-zero",
+            "input": {
+                "url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "now": 1793361600,
+                "page_url": "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                "html": "<script>window.__INITIAL_STATE__={\"note\":{\"noteDetailMap\":{\"wirefixture01\":{\"note\":{\"noteId\":\"wirefixture01\",\"type\":\"normal\",\"title\":\"numeric image keys\",\"desc\":\"PHP wire boundary\",\"user\":{\"nickname\":\"author\",\"userId\":\"007\"},\"imageList\":{\"1\":{\"urlPre\":\"https://images.example/one-cover.jpg\",\"url\":\"https://images.example/one.jpg\"},\"0\":{\"urlPre\":\"https://images.example/zero-cover.jpg\",\"url\":\"https://images.example/zero.jpg\"}},\"video\":{\"media\":{\"stream\":{\"h264\":[{\"masterUrl\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"width\":1920,\"height\":1080,\"duration\":12345,\"avgBitrate\":5000000,\"size\":7715625}]}}}}}}}};</script>"
+            },
+            "expected": {
+                "legacy_wire": "{\"code\":200,\"msg\":\"解析成功\",\"data\":{\"type\":\"image\",\"title\":\"numeric image keys\",\"desc\":\"PHP wire boundary\",\"author\":{\"name\":\"author\",\"id\":\"007\",\"avatar\":\"\"},\"cover\":\"https://images.example/zero-cover.jpg\",\"images\":[\"https://images.example/one.jpg\",\"https://images.example/zero.jpg\"],\"live_photo\":[],\"video_candidates\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\",\"metadata_source\":\"upstream\",\"sources\":[{\"url\":\"https://media.example/wire-video.mp4?sig=synthetic%2Bwire\"}],\"width\":1920,\"height\":1080,\"bit_rate\":5000000,\"size\":7715625,\"duration\":12.345,\"codec\":\"h264\"}],\"id\":\"wirefixture01\"}}",
+                "legacy_response": {
+                    "code": 200,
+                    "msg": "解析成功",
+                    "data": {
+                        "type": "image",
+                        "title": "numeric image keys",
+                        "desc": "PHP wire boundary",
+                        "author": {
+                            "name": "author",
+                            "id": "007",
+                            "avatar": ""
+                        },
+                        "cover": "https://images.example/zero-cover.jpg",
+                        "images": [
+                            "https://images.example/one.jpg",
+                            "https://images.example/zero.jpg"
+                        ],
+                        "live_photo": [],
+                        "video_candidates": [
+                            {
+                                "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire",
+                                "metadata_source": "upstream",
+                                "sources": [
+                                    {
+                                        "url": "https://media.example/wire-video.mp4?sig=synthetic%2Bwire"
+                                    }
+                                ],
+                                "width": 1920,
+                                "height": 1080,
+                                "bit_rate": 5000000,
+                                "size": 7715625,
+                                "duration": 12.345,
+                                "codec": "h264"
+                            }
+                        ],
+                        "id": "wirefixture01"
+                    }
+                },
+                "normal": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "image-1",
+                                "type": "image",
+                                "index": 1,
+                                "default": {
+                                    "variant_id": "main",
+                                    "url": "https://images.example/one.jpg"
+                                },
+                                "variants": [
+                                    {
+                                        "id": "main",
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://images.example/one.jpg"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=image-1"
+                            },
+                            {
+                                "id": "image-2",
+                                "type": "image",
+                                "index": 2,
+                                "default": {
+                                    "variant_id": "main",
+                                    "url": "https://images.example/zero.jpg"
+                                },
+                                "variants": [
+                                    {
+                                        "id": "main",
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://images.example/zero.jpg"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=image-2"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525",
+                        "content_id": "wirefixture01",
+                        "title": "numeric image keys",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/zero-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "default_item_id": "image-1",
+                        "groups": [
+                            {
+                                "id": "album",
+                                "kind": "album",
+                                "item_ids": [
+                                    "image-1",
+                                    "image-2"
+                                ],
+                                "complete": true
+                            }
+                        ],
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "debug": {
+                    "schema_version": "1.0",
+                    "code": "OK",
+                    "data": {
+                        "platform": "xiaohongshu",
+                        "source_url": "https://www.xiaohongshu.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525",
+                        "items": [
+                            {
+                                "id": "image-1",
+                                "type": "image",
+                                "index": 1,
+                                "default": {
+                                    "variant_id": "main",
+                                    "url": "https://images.example/one.jpg"
+                                },
+                                "variants": [
+                                    {
+                                        "id": "main",
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://images.example/one.jpg"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=image-1&debug=1"
+                            },
+                            {
+                                "id": "image-2",
+                                "type": "image",
+                                "index": 2,
+                                "default": {
+                                    "variant_id": "main",
+                                    "url": "https://images.example/zero.jpg"
+                                },
+                                "variants": [
+                                    {
+                                        "id": "main",
+                                        "delivery": {
+                                            "kind": "file",
+                                            "sources": [
+                                                {
+                                                    "url": "https://images.example/zero.jpg"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&item_id=image-2&debug=1"
+                            }
+                        ],
+                        "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.xiaohongshu.com%2Fexplore%2Fwirefixture01%3Fxsec_token%3Dsynthetic%252Bwire%26keep%3Da%2Bb%252525&debug=1",
+                        "content_id": "wirefixture01",
+                        "title": "numeric image keys",
+                        "description": "PHP wire boundary",
+                        "cover": {
+                            "url": "https://images.example/zero-cover.jpg"
+                        },
+                        "author": {
+                            "id": "007",
+                            "name": "author"
+                        },
+                        "default_item_id": "image-1",
+                        "groups": [
+                            {
+                                "id": "album",
+                                "kind": "album",
+                                "item_ids": [
+                                    "image-1",
+                                    "image-2"
+                                ],
+                                "complete": true
+                            }
+                        ],
+                        "generated_at": "2026-10-30T12:00:00Z"
+                    }
+                },
+                "page_requests": [
+                    "https://www.rednote.com/explore/wirefixture01?xsec_token=synthetic%2Bwire&keep=a+b%2525"
+                ]
+            }
+        }
+    ]
+}

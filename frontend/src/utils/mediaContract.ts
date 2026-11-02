@@ -157,12 +157,28 @@ export function sourcesOf(delivery: Delivery): Source[] {
     ];
   return delivery.resources.flatMap((resource) => sourcesOf(resource.delivery));
 }
+/** Server-attested alternatives retain selection and are tried only on transport failure. */
+export function sourceRoutes(source: Source, context: TargetContext = {}): string[] {
+  const primary = sourceUrl(source, context);
+  if (source.fallback_urls === undefined) return [primary];
+  if (!Array.isArray(source.fallback_urls) || source.fallback_urls.length < 1 || source.fallback_urls.length > 2 || source.access === "relay") fail("来源凭据候选无效");
+  const base = new URL(primary);
+  if (base.protocol !== "https:") fail("来源凭据候选必须使用 HTTPS");
+  const routes = [primary];
+  for (const raw of source.fallback_urls) {
+    const route = sourceUrl({url: raw}, context);
+    if (new URL(route).origin !== base.origin || routes.includes(route)) fail("来源凭据候选跨主机或重复");
+    routes.push(route);
+  }
+  return routes;
+}
+
 function validateSources(value: unknown): asserts value is Source[] {
   if (!Array.isArray(value) || !value.length) fail("来源不能为空");
   const sources = value as Source[];
   sources.forEach((source) => {
     if (!object(source) || !identity(source.url)) fail("来源无效");
-    sourceUrl(source);
+    sourceRoutes(source);
     if (source.id !== undefined && !identity(source.id)) fail("来源 ID 无效");
     if (sources.length > 1 && !source.id) fail("多来源必须有 ID");
     if (
@@ -426,7 +442,7 @@ function readFile(
       variant,
       source,
       url,
-      routes: [url, ...routes.filter((route) => route !== url)],
+      routes: [...sourceRoutes(source, context), ...routes.filter((route) => route !== url)],
     };
   } catch (error) {
     return {

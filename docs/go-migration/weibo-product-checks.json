@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "milestone": "weibo-full-HTTP-product-registration-and-PHP-public-pre-sign-parity",
+  "code_head": "aca70af8e21c29415e36e2ded23e4ef1c8772743",
+  "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "oracle_runtime": "PHP 8.3.6 (linux/amd64)",
+  "oracle_image": "php@sha256:9ed77294c3332080ebcd2f6b9a2d390565eaa4a05fc26aefff62aa9b0af9b5e9",
+  "php_source_verified": true,
+  "actual_php_product_functions": [
+    "formatWeiboStatusResponse",
+    "formatWeiboResponse",
+    "weiboResolve",
+    "snapAdaptWeibo",
+    "snapFinalizeData",
+    "snapPublicMediaView",
+    "snapWeiboMediaUrl"
+  ],
+  "frozen_formatter_cases": 29,
+  "frozen_status_tv_request_flow_cases": 16,
+  "frozen_public_adapter_cases": 29,
+  "frozen_public_adapter_views": [
+    "internal",
+    "normal",
+    "debug"
+  ],
+  "frozen_public_adapter_envelopes": 87,
+  "php_oracle_regenerated_and_byte_compared": true,
+  "go_public_adapter_exact_json_comparison": true,
+  "go_http_tests": {
+    "routes": [
+      "/api/parse",
+      "/api/resolve"
+    ],
+    "views": [
+      "normal",
+      "debug"
+    ],
+    "status_upstream": "synthetic fixed official-host tape",
+    "signed_media": "ticket independently verified",
+    "signed_default_reselected": true,
+    "invalid_source_rejected": true,
+    "missing_signer_rejected": true
+  },
+  "toolchain": "Go 1.27.3, go test -race, vet, gofmt, build; fixed PHP 8.3.6",
+  "ci": {
+    "run_id": 41257671113,
+    "url": "https://github.com/Brilliant666/DokiTool-Go/actions/runs/41257671113",
+    "bilibili_php_oracle": "success",
+    "offline_contract": "success",
+    "head": "aca70af8e21c29415e36e2ded23e4ef1c8772743"
+  },
+  "frontend": {
+    "unchanged_frontend_generic_gate": "passed",
+    "weibo_specific_formal_http_consumer": "pending"
+  },
+  "evidence_layers": {
+    "frozen_php_oracle": "passed",
+    "go_offline": "passed",
+    "synthetic_http": "passed",
+    "real_platform": "not_run",
+    "browser_file_save": "not_run",
+    "production": "not_run"
+  },
+  "remaining": [
+    "real PHP public signed gateway side-by-side using valid source",
+    "Weibo-specific unchanged frontend consumer of actual Go output",
+    "real status and TV session samples with bounded upstream",
+    "browser relay GET/HEAD/Range save and cancel",
+    "remaining six platforms"
+  ]
+}

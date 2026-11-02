@@ -1,0 +1,787 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "fixed_clock": "2026-10-30T12:00:00Z",
+  "cases": [
+    {
+      "id": "weibo/status-complete/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/status-complete/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/large-count-integer/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":9007199254740993,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/large-count-string/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":\"9007199254740993\",\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/unqualified-high-falls-back/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://unsupported.example/high.mp4\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/unqualified-high-falls-back/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://unsupported.example/high.mp4\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/no-qualified-source/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://unsupported.example/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://unsupported.example/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/no-qualified-source/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://unsupported.example/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://unsupported.example/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/missing-key/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/missing-key/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/short-key/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "short",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/no-video/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"123\",\"page_info\":{\"media_info\":{}}}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/no-video/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"123\",\"page_info\":{\"media_info\":{}}}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/blocked/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 403,
+            "body": "null",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/blocked/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 403,
+            "body": "null",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/transport-failure/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 0,
+            "body": "",
+            "error": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/transport-failure/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 0,
+            "body": "",
+            "error": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/invalid-json/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{broken",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/invalid-json/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{broken",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/missing-target/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "missing-video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-component/parse",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":{\"1080p\":\"https://f.video.weibocdn.com/tv-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"720p\":\"https://f.video.weibocdn.com/tv-720.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"}}}}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-component/resolve",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":{\"1080p\":\"https://f.video.weibocdn.com/tv-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"720p\":\"https://f.video.weibocdn.com/tv-720.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"}}}}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-supplement/parse",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":{\"1080p\":\"https://f.video.weibocdn.com/tv-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"720p\":\"https://f.video.weibocdn.com/tv-720.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"},\"mid\":\"1234567890123456\"}}}",
+            "error": false
+          },
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=1234567890123456",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-supplement/resolve",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":{\"1080p\":\"https://f.video.weibocdn.com/tv-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"720p\":\"https://f.video.weibocdn.com/tv-720.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"},\"mid\":\"1234567890123456\"}}}",
+            "error": false
+          },
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=1234567890123456",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-optional-failure/parse",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":{\"1080p\":\"https://f.video.weibocdn.com/tv-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"720p\":\"https://f.video.weibocdn.com/tv-720.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"},\"mid\":\"1234567890123456\"}}}",
+            "error": false
+          },
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=1234567890123456",
+            "method": "GET",
+            "post": null,
+            "status": 403,
+            "body": "null",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-optional-failure/resolve",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":{\"1080p\":\"https://f.video.weibocdn.com/tv-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"720p\":\"https://f.video.weibocdn.com/tv-720.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"},\"mid\":\"1234567890123456\"}}}",
+            "error": false
+          },
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=1234567890123456",
+            "method": "GET",
+            "post": null,
+            "status": 403,
+            "body": "null",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-business-error-scalar-data/parse",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100001,\"data\":\"blocked\"}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-business-error-scalar-data/resolve",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100001,\"data\":\"blocked\"}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-array-urls/parse",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":[\"https://f.video.weibocdn.com/array-0.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"https://f.video.weibocdn.com/array-1.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"]}}}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/tv-array-urls/resolve",
+      "input": {
+        "url": "https://weibo.com/tv/show/1034:1234567890123456",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/tv/api/component?page=%2Ftv%2Fshow%2F1034%3A1234567890123456",
+            "method": "POST",
+            "post": "data=%7B%22Component_Play_Playinfo%22%3A%7B%22oid%22%3A%221034%3A1234567890123456%22%7D%7D",
+            "status": 200,
+            "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"TV 主视频\",\"author\":\"TV 作者\",\"duration_time\":12.345,\"urls\":[\"https://f.video.weibocdn.com/array-0.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"https://f.video.weibocdn.com/array-1.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\"]}}}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/anonymous-session/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "<html><title>Sina Visitor System</title></html>",
+            "error": false
+          },
+          {
+            "url": "https://passport.weibo.com/visitor/genvisitor",
+            "method": "POST",
+            "post": "cb=gen_callback&fp=%7B%22os%22%3A%221%22%2C%22browser%22%3A%22Chrome131%2C0%2C0%2C0%22%2C%22fonts%22%3A%22undefined%22%2C%22screenInfo%22%3A%221920%2A1080%2A24%22%2C%22plugins%22%3A%22%22%7D",
+            "status": 200,
+            "body": "gen_callback({\"retcode\":20000000,\"data\":{\"tid\":\"synthetic_tid\",\"new_tid\":true,\"confidence\":80}})",
+            "error": false
+          },
+          {
+            "url": "https://passport.weibo.com/visitor/visitor?a=incarnate&t=synthetic_tid&w=3&c=080&gc=&cb=cross_domain&from=weibo&_rand=<nonce>",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "cross_domain({\"retcode\":20000000})",
+            "error": false
+          },
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/anonymous-session/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "<html><title>Sina Visitor System</title></html>",
+            "error": false
+          },
+          {
+            "url": "https://passport.weibo.com/visitor/genvisitor",
+            "method": "POST",
+            "post": "cb=gen_callback&fp=%7B%22os%22%3A%221%22%2C%22browser%22%3A%22Chrome131%2C0%2C0%2C0%22%2C%22fonts%22%3A%22undefined%22%2C%22screenInfo%22%3A%221920%2A1080%2A24%22%2C%22plugins%22%3A%22%22%7D",
+            "status": 200,
+            "body": "gen_callback({\"retcode\":20000000,\"data\":{\"tid\":\"synthetic_tid\",\"new_tid\":true,\"confidence\":80}})",
+            "error": false
+          },
+          {
+            "url": "https://passport.weibo.com/visitor/visitor?a=incarnate&t=synthetic_tid&w=3&c=080&gc=&cb=cross_domain&from=weibo&_rand=<nonce>",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "cross_domain({\"retcode\":20000000})",
+            "error": false
+          },
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/renewal/before/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793361600,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=before&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/renewal/after/parse",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793365200,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "parse",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=after&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=after&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "weibo/renewal/after/resolve",
+      "input": {
+        "url": "https://weibo.com/1234567890/AbC123",
+        "now": 1793365200,
+        "key": "public-synthetic-weibo-migration-key-DO-NOT-DEPLOY",
+        "route": "resolve",
+        "item_id": "video",
+        "http_responses": [
+          {
+            "url": "https://weibo.com/ajax/statuses/show?id=AbC123",
+            "method": "GET",
+            "post": null,
+            "status": 200,
+            "body": "{\"idstr\":\"1234567890123456\",\"text_raw\":\"微博签发全路径 A+B 中文😀\",\"user\":{\"idstr\":\"90071992547409930012\",\"screen_name\":\"合成作者\"},\"page_info\":{\"page_pic\":\"https://images.example/weibo.jpg\",\"media_info\":{\"duration\":12.345,\"online_users_number\":0,\"playback_list\":[{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-1080.mp4?Expires=4102444800&ssig=after&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"1080p\",\"width\":1920,\"height\":1080,\"size\":8000000,\"bitrate\":4000000,\"fps\":30,\"video_codecs\":\"h264\"}},{\"play_info\":{\"url\":\"https://f.video.weibocdn.com/full-4k.mp4?Expires=4102444800&ssig=after&KID=1&keep=a%2Bb\",\"mime\":\"video/mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"size\":16000000,\"bitrate\":8000000,\"fps\":30,\"video_codecs\":\"h264\"}}]}},\"attitudes_count\":0,\"comments_count\":\"12\",\"reposts_count\":0}",
+            "error": false
+          }
+        ]
+      }
+    }
+  ]
+}

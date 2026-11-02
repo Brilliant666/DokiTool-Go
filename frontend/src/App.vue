@@ -136,6 +136,7 @@ const {
   downloadImage,
   handleCancelDownload,
   handleRetryDownload,
+  handleRefreshDownload,
   handleQueryDownload,
   handleBrowserDownload,
   handleClearCompleted,
@@ -246,6 +247,7 @@ onMounted(() => {
       :downloads="videoStore.downloads"
       @cancel="handleCancelDownload"
       @retry="handleRetryDownload"
+      @refresh="handleRefreshDownload"
       @query="handleQueryDownload"
       @handoff="handleBrowserDownload"
       @clear-completed="handleClearCompleted"

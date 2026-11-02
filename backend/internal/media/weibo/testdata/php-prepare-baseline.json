@@ -1,0 +1,468 @@
+{
+    "schema": 1,
+    "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "description": "Fixed inputs passed to the unmodified PHP snapWeiboMediaPrepare product function; frozen PHP 8.3.6 CI replay must match byte-for-byte",
+    "cases": [
+        {
+            "id": "prepare-method-post",
+            "operation": "prepare",
+            "input": {
+                "method": "POST",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 405,
+                "message": "仅支持 GET 和 HEAD"
+            }
+        },
+        {
+            "id": "prepare-key-missing",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "short",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 503,
+                "message": "微博媒体服务未配置完成"
+            }
+        },
+        {
+            "id": "prepare-ticket-missing",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {},
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 400,
+                "message": "媒体链接参数无效，请重新解析"
+            }
+        },
+        {
+            "id": "prepare-ticket-array",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": [
+                        "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                    ]
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 400,
+                "message": "媒体链接参数无效，请重新解析"
+            }
+        },
+        {
+            "id": "prepare-extra-query",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg",
+                    "debug": "1"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 400,
+                "message": "媒体链接参数无效，请重新解析"
+            }
+        },
+        {
+            "id": "prepare-invalid-signature",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "invalid"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 403,
+                "message": "媒体链接无效或已过期，请重新解析"
+            }
+        },
+        {
+            "id": "prepare-expired",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793363400,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 403,
+                "message": "媒体链接无效或已过期，请重新解析"
+            }
+        },
+        {
+            "id": "prepare-future-issued",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361599,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 403,
+                "message": "媒体链接无效或已过期，请重新解析"
+            }
+        },
+        {
+            "id": "prepare-invalid-range",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": "bytes=0-1,3-4",
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 416,
+                "message": "视频请求范围无效"
+            }
+        },
+        {
+            "id": "prepare-head-ignores-range",
+            "operation": "prepare",
+            "input": {
+                "method": "HEAD",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": "bytes=0-1,3-4",
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": true,
+                "method": "HEAD",
+                "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+                "ip": "8.8.8.8",
+                "range": null
+            }
+        },
+        {
+            "id": "prepare-get-full",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": true,
+                "method": "GET",
+                "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+                "ip": "8.8.8.8",
+                "range": null
+            }
+        },
+        {
+            "id": "prepare-get-bound-range",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": "bytes=1-7",
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": true,
+                "method": "GET",
+                "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+                "ip": "8.8.8.8",
+                "range": {
+                    "header": "bytes=1-7",
+                    "start": 1,
+                    "end": 7
+                }
+            }
+        },
+        {
+            "id": "prepare-get-suffix-range",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": "bytes=-8",
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": true,
+                "method": "GET",
+                "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+                "ip": "8.8.8.8",
+                "range": {
+                    "header": "bytes=-8",
+                    "suffix": 8
+                }
+            }
+        },
+        {
+            "id": "prepare-dns-empty",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": []
+            },
+            "expected": {
+                "ok": false,
+                "status": 502,
+                "message": "微博媒体地址暂不可用，请稍后重试"
+            }
+        },
+        {
+            "id": "prepare-dns-loopback",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "127.0.0.1"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 502,
+                "message": "微博媒体地址暂不可用，请稍后重试"
+            }
+        },
+        {
+            "id": "prepare-dns-mixed",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "8.8.8.8",
+                    "10.0.0.1"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 502,
+                "message": "微博媒体地址暂不可用，请稍后重试"
+            }
+        },
+        {
+            "id": "prepare-dns-v4-preferred",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "2001:4860:4860::8888",
+                    "8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": true,
+                "method": "GET",
+                "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+                "ip": "8.8.8.8",
+                "range": null
+            }
+        },
+        {
+            "id": "prepare-dns-v6-only",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "2001:4860:4860::8888"
+                ]
+            },
+            "expected": {
+                "ok": true,
+                "method": "GET",
+                "url": "https://f.video.weibocdn.com/synthetic.mp4?media_id=fixture&template=1080&ssig=synthetic",
+                "ip": "2001:4860:4860::8888",
+                "range": null
+            }
+        },
+        {
+            "id": "prepare-dns-invalid",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "not-an-ip"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 502,
+                "message": "微博媒体地址暂不可用，请稍后重试"
+            }
+        },
+        {
+            "id": "prepare-dns-mapped",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "::ffff:8.8.8.8"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 502,
+                "message": "微博媒体地址暂不可用，请稍后重试"
+            }
+        },
+        {
+            "id": "prepare-dns-documentation",
+            "operation": "prepare",
+            "input": {
+                "method": "GET",
+                "query": {
+                    "ticket": "eyJ2IjoxLCJ1IjoiaHR0cHM6Ly9mLnZpZGVvLndlaWJvY2RuLmNvbS9zeW50aGV0aWMubXA0P21lZGlhX2lkPWZpeHR1cmUmdGVtcGxhdGU9MTA4MCZzc2lnPXN5bnRoZXRpYyIsImlhdCI6MTc5MzM2MTYwMCwiZXhwIjoxNzkzMzYzNDAwfQ.uFH1aj3G4kDs14bZIrhsOMM5zP4O4MeSfe1EwsSE4Rg"
+                },
+                "range": null,
+                "key": "tttttttttttttttttttttttttttttttt",
+                "now": 1793361600,
+                "ips": [
+                    "2001:db8::1"
+                ]
+            },
+            "expected": {
+                "ok": false,
+                "status": 502,
+                "message": "微博媒体地址暂不可用，请稍后重试"
+            }
+        }
+    ]
+}

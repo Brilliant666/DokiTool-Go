@@ -1,0 +1,213 @@
+{
+  "format_version": 1,
+  "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+  "baseline_tree": "93744d4d718c3299f82640d2888e93252106db70",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "evidence_scope": "Synthetic deterministic calls to the approved PHP implementation; no platform network, browser, real credentials or Go-derived expected output.",
+  "php_version": "8.3.6",
+  "case_count": 208,
+  "operation_counts": {
+    "candidate_metadata": 7,
+    "file_variants": 20,
+    "finalize_and_public_view": 48,
+    "finalize_data": 28,
+    "merge_metadata": 16,
+    "merge_sources": 1,
+    "quality_compare": 8,
+    "same_frame_rate": 5,
+    "source_identity": 19,
+    "sources": 9,
+    "validate_envelope": 47
+  },
+  "ticket_case_count": 21,
+  "catalog_case_count": 1,
+  "files": {
+    "cases.json": "2cf7e365373653ac974e144805298d8da873d536ed5c4622122b4a7e9b9edf50",
+    "tickets.json": "475304e624a8f7a2f9c5fa6ada2081c067a9ffcacb9d6a0f6eded5c1f9f1f063",
+    "catalog.json": "f16253eee386c31cb92890a5358c89d985a5b0c3e136e5b51ac0d2457a93156b"
+  },
+  "source_files": [
+    {
+      "path": "backend/lib/media-contract.php",
+      "sha256": "39e2e218917ad2ddc329cfbd2d7b4e6130e240bced8e4af6526656ad6b243817"
+    },
+    {
+      "path": "backend/lib/media-adapters.php",
+      "sha256": "0257081ef5f4fe40bf1f288145405a56e05dfff6c887d2e73b117c6f27ea27db"
+    },
+    {
+      "path": "backend/lib/media-metadata.php",
+      "sha256": "d96a408e91029580085ef530cb99511887e165dd11063570dbb75fee58a3483e"
+    },
+    {
+      "path": "backend/lib/media-policy.php",
+      "sha256": "ccc523c6c8e53c4f8af18f51c2204a4ba14c124ed9aeb86448dafa7cf30840d9"
+    },
+    {
+      "path": "backend/lib/platforms.php",
+      "sha256": "5b82407a1fb6a1b7a849154fd65a44f030b2298466561dc289b60b182c359074"
+    },
+    {
+      "path": "backend/lib/runtime.php",
+      "sha256": "0c90dca5e4e90498e904a69bb891625c7f66cbcf0723c15fedd72524d8134358"
+    },
+    {
+      "path": "backend/lib/weibo-media.php",
+      "sha256": "5530988ce434497251aef118af2dc0833b45640da84ad32450657aa7b86adb18"
+    },
+    {
+      "path": "backend/bin/catalog.php",
+      "sha256": "d34aa452832ac54ee2c01386d2f3e89f6b87963b3086ca64d58f3b41db069d3c"
+    },
+    {
+      "path": "backend/config/platforms.json",
+      "sha256": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487"
+    },
+    {
+      "path": "docs/schema/unified-v1/unified-v1.schema.json",
+      "sha256": "bde334422f63488da67b8a5a40f3081f143e031f9849f2df282a175a8df6165a"
+    },
+    {
+      "path": "docs/schema/unified-v1/fixtures-manifest.json",
+      "sha256": "77f378b7197dbdd4c83c57733d481557c00f0e801edd4e7f24dd20cbe514bb42"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/01-douyin-quality-and-cdn.json",
+      "sha256": "f2380a2aa29213780ef6a2b19d87c08e70951a5ceb706d98de49084820e5bd89"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/02-kuaishou-single-file.json",
+      "sha256": "679ef40a8b36ae69f343667cff5bf5d5b7fdf55f89db2bebc48b1b1c474849fd"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/03-bilibili-parts-lazy-unavailable.json",
+      "sha256": "7a340c77fd38b13a0cb476fb7e45459f456a8faa68793c276171153066e56dab"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/04-xiaohongshu-original-candidate.json",
+      "sha256": "a29509a124ea6bab7b736b686b2658b1be4711b2240434b5572d06abaf27fcc5"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/05-toutiao-single-file.json",
+      "sha256": "92c830b96c6fa7ef7c3293209972d3d5c863e5b8d2d80b3fc6512d1b1d67df51"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/06-weibo-signed-relay.json",
+      "sha256": "3c559572543f58686d711f3ee6c9000255d523318d4d4261ffe1c3f8ec56d633"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/07-pipixia-image-album.json",
+      "sha256": "887fe1b4333bfebe283ba904b1cef3dc58d04f8f464be9d02d4706713666978a"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/08-pipigx-single-file.json",
+      "sha256": "e7c1f3fc2bdaf8219b41976316eab80889f55ca485637911b595ab72f972c7de"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/09-zuiyou-image.json",
+      "sha256": "ed0930d84500ef7575e2c5e96e071f5b535f99018a547676c41bc3fd32a17f5e"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/10-mixed-live-photo-and-bgm.json",
+      "sha256": "0770ebb2f17642b53e348e566ea14903f741985e061db731e010c0b8ddad3e5c"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/11-future-audio.json",
+      "sha256": "9113780084d46f3b38aa8dadaa063e5ad3fe7730ed2ae575a6f5f2a344323e54"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/12-future-dash-selected-mux.json",
+      "sha256": "91a187926bc41c2f6b97de62b899c32e537442d13ac63a6a41855055c7470031"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/13-segments-then-mux.json",
+      "sha256": "c363485eb6ca451f9a5d2ddefbd254724d3c7beb11a7e6915a167ee237f59190"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/14-hls-adaptive-unknown-quality.json",
+      "sha256": "2a7035c253b49f71059fd574d9a742116b8bea9c8067d02f91a323ffe8bcbbb1"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/15-missing-media-config.json",
+      "sha256": "1f252b403332f1a6c93ef4c19c795826b048566088da6d1942bf16d5f9406a8b"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/16-1080-file-and-higher-4k-mux.json",
+      "sha256": "815e75fe1113e4bd3ecf976c4e52968874adfa77cd2bf84edaf6112df6edac91"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/17-only-mux-no-file-default.json",
+      "sha256": "9e17de35ff18a14955b7a5e5eaa37824fb6fe2bf781cda6f0baf08ae34cebf1a"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/18-4k-expired-a-valid-b.json",
+      "sha256": "a9c638136f122397c1f13834ab57acd6ce1802230f213e7a7f638531e0003683"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/19-complete-silent-video.json",
+      "sha256": "51d3c0f194dff1d68c0ca280e92305bf6419161b780d838be172638b571e3e8d"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/20-local-variant-id-scope.json",
+      "sha256": "3977dc7d6b2f0aa4c40267016c919692c7aabbea5dae75078ef616ab28e84c90"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/21-expired-file-needs-refresh.json",
+      "sha256": "2dac2bbb2fdf60c42375a41265d240e569aeeaeafb2aa62ad4478a43323a3289"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/22-known-unavailable-file.json",
+      "sha256": "67791a2c284c89b8ca8efd7031b6c2ca4ff8b1b6f3636893babca6fb3ba31391"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/23-hls-selected-representation.json",
+      "sha256": "7a2136491edcf0cfb877d4143594dab9d0612871387ad107268bda745a833af6"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/24-dash-adaptive-manifest.json",
+      "sha256": "d137bf19faa84cfadb4e8e3405b23f8375a9bf0a50e9c68cfd0a132bfe7a366b"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/25-variant-order-does-not-change-default.json",
+      "sha256": "d83f48620ddb1a6c97fab7ed43efab0190ec7317f776a6c57e877a0b1400b013"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/26-expired-mux-needs-refresh.json",
+      "sha256": "941d8ce6313428b12583f38cb9cd7a96df5404bfd17e00637907839efe966d71"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/27-deferred-original-variant.json",
+      "sha256": "ca7e484ac18f8ae9fbf8c03ff0e964873fed1b03f6199f5d942e968fbe3e3337"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/28-protected-mux-capabilities.json",
+      "sha256": "490d60b853cf9f6317d9106fe82d8d09eab599b11b950ab07224a28841e0066a"
+    },
+    {
+      "path": "docs/schema/unified-v1/examples/29-conflicting-mux-evidence.json",
+      "sha256": "b07e515457e56614a8ad77123887a39f6cdefde6d5eb26500b93a5dfef526432"
+    }
+  ],
+  "producer_files": [
+    {
+      "path": "scripts/go-migration/produce.py",
+      "sha256": "1e3f6277fbf63ef81bb853104eb77c4437822e38806465610dd3efb38a7265f6"
+    },
+    {
+      "path": "scripts/go-migration/produce.php",
+      "sha256": "3d4871c92dafca8a4991d51ae2b1168b28c0516c6cce2f36a1570685565a326e"
+    }
+  ],
+  "dynamic_difference_rules": [
+    "Explicit now is fixed per case; generated_at is compared exactly, not omitted.",
+    "PHP snapMergeSources reads wall time internally. Its inputs use expiry in 2000 or 2100/2101; rank is stable while wall time is between those bounds. Go receives the fixed now. No production PHP source was changed.",
+    "No URL, ID, order, signature parameter, expires_at, browser_fetch, source credential or policy field is globally stripped. Every output value is compared.",
+    "Only internal candidate_metadata/merge_metadata empty PHP arrays are encoded as objects because these functions represent metadata objects; public envelope shapes are never normalized this way.",
+    "JSON object key order and equivalent numeric spellings (30 and 30.0) are non-semantic. Array order, missing/null, false/zero, exact integers and string bytes remain significant.",
+    "Validation compares accepted/rejected; php_error records the original diagnostic for evidence without forcing Go to copy PHP wording.",
+    "Ticket cases carry explicit signing/verification clocks and public synthetic keys. PHP-minted ticket bytes and PHP verification results are preserved exactly; negative token construction only generates inputs."
+  ]
+}

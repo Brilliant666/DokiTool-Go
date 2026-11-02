@@ -1,0 +1,725 @@
+{
+  "format_version": 1,
+  "cases": [
+    {
+      "id": "round/p0/00/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.5005,
+        "precision": 0
+      },
+      "expected": 1
+    },
+    {
+      "id": "round/p0/00/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.5005,
+        "precision": 0
+      },
+      "expected": -1
+    },
+    {
+      "id": "round/p0/01/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.5015,
+        "precision": 0
+      },
+      "expected": 1
+    },
+    {
+      "id": "round/p0/01/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.5015,
+        "precision": 0
+      },
+      "expected": -1
+    },
+    {
+      "id": "round/p0/02/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1.0005,
+        "precision": 0
+      },
+      "expected": 1
+    },
+    {
+      "id": "round/p0/02/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1.0005,
+        "precision": 0
+      },
+      "expected": -1
+    },
+    {
+      "id": "round/p0/03/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 500.49999999999994,
+        "precision": 0
+      },
+      "expected": 501
+    },
+    {
+      "id": "round/p0/03/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -500.49999999999994,
+        "precision": 0
+      },
+      "expected": -501
+    },
+    {
+      "id": "round/p0/04/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 500.49999999999,
+        "precision": 0
+      },
+      "expected": 500
+    },
+    {
+      "id": "round/p0/04/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -500.49999999999,
+        "precision": 0
+      },
+      "expected": -500
+    },
+    {
+      "id": "round/p0/05/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.005,
+        "precision": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p0/05/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.005,
+        "precision": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p0/06/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1.005,
+        "precision": 0
+      },
+      "expected": 1
+    },
+    {
+      "id": "round/p0/06/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1.005,
+        "precision": 0
+      },
+      "expected": -1
+    },
+    {
+      "id": "round/p0/07/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 5e-08,
+        "precision": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p0/07/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -5e-08,
+        "precision": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p0/08/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 5e-324,
+        "precision": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p0/08/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -5e-324,
+        "precision": 0
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p0/09/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 99999999999999.5,
+        "precision": 0
+      },
+      "expected": 100000000000000
+    },
+    {
+      "id": "round/p0/09/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -99999999999999.5,
+        "precision": 0
+      },
+      "expected": -100000000000000
+    },
+    {
+      "id": "round/p0/10/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1000000000000000.5,
+        "precision": 0
+      },
+      "expected": 1000000000000000.5
+    },
+    {
+      "id": "round/p0/10/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1000000000000000.5,
+        "precision": 0
+      },
+      "expected": -1000000000000000.5
+    },
+    {
+      "id": "round/p0/11/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1e+300,
+        "precision": 0
+      },
+      "expected": 1e+300
+    },
+    {
+      "id": "round/p0/11/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1e+300,
+        "precision": 0
+      },
+      "expected": -1e+300
+    },
+    {
+      "id": "round/p2/00/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.5005,
+        "precision": 2
+      },
+      "expected": 0.5
+    },
+    {
+      "id": "round/p2/00/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.5005,
+        "precision": 2
+      },
+      "expected": -0.5
+    },
+    {
+      "id": "round/p2/01/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.5015,
+        "precision": 2
+      },
+      "expected": 0.5
+    },
+    {
+      "id": "round/p2/01/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.5015,
+        "precision": 2
+      },
+      "expected": -0.5
+    },
+    {
+      "id": "round/p2/02/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1.0005,
+        "precision": 2
+      },
+      "expected": 1
+    },
+    {
+      "id": "round/p2/02/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1.0005,
+        "precision": 2
+      },
+      "expected": -1
+    },
+    {
+      "id": "round/p2/03/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 500.49999999999994,
+        "precision": 2
+      },
+      "expected": 500.5
+    },
+    {
+      "id": "round/p2/03/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -500.49999999999994,
+        "precision": 2
+      },
+      "expected": -500.5
+    },
+    {
+      "id": "round/p2/04/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 500.49999999999,
+        "precision": 2
+      },
+      "expected": 500.5
+    },
+    {
+      "id": "round/p2/04/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -500.49999999999,
+        "precision": 2
+      },
+      "expected": -500.5
+    },
+    {
+      "id": "round/p2/05/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.005,
+        "precision": 2
+      },
+      "expected": 0.01
+    },
+    {
+      "id": "round/p2/05/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.005,
+        "precision": 2
+      },
+      "expected": -0.01
+    },
+    {
+      "id": "round/p2/06/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1.005,
+        "precision": 2
+      },
+      "expected": 1.01
+    },
+    {
+      "id": "round/p2/06/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1.005,
+        "precision": 2
+      },
+      "expected": -1.01
+    },
+    {
+      "id": "round/p2/07/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 5e-08,
+        "precision": 2
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p2/07/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -5e-08,
+        "precision": 2
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p2/08/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 5e-324,
+        "precision": 2
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p2/08/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -5e-324,
+        "precision": 2
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p2/09/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 99999999999999.5,
+        "precision": 2
+      },
+      "expected": 99999999999999.5
+    },
+    {
+      "id": "round/p2/09/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -99999999999999.5,
+        "precision": 2
+      },
+      "expected": -99999999999999.5
+    },
+    {
+      "id": "round/p2/10/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1000000000000000.5,
+        "precision": 2
+      },
+      "expected": 1000000000000000.5
+    },
+    {
+      "id": "round/p2/10/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1000000000000000.5,
+        "precision": 2
+      },
+      "expected": -1000000000000000.5
+    },
+    {
+      "id": "round/p2/11/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1e+300,
+        "precision": 2
+      },
+      "expected": 1e+300
+    },
+    {
+      "id": "round/p2/11/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1e+300,
+        "precision": 2
+      },
+      "expected": -1e+300
+    },
+    {
+      "id": "round/p3/00/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.5005,
+        "precision": 3
+      },
+      "expected": 0.501
+    },
+    {
+      "id": "round/p3/00/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.5005,
+        "precision": 3
+      },
+      "expected": -0.501
+    },
+    {
+      "id": "round/p3/01/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.5015,
+        "precision": 3
+      },
+      "expected": 0.502
+    },
+    {
+      "id": "round/p3/01/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.5015,
+        "precision": 3
+      },
+      "expected": -0.502
+    },
+    {
+      "id": "round/p3/02/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1.0005,
+        "precision": 3
+      },
+      "expected": 1.001
+    },
+    {
+      "id": "round/p3/02/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1.0005,
+        "precision": 3
+      },
+      "expected": -1.001
+    },
+    {
+      "id": "round/p3/03/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 500.49999999999994,
+        "precision": 3
+      },
+      "expected": 500.5
+    },
+    {
+      "id": "round/p3/03/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -500.49999999999994,
+        "precision": 3
+      },
+      "expected": -500.5
+    },
+    {
+      "id": "round/p3/04/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 500.49999999999,
+        "precision": 3
+      },
+      "expected": 500.5
+    },
+    {
+      "id": "round/p3/04/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -500.49999999999,
+        "precision": 3
+      },
+      "expected": -500.5
+    },
+    {
+      "id": "round/p3/05/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 0.005,
+        "precision": 3
+      },
+      "expected": 0.005
+    },
+    {
+      "id": "round/p3/05/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -0.005,
+        "precision": 3
+      },
+      "expected": -0.005
+    },
+    {
+      "id": "round/p3/06/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1.005,
+        "precision": 3
+      },
+      "expected": 1.005
+    },
+    {
+      "id": "round/p3/06/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1.005,
+        "precision": 3
+      },
+      "expected": -1.005
+    },
+    {
+      "id": "round/p3/07/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 5e-08,
+        "precision": 3
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p3/07/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -5e-08,
+        "precision": 3
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p3/08/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 5e-324,
+        "precision": 3
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p3/08/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -5e-324,
+        "precision": 3
+      },
+      "expected": 0
+    },
+    {
+      "id": "round/p3/09/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 99999999999999.5,
+        "precision": 3
+      },
+      "expected": 99999999999999.5
+    },
+    {
+      "id": "round/p3/09/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -99999999999999.5,
+        "precision": 3
+      },
+      "expected": -99999999999999.5
+    },
+    {
+      "id": "round/p3/10/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1000000000000000.5,
+        "precision": 3
+      },
+      "expected": 1000000000000000.5
+    },
+    {
+      "id": "round/p3/10/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1000000000000000.5,
+        "precision": 3
+      },
+      "expected": -1000000000000000.5
+    },
+    {
+      "id": "round/p3/11/positive",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": 1e+300,
+        "precision": 3
+      },
+      "expected": 1e+300
+    },
+    {
+      "id": "round/p3/11/negative",
+      "operation": "round",
+      "scenario": "Actual PHP default half-up rounding near decimal ties and finite magnitude boundaries",
+      "input": {
+        "value": -1e+300,
+        "precision": 3
+      },
+      "expected": -1e+300
+    }
+  ]
+}

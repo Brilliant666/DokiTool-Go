@@ -1,0 +1,371 @@
+{
+  "schema": 1,
+  "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "description": "Synthetic deterministic fixed-host Weibo status/TV + anonymous-guest request tapes; no network or credentials.",
+  "cases": [
+    {
+      "id": "status-success",
+      "kind": "status",
+      "target": {
+        "kind": "status",
+        "id": "status-success"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": "{\"idstr\":\"123456\",\"text_raw\":\"正文视频\",\"page_info\":{\"media_info\":{\"mp4_hd_url\":\"https://f.video.weibocdn.com/status.mp4\"}}}"
+        }
+      ]
+    },
+    {
+      "id": "status-no-video",
+      "kind": "status",
+      "target": {
+        "kind": "status",
+        "id": "status-no-video"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": "{\"idstr\":\"10001\",\"page_info\":{\"media_info\":{}}}"
+        }
+      ]
+    },
+    {
+      "id": "status-http-blocked",
+      "kind": "status",
+      "target": {
+        "kind": "status",
+        "id": "abc12"
+      },
+      "responses": [
+        {
+          "status": 403,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": ""
+        }
+      ]
+    },
+    {
+      "id": "status-invalid-json",
+      "kind": "status",
+      "target": {
+        "kind": "status",
+        "id": "badjson"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": "{broken"
+        }
+      ]
+    },
+    {
+      "id": "status-anonymous-initialization",
+      "kind": "status",
+      "target": {
+        "kind": "status",
+        "id": "needGuest"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "<!DOCTYPE html><html><title>Sina Visitor System</title></html>"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/genvisitor",
+          "body": "gen_callback({\"retcode\":20000000,\"data\":{\"tid\":\"synthetic_tid_1\",\"new_tid\":true,\"confidence\":80}})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "cross_domain({\"retcode\":20000000})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": "{\"idstr\":\"222\",\"page_info\":{\"media_info\":{\"mp4_720p_mp4\":\"https://f.video.weibocdn.com/afterguest.mp4\"}}}"
+        }
+      ]
+    },
+    {
+      "id": "status-repeated-visitor",
+      "kind": "status",
+      "target": {
+        "kind": "status",
+        "id": "again"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "<!DOCTYPE html><html><title>Sina Visitor System</title></html>"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/genvisitor",
+          "body": "gen_callback({\"retcode\":20000000,\"data\":{\"tid\":\"synthetic_tid_1\",\"new_tid\":true,\"confidence\":80}})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "cross_domain({\"retcode\":20000000})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "<!DOCTYPE html><html><title>Sina Visitor System</title></html>"
+        }
+      ]
+    },
+    {
+      "id": "status-guest-init-failed",
+      "kind": "status",
+      "target": {
+        "kind": "status",
+        "id": "failGuest"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "<!DOCTYPE html><html><title>Sina Visitor System</title></html>"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/genvisitor",
+          "body": "gen_callback({\"retcode\":500,\"data\":{}})"
+        }
+      ]
+    },
+    {
+      "id": "video-playable-no-mid",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\"}}}"
+        }
+      ]
+    },
+    {
+      "id": "video-status-enrichment",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\",\"mid\":\"888888888888\"}}}"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": "{\"idstr\":\"888888888888\",\"text_raw\":\"正文补充\",\"user\":{\"screen_name\":\"正文作者\",\"idstr\":\"90071992547409932\"},\"page_info\":{\"media_info\":{\"playback_list\":[{\"play_info\":{\"mime\":\"video/mp4\",\"url\":\"https://f.video.weibocdn.com/4k.mp4\",\"label\":\"4K\",\"width\":3840,\"height\":2160,\"bitrate\":9000000}}],\"online_users_number\":0}},\"comments_count\":0,\"attitudes_count\":5,\"reposts_count\":1}"
+        }
+      ]
+    },
+    {
+      "id": "video-optional-metadata-http-error",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\",\"mid\":\"900\"}}}"
+        },
+        {
+          "status": 403,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": ""
+        }
+      ]
+    },
+    {
+      "id": "video-optional-metadata-invalid-json",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\",\"mid\":\"901\"}}}"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": "{invalid"
+        }
+      ]
+    },
+    {
+      "id": "video-invalid-component-code",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":403,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\"}}}"
+        }
+      ]
+    },
+    {
+      "id": "video-no-candidates",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"title\":\"none\",\"mid\":\"902\"}}}"
+        }
+      ]
+    },
+    {
+      "id": "video-invalid-mid-skips-request",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\",\"mid\":\"invalid-mid\"}}}"
+        }
+      ]
+    },
+    {
+      "id": "video-anonymous-status-restricted",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\",\"mid\":\"903\"}}}"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "<!DOCTYPE html><html><title>Sina Visitor System</title></html>"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/genvisitor",
+          "body": "gen_callback({\"retcode\":20000000,\"data\":{\"tid\":\"synthetic_tid_1\",\"new_tid\":true,\"confidence\":80}})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "cross_domain({\"retcode\":20000000})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "<!DOCTYPE html><html><title>Sina Visitor System</title></html>"
+        }
+      ]
+    },
+    {
+      "id": "video-guest-first-then-status",
+      "kind": "video",
+      "target": {
+        "kind": "video",
+        "id": "1234567:1234567890123456"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "<!DOCTYPE html><html><title>Sina Visitor System</title></html>"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/genvisitor",
+          "body": "gen_callback({\"retcode\":20000000,\"data\":{\"tid\":\"synthetic_tid_1\",\"new_tid\":true,\"confidence\":80}})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://passport.weibo.com/visitor/visitor",
+          "body": "cross_domain({\"retcode\":20000000})"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/tv/api/component",
+          "body": "{\"code\":100000,\"data\":{\"Component_Play_Playinfo\":{\"urls\":{\"标清\":\"https://f.video.weibocdn.com/360.mp4?template=640x360\",\"超清\":\"https://f.video.weibocdn.com/1080.mp4?template=1920x1080\"},\"title\":\"TV 标题\",\"author\":\"TV 作者\",\"author_id\":\"9007199254740993\",\"duration_time\":16.75,\"cover_image\":\"https://f.video.weibocdn.com/cover.jpg\",\"mid\":\"904\"}}}"
+        },
+        {
+          "status": 200,
+          "error": false,
+          "url": "https://weibo.com/ajax/statuses/show",
+          "body": "{\"idstr\":\"904\",\"text_raw\":\"来自访客的正文\",\"page_info\":{\"media_info\":{\"mp4_1080p_mp4\":\"https://f.video.weibocdn.com/metadata.mp4\"}}}"
+        }
+      ]
+    }
+  ]
+}

@@ -92,7 +92,9 @@ the unified parser or of any real platform's current availability.
    protocol failures do not. CORS errors, source failures and ambiguous START
    acknowledgements never silently fall back. Blob still buffers the complete file.
 
-`file.ts` owns common URL, media type, filename and network-wait rules. The manager
+`file.ts` handles URLs, format evidence and network waits. Page transports and the Worker
+share the filename rules in `media-format.js` and decoded-byte accounting in `decoded-length.js`.
+The manager
 limits preparation/transfers to two concurrent tasks per page, the Worker also
 limits transfers across tabs to two, and Blob has its stricter memory queue.
 Native transfers leave application control and cannot count toward an observable
@@ -191,6 +193,15 @@ neither message nor fetch events wait for the whole file through `waitUntil`.
   upstream EOF, integrity checks and normal response stream close are required.
   Stream completion means bytes were handed to the browser,
   not independently verified disk persistence.
+- A source's declared file size applies only to that source URL. Fetch can decode
+  a CDN response while CORS hides `Content-Encoding`. In that case the wire
+  `Content-Length` cannot bound the decoded stream. When both the source size
+  and a trustworthy identity length are absent, the attachment omits its length
+  and counts delivered bytes until EOF. A reader error still fails the task.
+- A supported format established by the selected variant can supply the safe
+  filename suffix and attachment MIME. A probed QuickTime file keeps its MOV
+  name if the CDN serves it as `video/mp4`. Without format evidence the
+  transport falls back to the observed media type.
 - Manual opening of a source is available only after confirmed failure,
   cancellation or loss of the original task. It is absent from active/uncertain
   cards; a stale click cannot cancel the running transfer or create a second one.
@@ -235,9 +246,26 @@ user has manually folded it; that preference is stored locally when available.
 After all tasks end, the panel folds after five seconds without pointer hover or
 keyboard focus. Automatic folding does not overwrite the manual preference.
 
+### Explicit link refresh
+
+Owned, settled single-file failures can offer **刷新链接并重试** in the details.
+Unlike ordinary retry, this user action calls the original item's resolver once,
+even when the old URL has no expiry timestamp. It retains the pinned item,
+variant and source IDs; a missing selection fails rather than borrowing a new
+default. The existing 30-second preparation deadline, cancellation and Worker
+acknowledgement protect the old/new attempt boundary. This does not diagnose all
+403 responses as expired and never starts an automatic refresh loop.
+
+Only in-memory tasks with an identified file source and resolver are eligible.
+Restored URL-only history, archives, Live pairs, active/unknown, completed or
+cancelled tasks do not gain a guessed recovery path. Fresh source size/format
+metadata replaces the prior attempt's data; this is a fresh download, not a byte
+resume. Existing transport fallback among the same variant's sources is unchanged.
+See [implementation evidence and remaining identity limitation](go-migration/refresh-recovery.md).
+
 ## Deployment
 
-Publish `frontend/dist/downloads/worker.js`, `task-store.js` and `bridge.html` along with the build.
+Publish the entire `frontend/dist/downloads/` directory along with its frontend build. The module Worker imports its task store, decoded-length and media-format helpers from that directory.
 Verify the existing `/downloads/*` static-file rules against
 `ops/examples/snap.caddy`, adding the block only if missing: use revalidation
 (`Cache-Control: no-cache`), correct JavaScript MIME, and **404 for missing files**.

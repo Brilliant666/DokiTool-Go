@@ -1,0 +1,514 @@
+{
+  "date": "2026-11-01",
+  "timezone": "Asia/Shanghai",
+  "scope": "Development loopback formal APIs, separately observed stages, frozen-PHP offline replay, real Edge UI. No deployment.",
+  "initial_go": "115049540348afc197e30516fa886f8489e61b76",
+  "tested_product": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+  "go": "1.27.3",
+  "modules": {
+    "tls-client": "v1.18.0",
+    "fhttp": "v0.7.3"
+  },
+  "binary_sha256": {
+    "1150495": "21864152771891aad89d1110c83296eaaee3cce71e9f0304b0e560d70e20b75b",
+    "c3be650": "6bebe57034dc51d8bb849607ea2c6534af1d7cdf490b6e669e70ec7d3370ca3a"
+  },
+  "historical_probe": "Third-party report. Probe artifacts and independent original-file hash unavailable.",
+  "formal_http": [
+    {
+      "sample": "XHS-IMAGE-A",
+      "build": "115049540348afc197e30516fa886f8489e61b76",
+      "transport": "chrome131",
+      "operation": "parse",
+      "start": "2026-11-01T12:16:50.816949+08:00",
+      "end": "2026-11-01T12:16:54.082845+08:00",
+      "http": 404,
+      "code": "NO_MEDIA",
+      "item_types": [],
+      "variant_counts": [],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-IMAGE-A",
+      "build": "115049540348afc197e30516fa886f8489e61b76",
+      "transport": "standard",
+      "operation": "parse",
+      "start": "2026-11-01T12:16:50.817983+08:00",
+      "end": "2026-11-01T12:16:53.928781+08:00",
+      "http": 404,
+      "code": "NO_MEDIA",
+      "item_types": [],
+      "variant_counts": [],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-LIVE-A",
+      "build": "115049540348afc197e30516fa886f8489e61b76",
+      "transport": "chrome131",
+      "operation": "parse",
+      "start": "2026-11-01T12:15:45.834920+08:00",
+      "end": "2026-11-01T12:15:48.908227+08:00",
+      "http": 404,
+      "code": "NO_MEDIA",
+      "item_types": [],
+      "variant_counts": [],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-VIDEO-A",
+      "build": "115049540348afc197e30516fa886f8489e61b76",
+      "transport": "chrome131",
+      "operation": "parse",
+      "start": "2026-11-01T12:16:58.144649+08:00",
+      "end": "2026-11-01T12:17:01.526908+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "video"
+      ],
+      "variant_counts": [
+        2
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-VIDEO-A",
+      "build": "115049540348afc197e30516fa886f8489e61b76",
+      "transport": "chrome131",
+      "operation": "resolve",
+      "start": "2026-11-01T12:17:20.124301+08:00",
+      "end": "2026-11-01T12:17:23.370532+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "video"
+      ],
+      "variant_counts": [
+        2
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-VIDEO-A",
+      "build": "115049540348afc197e30516fa886f8489e61b76",
+      "transport": "standard",
+      "operation": "parse",
+      "start": "2026-11-01T12:16:58.136640+08:00",
+      "end": "2026-11-01T12:17:01.465543+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "video"
+      ],
+      "variant_counts": [
+        1
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-IMAGE-A",
+      "build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+      "transport": "chrome131",
+      "operation": "parse",
+      "start": "2026-11-01T12:23:57.509399+08:00",
+      "end": "2026-11-01T12:24:00.524538+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "image",
+        "image",
+        "image",
+        "image"
+      ],
+      "variant_counts": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-IMAGE-A",
+      "build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+      "transport": "chrome131",
+      "operation": "resolve",
+      "start": "2026-11-01T12:24:18.817714+08:00",
+      "end": "2026-11-01T12:24:23.802796+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "image",
+        "image",
+        "image",
+        "image"
+      ],
+      "variant_counts": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-IMAGE-A",
+      "build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+      "transport": "standard",
+      "operation": "parse",
+      "start": "2026-11-01T12:23:57.502744+08:00",
+      "end": "2026-11-01T12:24:00.755807+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "image",
+        "image",
+        "image",
+        "image"
+      ],
+      "variant_counts": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-LIVE-A",
+      "build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+      "transport": "chrome131",
+      "operation": "parse",
+      "start": "2026-11-01T12:24:05.694990+08:00",
+      "end": "2026-11-01T12:24:09.343692+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "live_photo",
+        "live_photo",
+        "live_photo",
+        "live_photo",
+        "live_photo",
+        "live_photo"
+      ],
+      "variant_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-LIVE-A",
+      "build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+      "transport": "chrome131",
+      "operation": "resolve",
+      "start": "2026-11-01T12:24:18.818769+08:00",
+      "end": "2026-11-01T12:24:24.059460+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "live_photo",
+        "live_photo",
+        "live_photo",
+        "live_photo",
+        "live_photo",
+        "live_photo"
+      ],
+      "variant_counts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-VIDEO-A",
+      "build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+      "transport": "chrome131",
+      "operation": "parse",
+      "start": "2026-11-01T12:24:05.694990+08:00",
+      "end": "2026-11-01T12:24:10.459501+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "video"
+      ],
+      "variant_counts": [
+        2
+      ],
+      "schema_and_semantics": true
+    },
+    {
+      "sample": "XHS-VIDEO-A",
+      "build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec",
+      "transport": "chrome131",
+      "operation": "resolve",
+      "start": "2026-11-01T12:24:18.810324+08:00",
+      "end": "2026-11-01T12:24:22.116590+08:00",
+      "http": 200,
+      "code": "OK",
+      "item_types": [
+        "video"
+      ],
+      "variant_counts": [
+        2
+      ],
+      "schema_and_semantics": true
+    }
+  ],
+  "diagnostic_stages_separate_from_formal_http": {
+    "chrome131/XHS-IMAGE-A": [
+      {
+        "host": "www.rednote.com",
+        "http": 301,
+        "type": "",
+        "target_note": false,
+        "origin_key_present": false,
+        "bytes": 0,
+        "transport_error": false
+      },
+      {
+        "host": "www.rednote.com",
+        "http": 200,
+        "type": "normal",
+        "target_note": true,
+        "origin_key_present": false,
+        "bytes": 352026,
+        "transport_error": false
+      }
+    ],
+    "chrome131/XHS-LIVE-A": [
+      {
+        "host": "www.rednote.com",
+        "http": 301,
+        "type": "",
+        "target_note": false,
+        "origin_key_present": false,
+        "bytes": 0,
+        "transport_error": false
+      },
+      {
+        "host": "www.rednote.com",
+        "http": 200,
+        "type": "normal",
+        "target_note": true,
+        "origin_key_present": false,
+        "bytes": 360171,
+        "transport_error": false
+      }
+    ],
+    "chrome131/XHS-VIDEO-A": [
+      {
+        "host": "www.rednote.com",
+        "http": 301,
+        "type": "",
+        "target_note": false,
+        "origin_key_present": false,
+        "bytes": 0,
+        "transport_error": false
+      },
+      {
+        "host": "www.rednote.com",
+        "http": 200,
+        "type": "video",
+        "target_note": true,
+        "origin_key_present": true,
+        "bytes": 348329,
+        "transport_error": false
+      }
+    ],
+    "standard/XHS-VIDEO-A": [
+      {
+        "host": "www.rednote.com",
+        "http": 302,
+        "type": "",
+        "target_note": false,
+        "origin_key_present": false,
+        "bytes": 0,
+        "transport_error": false
+      },
+      {
+        "host": "www.rednote.com",
+        "http": 200,
+        "type": "",
+        "target_note": false,
+        "origin_key_present": false,
+        "bytes": 236591,
+        "transport_error": false
+      },
+      {
+        "host": "www.xiaohongshu.com",
+        "http": 200,
+        "type": "video",
+        "target_note": true,
+        "origin_key_present": false,
+        "bytes": 66563,
+        "transport_error": false
+      }
+    ]
+  },
+  "image": {
+    "parse_and_resolve": "PASS",
+    "order_and_cover": "PASS",
+    "returned_sources": [
+      {
+        "http": 206,
+        "bytes_read": 2048,
+        "format": "JPEG",
+        "width": 1080,
+        "height": 1440
+      },
+      {
+        "http": 206,
+        "bytes_read": 2048,
+        "format": "JPEG",
+        "width": 1080,
+        "height": 1920
+      },
+      {
+        "http": 206,
+        "bytes_read": 2048,
+        "format": "JPEG",
+        "width": 1080,
+        "height": 1440
+      },
+      {
+        "http": 206,
+        "bytes_read": 2048,
+        "format": "JPEG",
+        "width": 1080,
+        "height": 1622
+      }
+    ]
+  },
+  "video": {
+    "standard_initial": "720p H.264 stream",
+    "chrome131": "720p H.264 stream and probed original file default",
+    "origin_probe": {
+      "proof": "Captured bounded origin header and moov only; no full-file transfer",
+      "major_brand": "qt  ",
+      "http_mime": "video/mp4",
+      "original_bytes": 70759716,
+      "probe_calls": 3,
+      "probe_read_bytes": 86520,
+      "tracks": [
+        {
+          "role": "vide",
+          "fourcc": "hvc1",
+          "width": 2160,
+          "height": 3840,
+          "fps": "60",
+          "frames": 780
+        },
+        {
+          "role": "soun",
+          "fourcc": "mp4a",
+          "sample_entry_channels": 2,
+          "has_esds": true,
+          "mp4a_declared": true
+        }
+      ]
+    }
+  },
+  "resolve_identity": {
+    "XHS-IMAGE-A": {
+      "same_item_order": true,
+      "requested_item_returned": true,
+      "same_variant_order": true,
+      "variant_count": 4,
+      "source_count": 4,
+      "retained_source_paths": 4,
+      "byte_identical_urls": 0
+    },
+    "XHS-VIDEO-A": {
+      "same_item_order": true,
+      "requested_item_returned": true,
+      "same_variant_order": true,
+      "variant_count": 2,
+      "source_count": 7,
+      "retained_source_paths": 7,
+      "byte_identical_urls": 7
+    },
+    "XHS-LIVE-A": {
+      "same_item_order": true,
+      "requested_item_returned": true,
+      "same_variant_order": true,
+      "variant_count": 6,
+      "source_count": 24,
+      "retained_source_paths": 24,
+      "byte_identical_urls": 24
+    }
+  },
+  "same_bytes": {
+    "reference_php": "25beaee107f8c1a208ced9deb3c637068445e316 / 8.3.6",
+    "original_php_video_vs_final_go": "identical legacy, normal, debug",
+    "original_php_on_image_and_live": "NO_MEDIA",
+    "final_go_vs_media_facts_and_projected_php": "0 differences across legacy, normal, debug; projected reference is not unmodified PHP on the same input",
+    "old_fixture_oracles_changed": false
+  },
+  "browser": {
+    "product": "Edge",
+    "image_display": "PASS",
+    "image_file_save": {
+      "result": "FAIL",
+      "saved_complete_file": false,
+      "error": "下载长度与来源声明不一致",
+      "committed_bytes": 133563,
+      "worker_declared_total": 156177,
+      "wire_content_encoding": "not captured"
+    },
+    "720p_play_seconds": 2.155361,
+    "original_play_seconds": 0.606175,
+    "explicit_selection": "PASS",
+    "original_save": {
+      "result": "PASS",
+      "attempts": 1,
+      "actual_size": 70759716,
+      "hash_locally_computed": "d8a6bc32058cea5687092d45770a729c22aab5ed847fb0a4599623aba94e837b",
+      "trusted_reference_sha256": null,
+      "actual_suffix": ".mp4",
+      "api_extension": "mov",
+      "filename_matches_api": false,
+      "worker": "downloads-20261031.2",
+      "terminal": "completed",
+      "transport": "browser_streaming",
+      "cdn_route": "qn",
+      "complete_decode_exit": 0,
+      "audio": "AAC LC stereo"
+    },
+    "live": {
+      "result": "PASS for six pairs, stills and one motion preview",
+      "default": null,
+      "default_reason": "processing_required",
+      "preview_width": 1080,
+      "preview_height": 1920,
+      "play_seconds": 0.7807,
+      "files_saved": 0
+    },
+    "playback_build": "115049540348afc197e30516fa886f8489e61b76",
+    "gallery_original_save_and_live_build": "c3be6503c7ea14ce14aa1a03d317b72815e436ec"
+  },
+  "remaining": [
+    "Single-image save length mismatch (actual wire encoding unknown)",
+    "Browser MOV filename .mp4 vs public .mov",
+    "Other platforms cross-call identity and production cutover remain separate"
+  ],
+  "private_evidence_index": {
+    "root": ".local/xhs-pr5-online/private/",
+    "index": "RESULT.md",
+    "initial_http": "formal/",
+    "fixed_http": "formal-c3be650/",
+    "stage_captures": "page-observation/",
+    "same_byte_replay": "after-image-fix-replay/sanitized-summary.json",
+    "formal_images": "image-shape/formal-image-range.json",
+    "browser": "browser/pr5-browser-receipt.json",
+    "complete_file_receipt": "browser/original-saved.private.json"
+  }
+}

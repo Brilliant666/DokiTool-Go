@@ -1,0 +1,914 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "fixed_clock": {
+    "rfc3339": "2026-10-30T12:00:00Z",
+    "unix_seconds": 1793361600
+  },
+  "cases": [
+    {
+      "id": "zuiyou/video/img-order-map-identity",
+      "purpose": "imgs order overrides reversed videos map; video map keys remain stable item identity",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/video/single",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/video/reversed-imgs",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}},{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/identity/first-missing",
+      "purpose": "Removing the first media cannot rename the surviving second item",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/identity/first-invalid",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/resolve/second-survives",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "resolve",
+        "item_id": "video-4fc82b26aecb47d2868c4efb",
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/resolve/selected-missing",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "resolve",
+        "item_id": "video-4fc82b26aecb47d2868c4efb",
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/resolve/second-original",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "resolve",
+        "item_id": "video-4fc82b26aecb47d2868c4efb",
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/resolve/unknown",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "resolve",
+        "item_id": "video-missing",
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/video/unlisted-map-entry",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"78\":{\"url\":\"https://media.example/zuiyou-third.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/video/duplicate-img-id",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}},{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/identity/numeric-img-id",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":42,\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":11,\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/identity/list-video-keys",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":1,\"urls\":{\"origin\":{\"urls\":[\"https://images.example/1-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/1-preview.webp\"]}}},{\"id\":0,\"urls\":{\"origin\":{\"urls\":[\"https://images.example/0-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/0-preview.webp\"]}}}],\"videos\":[{\"url\":\"https://media.example/zuiyou-zero.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},{\"url\":\"https://media.example/zuiyou-one.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}]}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/exact-large-key",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"9007199254740993\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/9007199254740993-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/9007199254740993-preview.webp\"]}}}],\"videos\":{\"9007199254740993\":{\"url\":\"https://media.example/zuiyou-big-key.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/numeric-check-480",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"00042\",\"member\":{\"name\":\"00123\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":\"1920\",\"height\":\"1080\",\"size\":\"5000000\",\"fps\":\"29.97\",\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/video/multiple-sources",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\",\"sources\":[\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"https://media.example/zuiyou-alternate.mp4\"]}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/video/unsupported-m3u8",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/adaptive.m3u8\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/video/unsupported-mpd",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/adaptive.mpd\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/image/original-album",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"图集\",\"member\":{\"name\":\"图片作者\"},\"imgs\":[{\"id\":\"a\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/a-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/a-preview.webp\"]}}},{\"id\":\"b\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/b-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/b-preview.webp\"]}}}]}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/image/single",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"imgs\":[{\"id\":\"only\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/only-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/only-preview.webp\"]}}}]}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/resolve/image",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "resolve",
+        "item_id": "image-2",
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"图集\",\"member\":{\"name\":\"图片作者\"},\"imgs\":[{\"id\":\"a\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/a-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/a-preview.webp\"]}}},{\"id\":\"b\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/b-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/b-preview.webp\"]}}}]}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/image/fallback-order",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"imgs\":[{\"id\":\"large\",\"urls\":{\"large\":{\"urls\":[\"https://images.example/large.jpg\"]}}},{\"id\":\"fallback\",\"urls\":{\"thumb\":{\"urls\":[\"https://images.example/first.jpg\"]},\"other\":{\"urls\":[\"https://images.example/second.jpg\"]}}}]}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/image/duplicate-and-invalid",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"imgs\":[{\"id\":\"a\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/a-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/a-preview.webp\"]}}},{\"id\":\"a\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/a-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/a-preview.webp\"]}}},{\"urls\":{\"origin\":{\"urls\":[\"javascript:bad\"]}}}]}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/image/empty-origin-no-fallback",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"imgs\":[{\"id\":\"bad\",\"urls\":{\"origin\":{},\"large\":{\"urls\":[\"https://images.example/not-selected.jpg\"]}}},{\"id\":\"good\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/good-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/good-preview.webp\"]}}}]}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/media/missing-video-not-image-success",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/media/empty-post",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/media/no-media",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"no media\"}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/media/scalar-post",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":\"invalid\"}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/api/invalid-json",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{broken"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/api/json-scalar",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "\"invalid\""
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/api/transport",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 0,
+            "body": "",
+            "error": "Synthetic transport failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/api/http-status-not-parser-code",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 500,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/query-pid",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/post?pid=123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/query-final-scalar",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/post?pid=1&pid=123456789",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/query-array-path-fallback",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/detail/123456789?pid[]=987654321",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/unanchored-detail-path",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/a/detail/123456789suffix",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/nineteen-digit-overflow",
+      "purpose": "",
+      "input": {
+        "url": "https://www.izuiyou.com/post?pid=9223372036854775808",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}},{\"id\":\"11\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/11-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/11-preview.webp\"]}}}],\"videos\":{\"11\":{\"url\":\"https://media.example/zuiyou-second.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"},\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/invalid-pid",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/post?pid=-1",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "zuiyou/entry/leading-zero",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/post?pid=0123456",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "zuiyou/entry/nondecimal",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/post?pid=1e6",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": []
+      }
+    },
+    {
+      "id": "zuiyou/short/absolute",
+      "purpose": "Location is used only for pid extraction; the only following request is the fixed detail API",
+      "input": {
+        "url": "https://share.izuiyou.com/synthetic-short",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.izuiyou.com/synthetic-short",
+            "method": "HEAD",
+            "follow_redirects": false,
+            "status": 302,
+            "body": "HTTP/1.1 302 Synthetic\r\nLocation: https://share.izuiyou.com/post?pid=123456789\r\n\r\n"
+          },
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/short/relative",
+      "purpose": "Location is used only for pid extraction; the only following request is the fixed detail API",
+      "input": {
+        "url": "https://share.izuiyou.com/synthetic-short",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.izuiyou.com/synthetic-short",
+            "method": "HEAD",
+            "follow_redirects": false,
+            "status": 302,
+            "body": "HTTP/1.1 302 Synthetic\r\nLocation: /post?pid=123456789\r\n\r\n"
+          },
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/short/foreign-location-parameter-only",
+      "purpose": "Location is used only for pid extraction; the only following request is the fixed detail API",
+      "input": {
+        "url": "https://share.izuiyou.com/synthetic-short",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.izuiyou.com/synthetic-short",
+            "method": "HEAD",
+            "follow_redirects": false,
+            "status": 302,
+            "body": "HTTP/1.1 302 Synthetic\r\nLocation: https://example.invalid/post?pid=123456789\r\n\r\n"
+          },
+          {
+            "url": "https://share.xiaochuankeji.cn/planck/share/post/detail_h5",
+            "method": "POST",
+            "follow_redirects": true,
+            "status": 200,
+            "body": "{\"data\":{\"post\":{\"content\":\"最右产品迁移 A+B 中文😀\",\"member\":{\"name\":\"合成作者\",\"avatar_urls\":{\"origin\":{\"urls\":[\"https://images.example/zuiyou-avatar.jpg\"]}}},\"imgs\":[{\"id\":\"42\",\"urls\":{\"origin\":{\"urls\":[\"https://images.example/42-original.jpg\"]},\"540_webp\":{\"urls\":[\"https://images.example/42-preview.webp\"]}}}],\"videos\":{\"42\":{\"url\":\"https://media.example/zuiyou-first.mp4?Expires=4102444800&token=synthetic&keep=a%2Bb\",\"width\":1920,\"height\":1080,\"size\":5000000,\"fps\":30,\"codec\":\"h264\"}}}}}"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/short/does-not-follow-second-hop",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/synthetic-short",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.izuiyou.com/synthetic-short",
+            "method": "HEAD",
+            "follow_redirects": false,
+            "status": 302,
+            "body": "HTTP/1.1 302 Synthetic\r\nLocation: https://share.izuiyou.com/another-short\r\n\r\n"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/short/nonredirect",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/synthetic-short",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.izuiyou.com/synthetic-short",
+            "method": "HEAD",
+            "follow_redirects": false,
+            "status": 200,
+            "body": "HTTP/1.1 200 Synthetic\r\n\r\n"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/short/transport",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/synthetic-short",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.izuiyou.com/synthetic-short",
+            "method": "HEAD",
+            "follow_redirects": false,
+            "status": 0,
+            "body": "HTTP/1.1 0 Synthetic\r\n\r\n",
+            "error": "Synthetic transport failure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/zero-pid-needs-share-lookup",
+      "purpose": "",
+      "input": {
+        "url": "https://share.izuiyou.com/synthetic-short?pid=0",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": [
+          {
+            "url": "https://share.izuiyou.com/synthetic-short?pid=0",
+            "method": "HEAD",
+            "follow_redirects": false,
+            "status": 200,
+            "body": "HTTP/1.1 200 Synthetic\r\n\r\n"
+          }
+        ]
+      }
+    },
+    {
+      "id": "zuiyou/entry/invalid-url",
+      "purpose": "",
+      "input": {
+        "url": "not a URL",
+        "now": 1793361600,
+        "route": "parse",
+        "item_id": null,
+        "http_responses": []
+      }
+    }
+  ]
+}

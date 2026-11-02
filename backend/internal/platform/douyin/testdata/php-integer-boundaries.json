@@ -1,0 +1,3204 @@
+{
+  "format_version": 1,
+  "baseline_commit": "665bd55134982b9fe107aa1cd00373ba8da8ff3c",
+  "baseline_tree": "93744d4d718c3299f82640d2888e93252106db70",
+  "php_version": "8.3.6",
+  "fixed_clock": 1793361600,
+  "parse_case_count": 13,
+  "public_envelope_count": 26,
+  "direct_case_count": 12,
+  "evidence_scope": "Synthetic inputs executed through unmodified archived PHP. Public cases use real Parse, formatter, adapter and normal/debug policy with native network functions disabled. Direct cases reflect actual private videoMetadata/audioCandidates; no Go-derived expectations.",
+  "source_sha256": {
+    "backend/api/douyin/DouyinParser.php": "76bbdf4fea291919d570d0822b229d008e279ed6e1e214c259ac9f570d3edbad",
+    "backend/lib/runtime.php": "0c90dca5e4e90498e904a69bb891625c7f66cbcf0723c15fedd72524d8134358",
+    "backend/lib/douyin-media-probe.php": "cdae68394510fd0cd769688cb953cf6a99880a51c7be904c1765c051e715e0c0",
+    "backend/lib/media-probe.php": "bc63a07c910e312c7a6d57bb3b41ec758ecd13a999cf2a386849bbf8f88beb42",
+    "backend/lib/weibo-media.php": "5530988ce434497251aef118af2dc0833b45640da84ad32450657aa7b86adb18",
+    "backend/lib/media-adapters.php": "0257081ef5f4fe40bf1f288145405a56e05dfff6c887d2e73b117c6f27ea27db",
+    "backend/lib/media-contract.php": "39e2e218917ad2ddc329cfbd2d7b4e6130e240bced8e4af6526656ad6b243817",
+    "backend/lib/media-metadata.php": "d96a408e91029580085ef530cb99511887e165dd11063570dbb75fee58a3483e",
+    "backend/lib/media-policy.php": "ccc523c6c8e53c4f8af18f51c2204a4ba14c124ed9aeb86448dafa7cf30840d9",
+    "backend/lib/platforms.php": "5b82407a1fb6a1b7a849154fd65a44f030b2298466561dc289b60b182c359074",
+    "backend/config/platforms.json": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487",
+    "docs/schema/unified-v1/unified-v1.schema.json": "bde334422f63488da67b8a5a40f3081f143e031f9849f2df282a175a8df6165a"
+  },
+  "producer_sha256": {
+    "backend/internal/platform/douyin/testdata/produce_integer.py": "def5ce4cfcf3b6c313bd506503e19f07df72de31b69ec23cf4869ee62c3abdc0",
+    "scripts/go-migration/produce-douyin.php": "77586a5acdc945e4ca79d1f76f6854b916c2a2eb65bf240d891f3605e1a1e0a7"
+  },
+  "cases": [
+    {
+      "id": "statistics/9007199254740993/integer",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "digg_count": 9007199254740993,
+            "play_count": 0,
+            "share_count": 7.9,
+            "comment_count": "0"
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"digg_count\":9007199254740993,\"play_count\":0,\"share_count\":7.9,\"comment_count\":\"0\"},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 0,
+          "size_label": "",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "digg_count": 9007199254740993,
+              "play_count": 0,
+              "share_count": 7,
+              "comment_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 0,
+            "size_label": "",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "digg_count": 9007199254740993,
+                "play_count": 0,
+                "share_count": 7,
+                "comment_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9007199254740993
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9007199254740993
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "statistics/9007199254740993/string",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "digg_count": "9007199254740993",
+            "play_count": 0,
+            "share_count": 7.9,
+            "comment_count": "0"
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"digg_count\":\"9007199254740993\",\"play_count\":0,\"share_count\":7.9,\"comment_count\":\"0\"},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 0,
+          "size_label": "",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "digg_count": 9007199254740993,
+              "play_count": 0,
+              "share_count": 7,
+              "comment_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 0,
+            "size_label": "",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "digg_count": 9007199254740993,
+                "play_count": 0,
+                "share_count": 7,
+                "comment_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9007199254740993
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9007199254740993
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "statistics/9223372036854775800/integer",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "digg_count": 9223372036854775800,
+            "play_count": 0,
+            "share_count": 7.9,
+            "comment_count": "0"
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"digg_count\":9223372036854775800,\"play_count\":0,\"share_count\":7.9,\"comment_count\":\"0\"},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 0,
+          "size_label": "",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "digg_count": 9223372036854775800,
+              "play_count": 0,
+              "share_count": 7,
+              "comment_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 0,
+            "size_label": "",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "digg_count": 9223372036854775800,
+                "play_count": 0,
+                "share_count": 7,
+                "comment_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9223372036854775800
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9223372036854775800
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "statistics/9223372036854775800/string",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "digg_count": "9223372036854775800",
+            "play_count": 0,
+            "share_count": 7.9,
+            "comment_count": "0"
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"digg_count\":\"9223372036854775800\",\"play_count\":0,\"share_count\":7.9,\"comment_count\":\"0\"},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 0,
+          "size_label": "",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "digg_count": 9223372036854775800,
+              "play_count": 0,
+              "share_count": 7,
+              "comment_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 0,
+            "size_label": "",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "digg_count": 9223372036854775800,
+                "play_count": 0,
+                "share_count": 7,
+                "comment_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9223372036854775800
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              },
+              "likes": {
+                "value": 9223372036854775800
+              },
+              "comments": {
+                "value": 0
+              },
+              "shares": {
+                "value": 7
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "source-size/9007199254740993/integer",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ],
+              "data_size": 9007199254740993
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"],\"data_size\":9007199254740993}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 9007199254740993,
+          "size_label": "8192TB",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "play_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 9007199254740993,
+            "size_label": "8192TB",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "play_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9007199254740993,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9007199254740993,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "source-size/9007199254740993/string",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ],
+              "data_size": "9007199254740993"
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"],\"data_size\":\"9007199254740993\"}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 9007199254740993,
+          "size_label": "8192TB",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "play_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 9007199254740993,
+            "size_label": "8192TB",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "play_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9007199254740993,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9007199254740993,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "source-size/9223372036854775800/integer",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ],
+              "data_size": 9223372036854775800
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"],\"data_size\":9223372036854775800}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 9223372036854775800,
+          "size_label": "8388608TB",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "play_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 9223372036854775800,
+            "size_label": "8388608TB",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "play_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9223372036854775800,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9223372036854775800,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "source-size/9223372036854775800/string",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ],
+              "data_size": "9223372036854775800"
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"],\"data_size\":\"9223372036854775800\"}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 9223372036854775800,
+          "size_label": "8388608TB",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "play_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 9223372036854775800,
+            "size_label": "8388608TB",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "play_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9223372036854775800,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "size_bytes": 9223372036854775800,
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "representation-bitrate/integer",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            },
+            "bit_rate": [
+              {
+                "bit_rate": 9007199254740993,
+                "play_addr": {
+                  "width": 1920,
+                  "height": 1080,
+                  "url_list": [
+                    "https://v5-test.douyinvod.com/integer.mp4"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]},\"bit_rate\":[{\"bit_rate\":9007199254740993,\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}]}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 0,
+          "size_label": "",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "play_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "bit_rate": 9007199254740993,
+          "private_representation_id": "79ec56e124f61f69ec1ee26d92545ba2df5561b90b854e5d69af8da61d12403b",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 0,
+            "size_label": "",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "play_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "bit_rate": 9007199254740993,
+            "private_representation_id": "79ec56e124f61f69ec1ee26d92545ba2df5561b90b854e5d69af8da61d12403b",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "bitrate_bps": 9007199254740992,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "bitrate_bps": 9007199254740992,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "representation-bitrate/string",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            },
+            "bit_rate": [
+              {
+                "bit_rate": "9007199254740993",
+                "play_addr": {
+                  "width": 1920,
+                  "height": 1080,
+                  "url_list": [
+                    "https://v5-test.douyinvod.com/integer.mp4"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":0,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]},\"bit_rate\":[{\"bit_rate\":\"9007199254740993\",\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}]}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 0,
+          "size_label": "",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "play_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "bit_rate": 9007199254740993,
+          "private_representation_id": "79ec56e124f61f69ec1ee26d92545ba2df5561b90b854e5d69af8da61d12403b",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 0,
+            "size_label": "",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "play_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "bit_rate": 9007199254740993,
+            "private_representation_id": "79ec56e124f61f69ec1ee26d92545ba2df5561b90b854e5d69af8da61d12403b",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "bitrate_bps": 9007199254740992,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "bitrate_bps": 9007199254740992,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "status/integer-9223372036854775800",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":9223372036854775800,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": null,
+        "legacy_response": {
+          "code": 500,
+          "msg": "详情接口 status_code=9223372036854775800",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "详情接口 status_code=9223372036854775800",
+            "retryable": true
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "详情接口 status_code=9223372036854775800",
+            "retryable": true
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "status/string-9223372036854775800",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":\"9223372036854775800\",\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": null,
+        "legacy_response": {
+          "code": 500,
+          "msg": "详情接口 status_code=9223372036854775800",
+          "data": []
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "详情接口 status_code=9223372036854775800",
+            "retryable": true
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "UPSTREAM_UNAVAILABLE",
+          "error": {
+            "code": "UPSTREAM_UNAVAILABLE",
+            "message": "详情接口 status_code=9223372036854775800",
+            "retryable": true
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    },
+    {
+      "id": "status/integer-18446744073709551616",
+      "scenario": "Direct PHP integer cast is preserved before adapter normalization",
+      "input": {
+        "url": "https://www.douyin.com/video/7628438784602389247",
+        "now": 1793361600,
+        "detail": {
+          "aweme_id": "7628438784602389247",
+          "desc": "PHP integer boundary fixture",
+          "statistics": {
+            "play_count": 0
+          },
+          "video": {
+            "play_addr": {
+              "width": 1920,
+              "height": 1080,
+              "url_list": [
+                "https://v5-test.douyinvod.com/integer.mp4"
+              ]
+            }
+          }
+        },
+        "http_responses": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "follow_redirects": true,
+            "body": "{\"status_code\":18446744073709551616,\"aweme_detail\":{\"aweme_id\":\"7628438784602389247\",\"desc\":\"PHP integer boundary fixture\",\"statistics\":{\"play_count\":0},\"video\":{\"play_addr\":{\"width\":1920,\"height\":1080,\"url_list\":[\"https://v5-test.douyinvod.com/integer.mp4\"]}}}}"
+          }
+        ],
+        "probe_results": []
+      },
+      "expected": {
+        "formatter": {
+          "type": "video",
+          "title": "PHP integer boundary fixture",
+          "desc": "PHP integer boundary fixture",
+          "author": {
+            "name": "",
+            "id": "",
+            "avatar": ""
+          },
+          "cover": "",
+          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+          "quality": "1080p",
+          "duration": null,
+          "size": 0,
+          "size_label": "",
+          "create_time": 0,
+          "publish_time": "",
+          "video_backup": [],
+          "images": [],
+          "live_photo": [],
+          "music": {
+            "title": "",
+            "author": "",
+            "url": "",
+            "cover": ""
+          },
+          "extra": {
+            "statistics": {
+              "play_count": 0
+            }
+          },
+          "width": 1920,
+          "height": 1080,
+          "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+          "private_audio_candidates": [],
+          "video_id": 7628438784602389247
+        },
+        "legacy_response": {
+          "code": 200,
+          "msg": "解析成功",
+          "data": {
+            "type": "video",
+            "title": "PHP integer boundary fixture",
+            "desc": "PHP integer boundary fixture",
+            "author": {
+              "name": "",
+              "id": "",
+              "avatar": ""
+            },
+            "cover": "",
+            "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+            "quality": "1080p",
+            "duration": null,
+            "size": 0,
+            "size_label": "",
+            "create_time": 0,
+            "publish_time": "",
+            "video_backup": [],
+            "images": [],
+            "live_photo": [],
+            "music": {
+              "title": "",
+              "author": "",
+              "url": "",
+              "cover": ""
+            },
+            "extra": {
+              "statistics": {
+                "play_count": 0
+              }
+            },
+            "width": 1920,
+            "height": 1080,
+            "private_representation_id": "0684799469657ccdb6e09f8a74e1aefa07f52e89785c1c133403175d1fda8dd4",
+            "private_audio_candidates": [],
+            "video_id": 7628438784602389247
+          }
+        },
+        "normal": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "debug": {
+          "schema_version": "1.0",
+          "code": "OK",
+          "data": {
+            "platform": "douyin",
+            "source_url": "https://www.douyin.com/video/7628438784602389247",
+            "items": [
+              {
+                "id": "video",
+                "type": "video",
+                "default": {
+                  "variant_id": "v-6d1c937cc612e9fdd266cb4b",
+                  "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                  "source_id": "s-2e845e71508ca81d08c783e7"
+                },
+                "variants": [
+                  {
+                    "delivery": {
+                      "kind": "file",
+                      "sources": [
+                        {
+                          "url": "https://v5-test.douyinvod.com/integer.mp4?mime_type=video_mp4",
+                          "id": "s-2e845e71508ca81d08c783e7"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "width": 1920,
+                      "height": 1080,
+                      "evidence": "upstream"
+                    },
+                    "label": "1080p",
+                    "id": "v-6d1c937cc612e9fdd266cb4b"
+                  }
+                ],
+                "resolve_url": "/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&item_id=video&debug=1"
+              }
+            ],
+            "refresh_url": "/api/parse?schema_version=1.0&url=https%3A%2F%2Fwww.douyin.com%2Fvideo%2F7628438784602389247&debug=1",
+            "title": "PHP integer boundary fixture",
+            "description": "PHP integer boundary fixture",
+            "statistics": {
+              "plays": {
+                "value": 0,
+                "state": "unverified"
+              }
+            },
+            "generated_at": "2026-10-30T12:00:00Z"
+          }
+        },
+        "http_requests": [
+          {
+            "method": "GET",
+            "url": "https://api.amemv.com/aweme/v1/aweme/detail/?aweme_id=7628438784602389247&aid=6383&device_platform=web&version_code=190500&version_name=19.5.0",
+            "headers": {
+              "user-agent": "Mozilla/5.0 (Linux; Android 13; 2210132C Build/TKQ1.220829.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+              "accept": "application/json, text/plain, */*",
+              "accept-encoding": "gzip,deflate"
+            },
+            "follow_redirects": true,
+            "transport": "curl"
+          }
+        ],
+        "probe_requests": []
+      }
+    }
+  ],
+  "direct_cases": [
+    {
+      "id": "video-metadata/int53",
+      "operation": "video_metadata",
+      "input": {
+        "width": 9007199254740993,
+        "height": 1080,
+        "bit_rate": 9007199254740993,
+        "data_size": 9007199254740993
+      },
+      "expected": {
+        "width": 9007199254740993,
+        "height": 1080,
+        "bit_rate": 9007199254740993,
+        "size": 9007199254740993
+      }
+    },
+    {
+      "id": "audio-candidates/int53",
+      "operation": "audio_candidates",
+      "input": {
+        "entries": [
+          {
+            "audio_meta": {
+              "media_type": "audio",
+              "file_id": "audio-fixture",
+              "url_list": [
+                "https://v5-test.douyinvod.com/audio.m4a"
+              ],
+              "bitrate": 9007199254740993,
+              "size": 9007199254740993,
+              "sub_info": "{\"audio_channels\":9007199254740993,\"audio_sample_rate\":9007199254740993,\"audio_profile\":\"aac\"}"
+            }
+          }
+        ],
+        "expires_at": "4102444800.9"
+      },
+      "expected": [
+        {
+          "private_audio_id": "audio-fixture",
+          "private_media_identity": "douyin:audio:audio-fixture",
+          "sources": [
+            {
+              "url": "https://v5-test.douyinvod.com/audio.m4a",
+              "expires_at": "2100-01-01T00:00:00Z"
+            }
+          ],
+          "audio_channels": 9007199254740993,
+          "audio_codec": "aac",
+          "sample_rate_hz": 9007199254740993,
+          "audio_bitrate_bps": 9007199254740993,
+          "size": 9007199254740993
+        }
+      ]
+    },
+    {
+      "id": "video-metadata/string53",
+      "operation": "video_metadata",
+      "input": {
+        "width": "9007199254740993",
+        "height": 1080,
+        "bit_rate": "9007199254740993",
+        "data_size": "9007199254740993"
+      },
+      "expected": {
+        "width": 9007199254740993,
+        "height": 1080,
+        "bit_rate": 9007199254740993,
+        "size": 9007199254740993
+      }
+    },
+    {
+      "id": "audio-candidates/string53",
+      "operation": "audio_candidates",
+      "input": {
+        "entries": [
+          {
+            "audio_meta": {
+              "media_type": "audio",
+              "file_id": "audio-fixture",
+              "url_list": [
+                "https://v5-test.douyinvod.com/audio.m4a"
+              ],
+              "bitrate": "9007199254740993",
+              "size": "9007199254740993",
+              "sub_info": "{\"audio_channels\":\"9007199254740993\",\"audio_sample_rate\":\"9007199254740993\",\"audio_profile\":\"aac\"}"
+            }
+          }
+        ],
+        "expires_at": "4102444800.9"
+      },
+      "expected": [
+        {
+          "private_audio_id": "audio-fixture",
+          "private_media_identity": "douyin:audio:audio-fixture",
+          "sources": [
+            {
+              "url": "https://v5-test.douyinvod.com/audio.m4a",
+              "expires_at": "2100-01-01T00:00:00Z"
+            }
+          ],
+          "audio_channels": 9007199254740993,
+          "audio_codec": "aac",
+          "sample_rate_hz": 9007199254740993,
+          "audio_bitrate_bps": 9007199254740993,
+          "size": 9007199254740993
+        }
+      ]
+    },
+    {
+      "id": "video-metadata/int64",
+      "operation": "video_metadata",
+      "input": {
+        "width": 9223372036854775800,
+        "height": 1080,
+        "bit_rate": 9223372036854775800,
+        "data_size": 9223372036854775800
+      },
+      "expected": {
+        "width": 9223372036854775800,
+        "height": 1080,
+        "bit_rate": 9223372036854775800,
+        "size": 9223372036854775800
+      }
+    },
+    {
+      "id": "audio-candidates/int64",
+      "operation": "audio_candidates",
+      "input": {
+        "entries": [
+          {
+            "audio_meta": {
+              "media_type": "audio",
+              "file_id": "audio-fixture",
+              "url_list": [
+                "https://v5-test.douyinvod.com/audio.m4a"
+              ],
+              "bitrate": 9223372036854775800,
+              "size": 9223372036854775800,
+              "sub_info": "{\"audio_channels\":9223372036854775800,\"audio_sample_rate\":9223372036854775800,\"audio_profile\":\"aac\"}"
+            }
+          }
+        ],
+        "expires_at": "4102444800.9"
+      },
+      "expected": [
+        {
+          "private_audio_id": "audio-fixture",
+          "private_media_identity": "douyin:audio:audio-fixture",
+          "sources": [
+            {
+              "url": "https://v5-test.douyinvod.com/audio.m4a",
+              "expires_at": "2100-01-01T00:00:00Z"
+            }
+          ],
+          "audio_channels": 9223372036854775800,
+          "audio_codec": "aac",
+          "sample_rate_hz": 9223372036854775800,
+          "audio_bitrate_bps": 9223372036854775800,
+          "size": 9223372036854775800
+        }
+      ]
+    },
+    {
+      "id": "video-metadata/string64",
+      "operation": "video_metadata",
+      "input": {
+        "width": "9223372036854775800",
+        "height": 1080,
+        "bit_rate": "9223372036854775800",
+        "data_size": "9223372036854775800"
+      },
+      "expected": {
+        "width": 9223372036854775800,
+        "height": 1080,
+        "bit_rate": 9223372036854775800,
+        "size": 9223372036854775800
+      }
+    },
+    {
+      "id": "audio-candidates/string64",
+      "operation": "audio_candidates",
+      "input": {
+        "entries": [
+          {
+            "audio_meta": {
+              "media_type": "audio",
+              "file_id": "audio-fixture",
+              "url_list": [
+                "https://v5-test.douyinvod.com/audio.m4a"
+              ],
+              "bitrate": "9223372036854775800",
+              "size": "9223372036854775800",
+              "sub_info": "{\"audio_channels\":\"9223372036854775800\",\"audio_sample_rate\":\"9223372036854775800\",\"audio_profile\":\"aac\"}"
+            }
+          }
+        ],
+        "expires_at": "4102444800.9"
+      },
+      "expected": [
+        {
+          "private_audio_id": "audio-fixture",
+          "private_media_identity": "douyin:audio:audio-fixture",
+          "sources": [
+            {
+              "url": "https://v5-test.douyinvod.com/audio.m4a",
+              "expires_at": "2100-01-01T00:00:00Z"
+            }
+          ],
+          "audio_channels": 9223372036854775800,
+          "audio_codec": "aac",
+          "sample_rate_hz": 9223372036854775800,
+          "audio_bitrate_bps": 9223372036854775800,
+          "size": 9223372036854775800
+        }
+      ]
+    },
+    {
+      "id": "video-metadata/string-fraction",
+      "operation": "video_metadata",
+      "input": {
+        "width": "9007199254740993.75",
+        "height": 1080,
+        "bit_rate": "9007199254740993.75",
+        "data_size": "9007199254740993.75"
+      },
+      "expected": {
+        "width": 9007199254740994,
+        "height": 1080,
+        "bit_rate": 9007199254740994,
+        "size": 9007199254740994
+      }
+    },
+    {
+      "id": "audio-candidates/string-fraction",
+      "operation": "audio_candidates",
+      "input": {
+        "entries": [
+          {
+            "audio_meta": {
+              "media_type": "audio",
+              "file_id": "audio-fixture",
+              "url_list": [
+                "https://v5-test.douyinvod.com/audio.m4a"
+              ],
+              "bitrate": "9007199254740993.75",
+              "size": "9007199254740993.75",
+              "sub_info": "{\"audio_channels\":\"9007199254740993.75\",\"audio_sample_rate\":\"9007199254740993.75\",\"audio_profile\":\"aac\"}"
+            }
+          }
+        ],
+        "expires_at": "4102444800.9"
+      },
+      "expected": [
+        {
+          "private_audio_id": "audio-fixture",
+          "private_media_identity": "douyin:audio:audio-fixture",
+          "sources": [
+            {
+              "url": "https://v5-test.douyinvod.com/audio.m4a",
+              "expires_at": "2100-01-01T00:00:00Z"
+            }
+          ],
+          "audio_channels": 9007199254740994,
+          "audio_codec": "aac",
+          "sample_rate_hz": 9007199254740994,
+          "audio_bitrate_bps": 9007199254740994,
+          "size": 9007199254740994
+        }
+      ]
+    },
+    {
+      "id": "video-metadata/fraction",
+      "operation": "video_metadata",
+      "input": {
+        "width": 7.9,
+        "height": 1080,
+        "bit_rate": 7.9,
+        "data_size": 7.9
+      },
+      "expected": {
+        "width": 7,
+        "height": 1080,
+        "bit_rate": 7,
+        "size": 7
+      }
+    },
+    {
+      "id": "audio-candidates/fraction",
+      "operation": "audio_candidates",
+      "input": {
+        "entries": [
+          {
+            "audio_meta": {
+              "media_type": "audio",
+              "file_id": "audio-fixture",
+              "url_list": [
+                "https://v5-test.douyinvod.com/audio.m4a"
+              ],
+              "bitrate": 7.9,
+              "size": 7.9,
+              "sub_info": "{\"audio_channels\":7.9,\"audio_sample_rate\":7.9,\"audio_profile\":\"aac\"}"
+            }
+          }
+        ],
+        "expires_at": "4102444800.9"
+      },
+      "expected": [
+        {
+          "private_audio_id": "audio-fixture",
+          "private_media_identity": "douyin:audio:audio-fixture",
+          "sources": [
+            {
+              "url": "https://v5-test.douyinvod.com/audio.m4a",
+              "expires_at": "2100-01-01T00:00:00Z"
+            }
+          ],
+          "audio_channels": 7,
+          "audio_codec": "aac",
+          "sample_rate_hz": 7,
+          "audio_bitrate_bps": 7,
+          "size": 7
+        }
+      ]
+    }
+  ]
+}

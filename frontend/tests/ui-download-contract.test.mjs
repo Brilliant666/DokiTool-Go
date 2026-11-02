@@ -391,6 +391,29 @@ test('file download retries at most three matching-quality routes and synchroniz
   assert.equal(clicked.length, 1); assert.match(clicked[0].href, /^blob:/);
 });
 
+test('each ordinary download checks its declared file bytes on the route actually read', async () => {
+  const data = fixture(retryData());
+  const sources = data.items[0].variants[0].delivery.sources;
+  sources[0].size_bytes = 3;
+  sources[1].size_bytes = 4;
+  const transferred = [];
+  mockFileTransfer(async url => {
+    transferred.push(url);
+    const response = new Response(new Uint8Array([1, 2, 3, 4]), {
+      headers: { 'content-type': 'video/mp4', 'content-length': '2' },
+    });
+    Object.defineProperty(response, 'type', { value: 'cors' });
+    return response;
+  });
+  const { instance, store } = harness(data);
+  await instance.downloadMainVideo();
+  await settled(store.downloads[0]);
+  assert.deepEqual(transferred, [sources[0].url, sources[1].url]);
+  assert.equal(store.downloads[0].status, 'completed');
+  assert.equal(store.downloads[0].loaded, 4);
+  assert.equal(store.downloads[0].total, 4);
+});
+
 test('failed routes do not open popups; a deliberate browser handoff stays distinct from completion', async () => {
   const { instance, store } = harness(retryData());
   const transfers = [];
@@ -410,6 +433,21 @@ test('failed routes do not open popups; a deliberate browser handoff stays disti
   assert.match(html, /浏览器处理 1/); assert.match(html, /完成 1/); assert.match(html, /失败 1/); assert.match(html, /取消 1/);
   assert.match(html, /本站无法追踪/);
   instance.handleClearCompleted('all'); assert.equal(store.downloads.length, 0);
+});
+
+test('the resolved file format reaches the download even when the CDN offers an MP4 filename', async () => {
+  for (const [evidence, transport, suffix] of [['probe', 'browser_blob', 'mov'], ['unknown', 'browser_native', 'mp4']]) {
+    const data = fixture(base);
+    data.items[0].variants[0].metadata = { container: 'mov', extension: 'mov', mime_type: 'video/quicktime', evidence };
+    const { instance, store } = harness(data);
+    globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3, 4]), { headers: {
+      'content-type': 'video/mp4', 'content-length': '4', 'content-disposition': 'attachment; filename="upstream.mp4"',
+    } });
+    await instance.downloadMainVideo(); await settled(store.downloads[0]);
+    assert.equal(store.downloads[0].transport, transport);
+    assert.ok(store.downloads[0].filename.endsWith('.' + suffix));
+    if (evidence === 'probe') assert.equal(blobs.at(-1).type, 'video/quicktime');
+  }
 });
 
 test('eligible native attachment hands off once without Blob progress or a false completed state', async () => {
@@ -1495,6 +1533,16 @@ test('PR8 review: unexposed Content-Encoding on a CORS response is not proof of 
   assert.deepEqual(await Object.values(zip.files)[0].async('uint8array'), decoded);
 });
 
+// Only the transport bytes are synthetic; keep the exported source and its
+// actual size contract intact when exercising the real renewal/download path.
+function fixtureMediaFetch(source) {
+  const bytes = new Uint8Array(source.size_bytes ?? 4);
+  return async url => {
+    fetched.push(url);
+    return new Response(bytes, { headers: { 'content-type': 'video/mp4', 'content-length': String(bytes.length) } });
+  };
+}
+
 // Explicit cross-language suite: ordinary npm test remains frontend-only.
 if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
   const readRenewalEnvelopes = async () => {
@@ -1533,6 +1581,7 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
     if (explicit) selection.choose({ variant_id: chosen.id, source_id: source.id });
     const selectedBefore = JSON.parse(JSON.stringify(selection.currentSelection.value));
     const domainBefore = JSON.stringify(store.resultData);
+    globalThis.fetch = fixtureMediaFetch(renewed);
     await instance.downloadMainVideo(); await settled(store.downloads[0]);
     assert.equal(store.downloads[0].status, 'completed', JSON.stringify({ oldVariant: chosen.id, oldSource: source.id, error: store.downloads[0].error, fetched }));
     assert.equal(resolves, 1);
@@ -1543,6 +1592,75 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
       store.replaceItem(fresh);
       assert.equal(selection.currentTarget.value.url, renewed.url, 'refreshed UI resolves the same opaque selection');
     }
+  });
+  for (const scenario of ['play-endpoint', 'cdn']) test(`Renewal stability integration: actual ${scenario} pins variant-only source`, async t => {
+    const envelopes = await readRenewalEnvelopes();
+    const pair = scenario === 'cdn' ? envelopes.cases.cdn : envelopes;
+    const before = mediaContract.validateMediaEnvelope(pair.before);
+    const after = mediaContract.validateMediaEnvelope(pair.after);
+    const original = before.items[0];
+    const chosen = original.variants.find(variant => variant.id === original.default.variant_id);
+    const source = chosen.delivery.sources[0];
+    const fresh = after.items.find(item => item.id === original.id);
+    const refreshedVariant = fresh.variants.find(variant => variant.id === chosen.id);
+    const route = candidate => scenario === 'cdn' ? new URL(candidate.url).hostname : new URL(candidate.url).searchParams.get('line');
+    const renewed = refreshedVariant.delivery.sources.find(candidate => route(candidate) === route(source));
+    assert.ok(renewed, 'independent route evidence identifies the renewed source');
+    assert.notEqual(renewed.url, source.url, 'credentials really changed');
+    // The endpoint tape changes route order; the CDN tape renews only the
+    // signature path. Keep both original tapes unmodified.
+    if (scenario === 'play-endpoint') assert.notEqual(refreshedVariant.delivery.sources[0].id, source.id, 'endpoint fixture actually reorders the first source');
+    assert.equal(renewed.id, source.id, 'the original adapter preserves this known route identity');
+    t.mock.method(Date, 'now', () => Date.parse(source.expires_at) + 1000);
+    assert.ok(Date.parse(renewed.expires_at) > Date.now());
+    let resolves = 0;
+    const { instance, store, selection } = harness(before, async item => {
+      resolves++;
+      assert.equal(item.id, original.id);
+      return fresh;
+    });
+    selection.choose({ variant_id: chosen.id });
+    const displayBefore = JSON.stringify(store.resultData);
+    globalThis.fetch = fixtureMediaFetch(renewed);
+    await instance.downloadMainVideo(); await settled(store.downloads[0]);
+    assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
+    assert.equal(resolves, 1);
+    assert.ok(fetched.length > 0 && fetched.every(url => url === renewed.url));
+    assert.deepEqual(selection.currentSelection.value, { variant_id: chosen.id });
+    assert.equal(JSON.stringify(store.resultData), displayBefore);
+  });
+  for (const scenario of ['play-endpoint', 'cdn']) for (const explicit of [false, true]) test(`Refresh recovery integration: actual ${scenario} ${explicit ? 'explicit' : 'default'} refreshes through resolveItem`, async t => {
+    const envelopes = await readRenewalEnvelopes();
+    const pair = scenario === 'cdn' ? envelopes.cases.cdn : envelopes;
+    const before = mediaContract.validateMediaEnvelope(pair.before), after = mediaContract.validateMediaEnvelope(pair.after);
+    const original = before.items[0], fresh = after.items.find(item => item.id === original.id);
+    const variant = original.variants.find(value => value.id === original.default.variant_id);
+    const source = variant.delivery.sources.find(value => explicit ? value.id !== original.default.source_id : value.id === original.default.source_id);
+    const route = value => scenario === 'cdn' ? new URL(value.url).hostname : new URL(value.url).searchParams.get('line');
+    const renewed = fresh.variants.flatMap(value => value.delivery?.sources || []).find(value => route(value) === route(source));
+    assert.ok(renewed); assert.notEqual(renewed.url, source.url);
+    const mediaBytes = renewed.size_bytes ?? 4; // CDN tape intentionally has unknown file size.
+    t.mock.method(Date, 'now', () => Date.parse(source.expires_at) - 1000);
+    let parserInstance; const requests = [];
+    const { instance, store, selection } = harness(before, (item, signal) => parserInstance.resolveItem(item, signal));
+    parserInstance = parser.useVideoParser({ videoStore: store, locale: ref('zh-CN'), showToast() {} });
+    if (explicit) selection.choose({ variant_id: variant.id, source_id: source.id });
+    const choice = JSON.stringify(selection.currentSelection.value), displayed = JSON.stringify(store.resultData);
+    globalThis.fetch = async url => {
+      const target = new URL(url, 'https://snap.dokitool.com');
+      if (target.pathname === '/api/resolve') { requests.push(url); return new Response(JSON.stringify(pair.after), { headers: { 'content-type': 'application/json' } }); }
+      fetched.push(url);
+      return url === renewed.url ? new Response(new Uint8Array(mediaBytes), { headers: { 'content-type': 'video/mp4', 'content-length': String(mediaBytes) } }) : new Response('denied', { status: 403 });
+    };
+    await instance.downloadMainVideo(); await settled(store.downloads[0]);
+    assert.equal(store.downloads[0].status, 'failed'); assert.equal(requests.length, 0);
+    const firstRequests = fetched.length;
+    await instance.handleRefreshDownload(store.downloads[0].id); await settled(store.downloads[0]);
+    assert.equal(store.downloads[0].status, 'completed', JSON.stringify({ error: store.downloads[0].error, requests, fetched, expected: renewed.url }));
+    assert.equal(requests.length, 1); assert.equal(requests[0], parser.resolveApiUrl(original.resolve_url));
+    assert.ok(fetched.slice(firstRequests).length > 0 && fetched.slice(firstRequests).every(url => url === renewed.url));
+    assert.equal(store.downloads[0].loaded, renewed.size_bytes);
+    assert.equal(JSON.stringify(selection.currentSelection.value), choice); assert.equal(JSON.stringify(store.resultData), displayed);
   });
   for (const name of ['original', 'weibo']) test(`PR8 integration: actual ${name} refresh preserves explicit UI and download identity`, async t => {
     const exported = (await readRenewalEnvelopes()).cases[name];
@@ -1555,6 +1673,7 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
     const choice = { variant_id: original.default.variant_id, source_id: original.default.source_id };
     selection.choose(choice);
     store.replaceItem(fresh);
+    globalThis.fetch = fixtureMediaFetch(source);
     await instance.downloadMainVideo(); await settled(store.downloads[0]);
     assert.equal(store.downloads[0].status, 'completed', JSON.stringify({ oldChoice: choice, nextDefault: fresh.default, error: store.downloads[0].error, fetched }));
     assert.deepEqual(selection.currentSelection.value, choice);
@@ -1694,3 +1813,300 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
     assert.equal(resolveUrl.searchParams.get('debug'), mode === 'debug' ? '1' : null);
   });
 }
+
+// Test-only extension. The validator, selection and download composables remain
+// the existing PHP frontend product, and the envelopes come from Go's real
+// signed HTTP boundary (which is independently compared to frozen PHP).
+if (process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE) {
+  for (const scenario of ['expired-renewal', 'applied-refresh']) for (const explicit of [false, true]) {
+    test(`Go Weibo integration: ${scenario} preserves ${explicit ? 'explicit' : 'default'} signed download identity`, async t => {
+      const pair = JSON.parse(await readFile(process.env.DOKITOOL_WEIBO_RENEWAL_FIXTURE, 'utf8'));
+      const before = mediaContract.validateMediaEnvelope(pair.before);
+      const after = mediaContract.validateMediaEnvelope(pair.after);
+      assert.equal(before.items.length, 1, 'the compact single-item response needs no default_item_id');
+      const original = before.items[0];
+      const fresh = after.items.find(item => item.id === original.id);
+      const chosen = original.variants.find(variant => explicit ? variant.metadata?.height === 1080 : variant.id === original.default.variant_id);
+      assert.ok(chosen, 'fixture contains a complete alternate quality');
+      assert.equal(chosen.delivery.kind, 'file');
+      const source = chosen.delivery.sources[0];
+      const renewed = fresh.variants.find(variant => variant.id === chosen.id)?.delivery.sources.find(candidate => candidate.id === source.id);
+      assert.ok(renewed, 'renewal preserves the selected representation and source identity');
+      assert.notEqual(renewed.url, source.url, 'signed ticket really changes');
+      assert.equal(source.access, 'relay');
+      assert.match(renewed.url, /^\/api\/media\/weibo\?ticket=/);
+      const sourceURL = value => mediaContract.sourceUrl(value, { apiOrigin: configuration.apiConfig.baseUrl });
+      const renewedURL = sourceURL(renewed);
+      if (explicit) assert.notEqual(chosen.id, fresh.default.variant_id, 'explicit 1080p must not silently switch to server default 4K');
+      t.mock.method(Date, 'now', () => scenario === 'expired-renewal' ? Date.parse(source.expires_at) + 1000 : Date.parse(renewed.expires_at) - 1000);
+      assert.ok(Date.parse(renewed.expires_at) > Date.now());
+      const mediaFetch = fixtureMediaFetch(renewed), resolveRequests = [];
+      globalThis.fetch = async (url, options) => {
+        const target = new URL(url, 'https://snap.dokitool.com');
+        if (target.pathname === '/api/resolve') {
+          resolveRequests.push(target);
+          assert.equal(target.searchParams.get('item_id'), original.id);
+          assert.equal(target.searchParams.get('schema_version'), '1.0');
+          assert.equal(target.searchParams.get('url'), before.source_url);
+          assert.equal(target.searchParams.get('debug'), null);
+          return Response.json(pair.after);
+        }
+        return mediaFetch(url, options);
+      };
+      let resolver;
+      const { instance, store, selection } = harness(before, (item, signal) => resolver.resolveItem(item, signal));
+      resolver = parser.useVideoParser({ videoStore: store, locale: ref('zh-CN'), showToast() {} });
+      if (explicit) selection.choose({ variant_id: chosen.id, source_id: source.id });
+      const selectedBefore = JSON.parse(JSON.stringify(selection.currentSelection.value));
+      if (scenario === 'applied-refresh') store.replaceItem(fresh);
+      const domainBefore = JSON.stringify(store.resultData);
+      await instance.downloadMainVideo();
+      await settled(store.downloads[0]);
+      assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
+      assert.equal(resolveRequests.length, scenario === 'expired-renewal' ? 1 : 0);
+      assert.ok(fetched.length > 0 && fetched.every(url => url === renewedURL), 'every media request uses the same renewed signed source');
+      assert.deepEqual(selection.currentSelection.value, selectedBefore);
+      assert.equal(JSON.stringify(store.resultData), domainBefore, 'download renewal leaves the displayed response and explicit selection intact');
+      store.replaceItem(fresh);
+      assert.equal(selection.currentTarget.value.url, renewedURL);
+      assert.deepEqual(selection.currentSelection.value, selectedBefore);
+    });
+  }
+}
+
+// A quality-only UI choice still resolves to one concrete source at the moment
+// the task is created. Renewal must not reinterpret it as the new first route.
+for (const mode of ['variant-only', 'default-without-source-ref']) {
+  for (const renewedSource of ['retained', 'removed']) {
+    test(`renewal snapshot: ${mode} keeps its original source when ${renewedSource}`, async () => {
+      const original = fixtureItem(base);
+      original.resolve_url = '/api/resolve?schema_version=1.0&item_id=item-1';
+      original.variants[0].delivery.sources[0].expires_at = '2000-01-01T00:00:00Z';
+      original.variants[0].delivery.sources[0].size_bytes = 4;
+      original.default.expires_at = '2000-01-01T00:00:00Z';
+      if (mode === 'default-without-source-ref') delete original.default.source_id;
+      const renewed = structuredClone(original);
+      const sameSource = { id: 's0', url: 'https://media.test/renewed.mp4?sig=a%2Bb&k=x+y', size_bytes: 7, expires_at: '2099-01-01T00:00:00Z' };
+      const otherSource = { id: 's1', url: 'https://other.test/replacement.mp4', size_bytes: 11, expires_at: '2099-01-01T00:00:00Z' };
+      renewed.variants[0].delivery.sources = renewedSource === 'retained' ? [otherSource, sameSource] : [otherSource];
+      renewed.default = { variant_id: 'v0', source_id: 's1', url: otherSource.url, expires_at: otherSource.expires_at };
+      let resolves = 0;
+      const { instance, store, selection } = harness({ items: [original], default_item_id: original.id }, async item => {
+        resolves++;
+        assert.equal(item.id, original.id);
+        return renewed;
+      });
+      if (mode === 'variant-only') selection.choose({ variant_id: 'v0' });
+      const selectionBefore = JSON.parse(JSON.stringify(selection.currentSelection.value));
+      const displayBefore = JSON.stringify(store.resultData);
+      globalThis.fetch = async url => {
+        fetched.push(url);
+        const bytes = new Uint8Array(url === sameSource.url ? 7 : 11);
+        return new Response(bytes, { headers: { 'content-type': 'video/mp4', 'content-length': String(bytes.length) } });
+      };
+      await instance.downloadMainVideo();
+      await settled(store.downloads[0]);
+      assert.equal(resolves, 1);
+      assert.equal(JSON.stringify(store.resultData), displayBefore, 'renewal does not rewrite the displayed result');
+      assert.deepEqual(selection.currentSelection.value, selectionBefore, 'task pinning does not overwrite the UI choice');
+      if (renewedSource === 'removed') {
+        assert.equal(store.downloads[0].status, 'failed', 'missing original source must not silently use the new first route');
+        assert.match(store.downloads[0].error, /已选来源不存在/);
+        assert.deepEqual(fetched, [], 'no media request is permitted after source identity disappeared');
+      } else {
+        assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
+        assert.ok(fetched.length > 0 && fetched.every(url => url === sameSource.url), 'use the original source ID and preserve renewed query bytes');
+        assert.equal(store.downloads[0].loaded, 7, 'use the renewed source size, not the old or another route size');
+        assert.equal(store.downloads[0].total, 7);
+      }
+    });
+  }
+}
+
+// Regression supplied by dot's fixed-SHA investigation: an unknown expiry
+// must not turn an explicit refresh action into another request to a stale URL.
+function refreshFixture() {
+  const original = fixtureItem(base);
+  original.resolve_url = '/api/resolve?schema_version=1.0&item_id=item-1';
+  original.variants[0].delivery.sources[0].size_bytes = 4;
+  original.variants[0].metadata = { container: 'mov', extension: 'mov', mime_type: 'video/quicktime', evidence: 'probe' };
+  const fresh = JSON.parse(JSON.stringify(original));
+  const source = fresh.variants[0].delivery.sources[0];
+  source.url = 'https://media.test/fresh.mov?sig=a%2Bb+z&part=1&part=2';
+  source.size_bytes = 7;
+  fresh.default = { ...fresh.default, url: source.url };
+  return { original, fresh, freshURL: source.url };
+}
+for (const explicit of [false, true]) test(`refresh recovery: unknown expiry refreshes ${explicit ? 'explicit' : 'default'} once and keeps source facts`, async () => {
+  const { original, fresh, freshURL } = refreshFixture();
+  let resolves = 0;
+  const { instance, store, selection } = harness({ items: [original], default_item_id: original.id }, async (item, signal) => {
+    assert.equal(item.id, original.id); assert.equal(signal.aborted, false); resolves++;
+    return fresh;
+  });
+  if (explicit) selection.choose({ variant_id: 'v0', source_id: 's0' });
+  const choice = JSON.stringify(selection.currentSelection.value), displayed = JSON.stringify(store.resultData);
+  globalThis.fetch = async url => {
+    fetched.push(url);
+    return url === base.url ? new Response('denied', { status: 403 }) : new Response(new Uint8Array(7), { headers: { 'content-type': 'video/mp4', 'content-length': '7' } });
+  };
+  await instance.downloadMainVideo(); await settled(store.downloads[0]);
+  assert.equal(store.downloads[0].status, 'failed'); assert.equal(resolves, 0, '403 is not automatically diagnosed as expired');
+  await instance.handleRetryDownload(store.downloads[0].id, true); await settled(store.downloads[0]);
+  assert.equal(resolves, 1, 'one explicit refresh must call resolve despite unknown expiry');
+  assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
+  assert.equal(store.downloads[0].loaded, 7); assert.equal(store.downloads[0].total, 7);
+  assert.ok(store.downloads[0].filename.endsWith('.mov'));
+  assert.equal(store.downloads.length, 1); assert.ok(fetched.includes(freshURL));
+  assert.equal(fetched.filter(url => url === base.url).length, 2, 'initial HEAD and GET only; no stale requests after refresh');
+  assert.equal(JSON.stringify(selection.currentSelection.value), choice);
+  assert.equal(JSON.stringify(store.resultData), displayed);
+});
+
+for (const change of ['item', 'variant', 'source', 'expired', 'unavailable', 'kind', 'error']) test(`refresh recovery: rejects ${change} without borrowing the new default`, async () => {
+  const { original, fresh } = refreshFixture();
+  let resolves = 0;
+  if (change === 'item') fresh.id = 'another-item';
+  if (change === 'variant') { fresh.variants[0].id = 'new-variant'; fresh.default.variant_id = 'new-variant'; }
+  if (change === 'source') { fresh.variants[0].delivery.sources[0].id = 'new-source'; fresh.default.source_id = 'new-source'; }
+  if (change === 'expired') { fresh.variants[0].delivery.sources[0].expires_at = '2000-01-01T00:00:00Z'; fresh.default.expires_at = '2000-01-01T00:00:00Z'; }
+  if (change === 'unavailable') fresh.variants[0].delivery.sources[0].availability = 'unavailable';
+  if (change === 'kind') {
+    fresh.variants[0].delivery = { kind: 'hls', scope: 'single', sources: fresh.variants[0].delivery.sources };
+    fresh.default = null; fresh.default_unavailable_reason = 'processing_required';
+  }
+  const { instance, store, selection } = harness({ items: [original] }, async () => {
+    resolves++; if (change === 'error') throw new Error('upstream unavailable'); return fresh;
+  });
+  selection.choose({ variant_id: 'v0', source_id: 's0' });
+  globalThis.fetch = async url => { fetched.push(url); return new Response('denied', { status: 403 }); };
+  await instance.downloadMainVideo(); await settled(store.downloads[0]);
+  const count = fetched.length;
+  await instance.handleRefreshDownload(store.downloads[0].id); await settled(store.downloads[0]);
+  assert.equal(resolves, 1); assert.equal(store.downloads[0].status, 'failed');
+  assert.equal(fetched.length, count, 'a rejected refresh must not fetch old or alternative media');
+  assert.equal(store.downloads[0].nativeAvailable, false, 'a failed refresh must not expose the stale source link');
+  assert.equal(store.downloads[0].url, undefined);
+  assert.deepEqual(selection.currentSelection.value, { variant_id: 'v0', source_id: 's0' });
+});
+
+test('refresh recovery: ordinary retry remains ordinary; a failed fresh request cannot refresh itself', async () => {
+  const { original, fresh, freshURL } = refreshFixture(); let resolves = 0;
+  const { instance, store } = harness({ items: [original] }, async () => { resolves++; return fresh; });
+  globalThis.fetch = async url => { fetched.push(url); return new Response('denied', { status: 403 }); };
+  await instance.downloadMainVideo(); await settled(store.downloads[0]);
+  await instance.handleRetryDownload(store.downloads[0].id); await settled(store.downloads[0]);
+  assert.equal(resolves, 0);
+  await instance.handleRefreshDownload(store.downloads[0].id); await settled(store.downloads[0]);
+  assert.equal(resolves, 1); assert.equal(store.downloads[0].status, 'failed');
+  assert.ok(fetched.includes(freshURL));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(resolves, 1, 'no background resolve loop after failure');
+});
+
+for (const action of ['cancel', 'timeout']) test(`refresh recovery: ${action} prevents late resolver data and duplicate actions`, async t => {
+  const { original, fresh } = refreshFixture(); let resolves = 0, finish, signal, expire;
+  const { instance, store } = harness({ items: [original] }, async (_item, inputSignal) => {
+    resolves++; signal = inputSignal; return new Promise(resolve => { finish = resolve; });
+  });
+  globalThis.fetch = async url => { fetched.push(url); return new Response('denied', { status: 403 }); };
+  await instance.downloadMainVideo(); await settled(store.downloads[0]);
+  const id = store.downloads[0].id, before = fetched.length;
+  const timer = {}, realSet = globalThis.setTimeout, realClear = globalThis.clearTimeout;
+  t.mock.method(globalThis, 'setTimeout', (callback, ms, ...args) => ms === 30000 ? (expire = callback, timer) : realSet(callback, ms, ...args));
+  t.mock.method(globalThis, 'clearTimeout', value => { if (value !== timer) realClear(value); });
+  const pending = instance.handleRefreshDownload(id);
+  await waitUntil(() => resolves === 1);
+  await Promise.all([instance.handleRefreshDownload(id), instance.handleRetryDownload(id), instance.handleClearCompleted(id)]);
+  assert.equal(store.downloads.length, 1); assert.equal(resolves, 1);
+  if (action === 'cancel') await instance.handleCancelDownload(id); else expire();
+  await pending; await settled(store.downloads[0]);
+  assert.equal(signal.aborted, true);
+  assert.equal(store.downloads[0].status, action === 'cancel' ? 'cancelled' : 'failed');
+  if (action === 'timeout') assert.match(store.downloads[0].error, /30 秒/);
+  finish(fresh); await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(fetched.length, before); assert.equal(resolves, 1);
+});
+
+test('refresh recovery: late response does not change a newly selected work or its player', async () => {
+  const { original, fresh, freshURL } = refreshFixture(); let finish;
+  const { instance, store, selection } = harness({ items: [original] }, () => new Promise(resolve => { finish = resolve; }));
+  globalThis.fetch = async url => { fetched.push(url); return url === base.url ? new Response('denied', { status: 403 }) : new Response(new Uint8Array(7), { headers: { 'content-type': 'video/mp4', 'content-length': '7' } }); };
+  await instance.downloadMainVideo(); await settled(store.downloads[0]);
+  const pending = instance.handleRefreshDownload(store.downloads[0].id);
+  await waitUntil(() => finish);
+  store.resultVersion++;
+  store.resultData = fixture({ url: 'https://unrelated.test/next.mp4', title: 'next work' });
+  const displayed = JSON.stringify(store.resultData), choice = JSON.stringify(selection.currentSelection.value);
+  finish(fresh); await pending; await settled(store.downloads[0]);
+  assert.equal(store.downloads[0].status, 'completed'); assert.ok(fetched.includes(freshURL));
+  assert.equal(JSON.stringify(store.resultData), displayed); assert.equal(JSON.stringify(selection.currentSelection.value), choice);
+});
+
+for (const missing of ['source-id', 'resolve-url', 'owned-snapshot']) test(`refresh recovery: ${missing} cannot start a guessed refresh`, async () => {
+  const { original } = refreshFixture(); let resolves = 0;
+  if (missing === 'source-id') { delete original.variants[0].delivery.sources[0].id; delete original.default.source_id; }
+  if (missing === 'resolve-url') delete original.resolve_url;
+  const { instance, store } = harness({ items: [original] }, async () => { resolves++; return original; });
+  globalThis.fetch = async url => { fetched.push(url); return new Response('denied', { status: 403 }); };
+  if (missing === 'owned-snapshot') store.addDownload({ filename: 'restored.mov', url: base.url, status: 'failed', refreshAvailable: true });
+  else { await instance.downloadMainVideo(); await settled(store.downloads[0]); assert.equal(store.downloads[0].refreshAvailable, false); }
+  const count = fetched.length;
+  await instance.handleRefreshDownload(store.downloads[0].id);
+  assert.equal(resolves, 0); assert.equal(fetched.length, count); assert.equal(store.downloads[0].status, 'failed');
+});
+
+test('refresh recovery: button is only offered on settled owned file failures', async () => {
+  for (const [status, observation, available, visible] of [
+    ['failed', undefined, true, true], ['interrupted', undefined, true, true],
+    ['completed', undefined, true, false], ['handed-off', undefined, true, false],
+    ['cancelled', undefined, true, false], ['downloading', undefined, true, false],
+    ['preparing', undefined, true, false], ['failed', 'unknown', true, false],
+    ['failed', undefined, false, false],
+  ]) {
+    const html = await renderToString(createSSRApp({ render: () => h(DownloadCard, { downloads: [{ id: 1, filename: 'one.mov', status, observation, refreshAvailable: available }] }) }));
+    assert.equal(html.includes('刷新链接并重试'), visible, `${status}/${observation}/${available}`);
+  }
+});
+
+for (const acknowledgement of ['confirmed', 'rejected', 'reactivated']) test(`refresh recovery: Worker ${acknowledgement} acknowledgement is honored before resolve`, async t => {
+  const { original, fresh, freshURL } = refreshFixture(); let resolves = 0, finish, reject, forgets = 0;
+  const { instance, store } = harness({ items: [original] }, async () => { resolves++; return fresh; });
+  store.updateDownload = (id, changes) => {
+    const at = store.downloads.findIndex(task => task.id === id);
+    if (at >= 0) store.downloads[at] = { ...store.downloads[at], ...changes };
+  };
+  const deliveries = [];
+  globalThis.__uiDownloadManager = { async run(request, signal, observe) {
+    deliveries.push(request);
+    const success = request.url === freshURL;
+    const result = { id: request.id, filename: request.filename, url: request.url, transport: 'browser_streaming', status: success ? 'completed' : 'failed', loaded: success ? 7 : 0, total: success ? 7 : 4, speed: 0, elapsed: 0, averageSpeed: 0 };
+    observe(result);
+    if (!success) throw new Error('HTTP 403');
+    assert.equal(signal.aborted, false);
+    return result;
+  } };
+  globalThis.__uiDownloadStreaming = { forgetStreaming: () => { forgets++; return new Promise((resolve, fail) => { finish = resolve; reject = fail; }); } };
+  t.after(() => { delete globalThis.__uiDownloadManager; delete globalThis.__uiDownloadStreaming; });
+  await instance.downloadMainVideo();
+  // Observe the live Pinia row: updateDownload replaces its object.
+  await waitUntil(() => store.downloads[0]?.status === 'failed');
+  const id = store.downloads[0].id;
+  const pending = instance.handleRefreshDownload(id);
+  await waitUntil(() => forgets === 1);
+  await Promise.all([instance.handleRefreshDownload(id), instance.handleRetryDownload(id), instance.handleClearCompleted(id)]);
+  assert.equal(resolves, 0); assert.equal(deliveries.length, 1); assert.equal(forgets, 1);
+  if (acknowledgement === 'rejected') reject(new Error('original Worker state is unknown'));
+  else {
+    if (acknowledgement === 'reactivated') store.updateDownload(id, { status: 'downloading' });
+    finish();
+  }
+  await pending;
+  if (acknowledgement === 'confirmed') {
+    await waitUntil(() => store.downloads[0]?.status === 'completed');
+    assert.equal(resolves, 1); assert.equal(deliveries.length, 2);
+    assert.notEqual(deliveries[0].id, deliveries[1].id); assert.equal(deliveries[1].url, freshURL);
+    assert.equal(deliveries[1].sourceSizes[freshURL], 7); assert.equal(deliveries[1].formatMime, 'video/quicktime');
+    assert.equal(store.downloads[0].status, 'completed');
+  } else { assert.equal(resolves, 0); assert.equal(deliveries.length, 1); }
+});

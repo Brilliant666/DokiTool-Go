@@ -7,7 +7,7 @@
     "dev": "node scripts/generate-platform-catalog.mjs && vite",
     "build": "node scripts/generate-platform-catalog.mjs && vue-tsc --noEmit && vite build && node scripts/prerender.mjs && node --test tests/prerender.test.mjs",
     "typecheck": "vue-tsc --noEmit",
-    "test": "node --test --test-concurrency=1 tests/parser-contract.test.mjs tests/ui-download-contract.test.mjs tests/media-sources.test.mjs tests/icons.test.mjs tests/result-layout.test.mjs tests/seo-contract.test.mjs tests/download-transports.test.mjs tests/download-worker.test.mjs tests/download-manager.test.mjs tests/download-streaming.test.mjs tests/download-bridge.test.mjs tests/download-panel.test.mjs tests/media-delivery.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/parser-contract.test.mjs tests/ui-download-contract.test.mjs tests/download-selection-admission.test.mjs tests/media-sources.test.mjs tests/icons.test.mjs tests/result-layout.test.mjs tests/seo-contract.test.mjs tests/download-transports.test.mjs tests/download-worker.test.mjs tests/download-manager.test.mjs tests/download-streaming.test.mjs tests/download-bridge.test.mjs tests/download-panel.test.mjs tests/media-delivery.test.mjs",
     "assets:brand": "node scripts/generate-brand-assets.mjs",
     "check:load-budget": "node scripts/check-load-budget.mjs",
     "test:ssg": "node --test tests/prerender.test.mjs",

@@ -1,7 +1,9 @@
 /* Download-only service worker. It never caches or intercepts the application/API. */
 import { createTaskStore, HISTORY_MS } from "./task-store.js";
+import { attachmentFormat, cleanFilename } from "./media-format.js";
+import { decodedLength } from "./decoded-length.js";
 const PROTOCOL = 1;
-const BUILD = "downloads-20261031.2";
+const BUILD = "downloads-20261101.1";
 const INSTANCE = crypto.randomUUID();
 const store = createTaskStore();
 const MAX_ACTIVE = 2;
@@ -21,7 +23,6 @@ let historyTimer;
 const terminal = status => ["completed", "failed", "cancelled"].includes(status);
 const abortError = () => new DOMException("下载已取消", "AbortError");
 const validKey = value => typeof value === "string" && /^[a-zA-Z0-9_-]{16,100}$/.test(value);
-const cleanFilename = value => String(value || "download.mp4").replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, "_").slice(0, 180).trim() || "download.mp4";
 const sourceUrl = value => {
   const url = new URL(value, self.location.origin);
   if (!/^https?:$/.test(url.protocol) || url.username || url.password ||
@@ -168,17 +169,11 @@ async function timed(task, operation) {
   }
 }
 
-function mediaHeaders(response, filename) {
+function mediaHeaders(response, filename, formatMime, sourceSize) {
   if (response.status !== 200 || response.headers.has("content-range") || response.type === "opaque" || !response.body) throw new Error(`资源不是完整文件响应（HTTP ${response.status}）`);
-  const mime = (response.headers.get("content-type") || "application/octet-stream").split(";")[0].trim().toLowerCase();
-  if (!/^(video\/|audio\/|image\/|application\/octet-stream$)/.test(mime)) throw new Error("资源没有返回可下载的媒体文件");
-  const extensions = { "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/mp2t": "ts", "audio/mpeg": "mp3", "audio/mp4": "m4a", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
-  const extension = extensions[mime];
-  const safeName = cleanFilename(extension ? filename.replace(/\.[^.]+$/, `.${extension}`) : filename);
-  const length = Number(response.headers.get("content-length"));
-  const encoding = response.headers.get("content-encoding");
-  const total = Number.isSafeInteger(length) && length > 0 && (!encoding || encoding === "identity") ? length : 0;
-  return { mime, filename: safeName, total };
+  const format = attachmentFormat(filename, response.headers.get("content-type"), formatMime, { allowUnknownMedia: true });
+  const total = decodedLength(response, sourceSize);
+  return { ...format, total };
 }
 
 async function prepare(task) {
@@ -196,7 +191,7 @@ async function prepare(task) {
         signal: attempt.signal, mode: "cors", credentials: new URL(url).origin === self.location.origin ? "same-origin" : "omit",
         referrerPolicy: "no-referrer", cache: "no-store",
       }));
-      const metadata = mediaHeaders(response, task.state.filename);
+      const metadata = mediaHeaders(response, task.state.filename, task.formatMime, task.sourceSizes?.[url]);
       task.reader = response.body.getReader();
       const first = await timed(task, () => task.reader.read());
       if (first.done || !first.value?.length) throw new Error("资源为空");
@@ -312,7 +307,8 @@ self.addEventListener("message", event => {
           const now = Date.now();
           const startedAt = Number.isFinite(request.startedAt) && request.startedAt > 0 && request.startedAt <= now ? request.startedAt : now;
           task = {
-            token: message.token, routes, controller: new AbortController(), subscribers: new Set(),
+            token: message.token, routes, sourceSizes: request.sourceSizes, formatMime: request.formatMime,
+            controller: new AbortController(), subscribers: new Set(),
             startedAt, publishedAt: now, revision: 0, admission: message.admission === true,
             state: { id: request.id, transport: "browser_streaming", status: "queued", filename: cleanFilename(request.filename), url: routes[0], loaded: 0, total: 0, speed: 0, elapsed: 0, averageSpeed: 0,
               ...(message.admission === true ? { delivery: "waiting" } : {}) },

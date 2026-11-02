@@ -147,6 +147,32 @@ test('durable history retains 24h and latest 100 terminals without deleting acti
   assert.equal(db.records.size, 1);
 });
 
+test('attachment and task names honor a known media format and never copy an arbitrary suffix', async t => {
+  for (const [name, formatMime, sourceMime, expected, mime] of [
+    ['已选.mov', 'video/quicktime', 'video/mp4', '已选.mov', 'video/quicktime'],
+    ['已选.mp4', 'video/mp4', 'video/quicktime', '已选.mp4', 'video/mp4'],
+    ['image.png', 'image/png', null, 'image.png', 'image/png'],
+    ['unsafe.exe', 'application/x-msdownload', 'image/jpeg', 'unsafe.jpg', 'image/jpeg'],
+    ['CON.x.unsafe', undefined, null, 'media.bin', 'application/octet-stream'],
+    ['旧任务.mov', undefined, 'video/mp4', '旧任务.mp4', 'video/mp4'],
+  ]) {
+    const h = harness(async () => new Response(bytes[0], { headers: sourceMime ? { 'content-type': sourceMime } : {} }));
+    t.after(() => h.close());
+    await h.start(1, [], { filename: name, formatMime });
+    const response = await h.download(1);
+    assert.equal(response.headers.get('content-type'), mime);
+    assert.equal(decodeURIComponent(response.headers.get('content-disposition').split("filename*=UTF-8''")[1]), expected);
+    await response.arrayBuffer();
+    assert.equal((await h.query(1)).filename, expected);
+  }
+  const wrongKind = harness(async () => new Response(bytes[0], { headers: { 'content-type': 'image/jpeg' } }));
+  t.after(() => wrongKind.close());
+  await wrongKind.start(1, [], { filename: '已选.mov', formatMime: 'video/quicktime' });
+  assert.equal((await wrongKind.download(1)).status, 502);
+  const task = await wrongKind.query(1);
+  assert.equal(task.status, 'failed'); assert.match(task.error, /与已确认的文件格式不一致/);
+});
+
 test('streams with backpressure, UTF-8 filename and truthful completion', async t => {
   let pulls = 0;
   const h = harness(async () => media(bytes, 8, () => pulls++)); t.after(() => h.close());
@@ -439,6 +465,41 @@ test('partial responses never count as a complete file', async t => {
   assert.equal((await h.query(1)).status, 'failed');
 });
 
+test('a CORS wire length cannot delimit decoded bytes when encoding is hidden', async t => {
+  const h = harness(async () => {
+    const response = media(bytes, 5);
+    Object.defineProperty(response, 'type', { value: 'cors' });
+    return response;
+  });
+  t.after(() => h.close());
+  await h.start(1);
+  const attachment = await h.download(1);
+  assert.equal(attachment.headers.get('content-length'), null);
+  assert.equal((await attachment.arrayBuffer()).byteLength, 8);
+  const result = await h.query(1);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.loaded, 8);
+  assert.equal(result.total, 0);
+});
+
+test('a fallback only validates the size declared for its own source', async t => {
+  const initial = 'https://cdn.test/primary.mp4', alternate = 'https://cdn.test/mirror.mp4';
+  const h = harness(async url => {
+    if (url === initial) return new Response(null, { status: 403 });
+    const response = media(bytes, 5);
+    Object.defineProperty(response, 'type', { value: 'cors' });
+    return response;
+  });
+  t.after(() => h.close());
+  await h.start(1, [alternate], { sourceSizes: { [initial]: 3, [alternate]: 8 } });
+  const attachment = await h.download(1);
+  assert.equal(attachment.headers.get('content-length'), '8');
+  assert.equal((await attachment.arrayBuffer()).byteLength, 8);
+  const result = await h.query(1);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.url, alternate);
+});
+
 test('even HTTP 200 with Content-Range is rejected', async t => {
   const h = harness(async () => new Response(bytes[0], { headers: { 'content-type': 'video/mp4', 'content-range': 'bytes 0-3/8' } }));
   t.after(() => h.close());
@@ -463,7 +524,7 @@ test('finished elapsed time and average speed remain stable across later queries
 test('worker reports its build and separates total elapsed time from transfer speed', async t => {
   const h = harness(async () => media()); t.after(() => h.close());
   const ping = await h.send({ action: 'ping' });
-  assert.equal(ping.workerBuild, 'downloads-20261031.2');
+  assert.equal(ping.workerBuild, 'downloads-20261101.1');
   assert.equal(ping.capabilities.admission, true);
   await h.start(1, [], { startedAt: 995_000 });
   assert.equal((await h.query(1)).elapsed, 5);

@@ -1,0 +1,97 @@
+{
+  "format_version": 1,
+  "differences": [
+    {
+      "fixture": "backend/testdata/php-douyin/cases.json",
+      "case_id": "live/direct-and-still",
+      "view": "normal",
+      "path": "/data/items/2/variants/0/delivery/resources/1/delivery/sources/0/url",
+      "operation": "replace",
+      "before": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4#fragment",
+      "after": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4",
+      "reason": "Direct media fragments are not part of the HTTP request target and the public media contract rejects them; preserve every preceding signed URL byte."
+    },
+    {
+      "fixture": "backend/testdata/php-douyin/cases.json",
+      "case_id": "live/direct-and-still",
+      "view": "debug",
+      "path": "/data/items/2/variants/0/delivery/resources/1/delivery/sources/0/url",
+      "operation": "replace",
+      "before": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4#fragment",
+      "after": "https://v3-web.douyinvod.com/live-3.mp4?x=a%2Bb&mime_type=video_mp4",
+      "reason": "Direct media fragments are not part of the HTTP request target and the public media contract rejects them; preserve every preceding signed URL byte."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9007199254740993/integer",
+      "view": "normal",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9007199254740993,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9007199254740993/integer",
+      "view": "debug",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9007199254740993,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9007199254740993/string",
+      "view": "normal",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9007199254740993,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9007199254740993/string",
+      "view": "debug",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9007199254740993,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9223372036854775800/integer",
+      "view": "normal",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9223372036854775800,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9223372036854775800/integer",
+      "view": "debug",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9223372036854775800,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9223372036854775800/string",
+      "view": "normal",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9223372036854775800,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    },
+    {
+      "fixture": "backend/internal/platform/douyin/testdata/php-integer-boundaries.json",
+      "case_id": "source-size/9223372036854775800/string",
+      "view": "debug",
+      "path": "/data/items/0/variants/0/delivery/sources/0/size_bytes",
+      "operation": "remove",
+      "before": 9223372036854775800,
+      "reason": "Omit optional byte counts beyond JavaScript safe integers; retain the exact internal PHP value and do not round, clamp or stringify."
+    }
+  ]
+}

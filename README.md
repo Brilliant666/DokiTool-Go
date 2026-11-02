@@ -1,4 +1,8 @@
-# DokiTool
+# DokiTool-Go
+
+本仓库是 `Brilliant666/DokiTool-Go` 的独立 Go 迁移工作区，按维护者决定在开发阶段公开协作。原 [DokiTool](https://github.com/Brilliant666/DokiTool) 的 main 继续维护 PHP；Go 提交和 Draft PR 进入本仓库，不整体反向合入 PHP 仓库。**九个平台已完成 Go 实现与完整离线验收**：Go 3835 叶场景、race/vet/build，独立响应 994/994，原前端消费 918/918；[执行证据与限制](docs/go-migration/acceptance.md)、[剩余五平台实施说明](docs/go-migration/remaining-platforms-implementation.md) 均已入库。公共合同的 fragment 与安全整数问题由 [PR #2](https://github.com/Brilliant666/DokiTool-Go/pull/2) 修复。真实在线验收、发布包与回滚演练仍待完成；当前保持 Draft，未部署或切流，不能据离线结果替代 PHP 生产。
+
+当前计划、版本化 PHP 对拍与证据见 [Go 迁移说明](docs/go-migration/README.md)，仓库、选择性同步及许可范围见 [维护边界](docs/go-migration/MAINTENANCE.md)。下方保留的功能与部署说明描述继承的 PHP/前端基线，不能据此认定 Go 已完成真实平台和生产交付验收。
 
 DokiTool 是在同一仓库维护 Vue 3 前端与自建 PHP 解析接口的短视频工具，支持视频、图片、实况照片、画质与备用源选择，以及 B 站分 P 的展示、播放和下载。普通媒体优先由用户浏览器直接从媒体 CDN 获取。
 
@@ -9,7 +13,7 @@ DokiTool 是在同一仓库维护 Vue 3 前端与自建 PHP 解析接口的短�
 | PHP 解析器 | [jiuhunwl/short_videos](https://github.com/jiuhunwl/short_videos) | `72e5b6e72ab21e695d510e1c4c45213ce9a25f0f` |
 | Vue 前端 | [jiuhunwl/shortvideo-html](https://github.com/jiuhunwl/shortvideo-html) | `cd16011960fe90b53dd87f57714d1a096e986e5a`，包版本 `4.1.0` |
 
-原作者的许可证与版权声明保留在 [backend/LICENSE](backend/LICENSE)、[frontend/LICENSE](frontend/LICENSE) 和源码注释中；新增适配代码采用 [MIT](LICENSE)。依赖许可见 [NOTICE](NOTICE) 及 [frontend/public/licenses](frontend/public/licenses)。详细来源记录在 [UPSTREAM.json](UPSTREAM.json)，人工引入更新的方法见 [上游维护说明](docs/UPSTREAM-MAINTENANCE.md)。
+原作者的许可证与版权声明保留在 [backend/LICENSE](backend/LICENSE)、[frontend/LICENSE](frontend/LICENSE) 和源码注释中；公开检查点 `1eb529f` 及继承的 DokiTool 适配代码继续采用 [MIT](LICENSE)。该检查点之后自有私有增量的范围见 [维护边界](docs/go-migration/MAINTENANCE.md#来源和许可边界)，不改变已公开或第三方部分的许可。依赖许可见 [NOTICE](NOTICE) 及 [frontend/public/licenses](frontend/public/licenses)。详细来源记录在 [UPSTREAM.json](UPSTREAM.json)，人工引入更新的方法见 [上游维护说明](docs/UPSTREAM-MAINTENANCE.md)。
 
 [上游每日更新检查](docs/UPSTREAM-WATCH.md) 由 GitHub Actions 在北京时间 09:00 运行，新变化通过仓库 Issue 通知；不自动合并或部署。
 
@@ -53,7 +57,7 @@ SW 需要 HTTPS 或 localhost，同时传输最多两项任务；等待名额时
 
 任务面板将活动及恢复窗口内的待确认任务排在前面，超过窗口的未确认记录不再计为进行中。历史默认汇总，展开后可查看全部；手动折叠会记住偏好，新任务不会擅自展开，没有活动任务后面板可自动收起。“清除已结束”可在其他任务运行时使用；未确认记录仅在原实例已证实消失且恢复窗口结束时允许清除，不清除仍可能活跃的任务，也不删除已保存文件。折叠与展开只改变界面，不停止传输。
 
-生产下载故障与排查严重过失见 [事故 INC-20261031-001](docs/incidents/INC-20261031-001-download-delivery.md)。目前进入发布收尾：用户已报告正常生产流程三次约 540 MB 文件完整保存、首尾有声且卡片完成；历史停流未确定唯一原因，旧地址 403 不能继续作为有效测速证据。bridge 配置已修复，PR #11 的探针/恢复补丁仍待批准发布；自动终态恢复尚待发布后浏览器验收。当前结论、历史证据和停止加测要求见 [验收记录](docs/UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout)。
+生产下载故障与排查严重过失见 [事故 INC-20261031-001](docs/incidents/INC-20261031-001-download-delivery.md)。发布前用户已报告正常生产流程三次约 540 MB 文件完整保存、首尾有声且卡片完成；历史停流未确定唯一原因，旧地址 403 不能继续作为有效测速证据。维护者随后确认 PR #11 已合并并发布，PHP 生产基线为 `25beaee107f8c1a208ced9deb3c637068445e316`；自动终态恢复的真实浏览器验收仍单独待补。本轮 Go 迁移没有重新验证生产下载，不能把离线结果当作该事故的新线上证据。历史结论及停止加测要求见 [验收记录](docs/UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout)。
 
 ## 目录
 

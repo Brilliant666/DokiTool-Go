@@ -1,0 +1,42 @@
+{
+    "schema": 1,
+    "php_source_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+    "cases": [
+        {
+            "id": "root",
+            "referer": "https://weibo.com/",
+            "expected": [
+                "Referer: https://weibo.com/",
+                "Accept: application/json, text/plain, */*",
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ]
+        },
+        {
+            "id": "component",
+            "referer": "https://weibo.com/tv/show/1034:1234567890123456",
+            "expected": [
+                "Referer: https://weibo.com/tv/show/1034:1234567890123456",
+                "Accept: application/json, text/plain, */*",
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ]
+        },
+        {
+            "id": "visitor",
+            "referer": "https://passport.weibo.com/visitor/visitor",
+            "expected": [
+                "Referer: https://passport.weibo.com/visitor/visitor",
+                "Accept: application/json, text/plain, */*",
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ]
+        },
+        {
+            "id": "status",
+            "referer": "https://weibo.com/ajax/statuses/show?id=9007199254740993",
+            "expected": [
+                "Referer: https://weibo.com/ajax/statuses/show?id=9007199254740993",
+                "Accept: application/json, text/plain, */*",
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            ]
+        }
+    ]
+}

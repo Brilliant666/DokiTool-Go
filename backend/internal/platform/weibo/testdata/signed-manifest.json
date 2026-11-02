@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "baseline_commit": "25beaee107f8c1a208ced9deb3c637068445e316",
+  "baseline_tree": "e4b9d40f5e6c12a86fff629c105553886b434dcd",
+  "php_version": "8.3.6",
+  "cases": 35,
+  "public_envelopes": 70,
+  "files": {
+    "php-signed-baseline.json": "5c8a4841550594f9fb4000783071f3f1b0f127e4339c03049e93634deced0005"
+  },
+  "inputs": {
+    "backend/internal/platform/weibo/testdata/signed-inputs.json": "d8877ed366d9d66f20cc229f8e01108e7a014d0e6a554b7835d2355bebdcf942"
+  },
+  "sources": {
+    "backend/api/weibo.php": "0a3a9972491e21cf230be21995a127c5bad923db42d563ad0545eae7b7620616",
+    "backend/lib/gateway.php": "74f150b294220fd0c63e9851b31830c4ba2d11a8f8b58b1bf603c6a674e7a970",
+    "backend/lib/runtime.php": "0c90dca5e4e90498e904a69bb891625c7f66cbcf0723c15fedd72524d8134358",
+    "backend/lib/platforms.php": "5b82407a1fb6a1b7a849154fd65a44f030b2298466561dc289b60b182c359074",
+    "backend/lib/media-adapters.php": "0257081ef5f4fe40bf1f288145405a56e05dfff6c887d2e73b117c6f27ea27db",
+    "backend/lib/media-contract.php": "39e2e218917ad2ddc329cfbd2d7b4e6130e240bced8e4af6526656ad6b243817",
+    "backend/lib/media-metadata.php": "d96a408e91029580085ef530cb99511887e165dd11063570dbb75fee58a3483e",
+    "backend/lib/media-policy.php": "ccc523c6c8e53c4f8af18f51c2204a4ba14c124ed9aeb86448dafa7cf30840d9",
+    "backend/lib/weibo-media.php": "5530988ce434497251aef118af2dc0833b45640da84ad32450657aa7b86adb18",
+    "backend/config/platforms.json": "a900b8eadfdefdf1401371bdce9bfe09b4f330e24c1b733b18adec438c70b487",
+    "docs/schema/unified-v1/unified-v1.schema.json": "bde334422f63488da67b8a5a40f3081f143e031f9849f2df282a175a8df6165a"
+  },
+  "producers": {
+    "scripts/go-migration/produce-weibo-signed.py": "f2e7a2fc793370867cde6af099e7ec57df34604cf1bc10fdcb0c151debbdfe1b",
+    "scripts/go-migration/produce-weibo-signed.php": "72a5bae1989062abfd6235d2d227247b02dcba3b056715d731a87a1ae7c4296b"
+  },
+  "scope": "Original weiboFetchTarget, outputSuccess, snapAdaptParser and actual snapHandle/signing/resolve; controlled cURL metadata and internal-forward IO; fixed time() only; no source edits or live network.",
+  "request_comparison": "Exact URL/method/post/explicit PHP headers; only _rand normalized. Go performs its own approved redirects and decoder negotiation; PHP's cURL-native encoding/follow settings are not invented as Go wire headers."
+}
