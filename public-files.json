@@ -151,6 +151,7 @@
     "backend/internal/platform/weibo/product_test.go",
     "backend/internal/platform/weibo/public_media.go",
     "backend/internal/platform/weibo/public_oracle_test.go",
+    "backend/internal/platform/weibo/renewal.go",
     "backend/internal/platform/weibo/resolve.go",
     "backend/internal/platform/weibo/resolve_shape_test.go",
     "backend/internal/platform/weibo/resolve_test.go",

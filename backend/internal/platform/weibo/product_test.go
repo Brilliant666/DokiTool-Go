@@ -110,6 +110,83 @@ func TestWeiboSigningKeepsStableSourceAndDefault(t *testing.T) {
 	}
 }
 
+// Two credential generations of a selected rendition must still address the
+// same explicit choice, without ever replacing the signed delivery URL.
+func TestWeiboLPRefreshPreservesExplicitFile(t *testing.T) {
+	const file = "https://f.video.weibocdn.com/ab/object540.mp4?media_id=12345&template=540p&label=video"
+	const now = int64(1730000000)
+	key := strings.Repeat("k", 32)
+	type choice struct{ variant, source string }
+	publicChoices := func(urls ...string) []choice {
+		t.Helper()
+		var candidates unified.Array
+		for _, raw := range urls {
+			candidates = append(candidates, unified.Object{"url": raw, "width": 540, "height": 960, "size": 844977})
+		}
+		legacy := unified.Object{"code": 200, "data": unified.Object{"url": urls[0], "video_backup": candidates}}
+		out, err := PreparePublic(key)(context.Background(), "weibo", adaptLegacy(legacy, "https://weibo.com/tv/show/1034:12345", now), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = unified.PublicView(out, false, now)
+		if err := unified.ValidateEnvelopeAt(out, now); err != nil {
+			t.Fatal(err)
+		}
+		item := unified.Map(unified.Slice(unified.Map(out["data"])["items"])[0])
+		variants := unified.Slice(item["variants"])
+		if len(variants) != len(urls) {
+			t.Fatalf("lost candidates: got %d, want %d", len(variants), len(urls))
+		}
+		var got []choice
+		for i, v := range variants {
+			variant := unified.Map(v)
+			sources := unified.Slice(unified.Map(variant["delivery"])["sources"])
+			if len(sources) != 1 {
+				t.Fatal("unexpected source merge")
+			}
+			source := unified.Map(sources[0])
+			ticket := strings.TrimPrefix(unified.Str(source["url"]), "/api/media/weibo?ticket=")
+			data, ok := media.Verify(ticket, key, now)
+			if !ok || data["u"] != urls[i] {
+				t.Fatal("delivery did not preserve the exact incoming URL or source order")
+			}
+			got = append(got, choice{unified.Str(variant["id"]), unified.Str(source["id"])})
+		}
+		return got
+	}
+	const old = "&lp=oldRoute&Expires=1900000010&ssig=old&KID=k"
+	const fresh = "&lp=newRoute&Expires=1900000020&ssig=new&KID=k"
+	const plain = "&Expires=1900000010&ssig=other&KID=k"
+	first := publicChoices(file+plain, file+old)
+	next := publicChoices(file+fresh, file+plain)
+	if first[1] != next[0] || first[0] != next[1] {
+		t.Fatalf("refresh changed a choice: before %v, reordered after %v", first, next)
+	}
+	for _, raw := range []string{
+		strings.Replace(file, "object540", "other540", 1) + fresh,
+		strings.Replace(file, "12345", "12346", 1) + fresh,
+		strings.Replace(file, "540p", "other", 1) + fresh,
+		file + "&extra=content" + fresh,
+	} {
+		if publicChoices(raw)[0] == first[1] {
+			t.Fatal("unrelated content inherited explicit choice")
+		}
+	}
+	ambiguous := publicChoices(file+old, file+fresh)
+	if ambiguous[0] == ambiguous[1] || ambiguous[0] == first[1] || ambiguous[1] == first[1] {
+		t.Fatal("two simultaneously distinct observations must remain distinct from the unambiguous choice")
+	}
+	for _, unproven := range []string{
+		strings.Replace(file, "/ab/object540.mp4", "/other/shape", 1),
+		strings.Replace(file, "template=", "other=", 1),
+		file + "&lp=another",
+	} {
+		if publicChoices(unproven + old)[0] == publicChoices(unproven + fresh)[0] {
+			t.Fatal("an unfamiliar or ambiguous URL shape lost its original identity")
+		}
+	}
+}
+
 func TestWeiboForeignOnlyFailsClosed(t *testing.T) {
 	now := int64(1730000000)
 	raw := unified.Object{"code": 200, "data": unified.Object{"type": "video",

@@ -87,7 +87,8 @@ func adaptLegacy(legacy unified.Object, sourceURL string, now int64) unified.Obj
 	}
 	copied := unified.Clone(raw)
 	if candidates := unified.Slice(copied["video_backup"]); len(candidates) != 0 {
-		copied["video_candidates"] = unified.CloneValue(candidates)
+		markRenewableFiles(candidates)
+		copied["video_candidates"] = candidates
 	}
 	data := unified.SimpleData("weibo", copied, sourceURL, now)
 	if len(unified.Slice(data["items"])) == 0 {
