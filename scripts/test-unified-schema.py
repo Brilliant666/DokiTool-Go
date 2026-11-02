@@ -131,6 +131,61 @@ class ContractTests(unittest.TestCase):
         contract.validate(r)
         self.assertEqual(item(r)['default']['url'], url)
 
+    def test_credential_fallbacks_accept_same_https_origin(self):
+        for primary, alternatives in [
+            ('https://media.example.test/video.mp4?signature=old',
+             ['https://media.example.test/video.mp4?signature=new']),
+            ('https://MEDIA.EXAMPLE.TEST:443/video.mp4',
+             ['https://media.example.test/other.mp4?sig=abc%23def',
+              'https://media.example.test:443/video.mp4?signature=new']),
+            ('https://media.example.test:8443/video.mp4',
+             ['https://MEDIA.EXAMPLE.TEST:8443/other.mp4']),
+        ]:
+            with self.subTest(primary=primary):
+                response = example(2)
+                source = variant(response)['delivery']['sources'][0]
+                source.update(url=primary, fallback_urls=alternatives)
+                item(response)['default']['url'] = primary
+                unchanged = deepcopy(response)
+                contract.validate(response)
+                self.assertEqual(response, unchanged)
+
+    def test_credential_fallbacks_reject_invalid_candidates(self):
+        primary = 'https://v3-cdn-tos.ppxvod.com/video.mp4?signature=old'
+        cases = {
+            'cross-origin': ['https://other.example.test/other.mp4'],
+            'http-downgrade': ['http://v3-cdn-tos.ppxvod.com/other.mp4'],
+            'fragment': ['https://v3-cdn-tos.ppxvod.com/other.mp4#fragment'],
+            'userinfo': ['https://user:pass@v3-cdn-tos.ppxvod.com/other.mp4'],
+            'primary-duplicate': [primary],
+            'different-port': ['https://v3-cdn-tos.ppxvod.com:8443/other.mp4'],
+            'invalid-port': ['https://v3-cdn-tos.ppxvod.com:99999/other.mp4'],
+            'duplicate-candidates': [primary + 'x', primary + 'x'],
+            'empty': [],
+            'too-many': [primary + str(i) for i in range(3)],
+            'not-array': primary,
+        }
+        for label, alternatives in cases.items():
+            with self.subTest(case=label):
+                response = example(2)
+                variant(response)['delivery']['sources'][0].update(
+                    url=primary, fallback_urls=alternatives)
+                item(response)['default']['url'] = primary
+                with self.assertRaises(ValueError):
+                    contract.validate(response)
+
+    def test_credential_fallbacks_require_direct_https_primary(self):
+        for primary, access in [('http://media.example.test/video.mp4', 'direct'),
+                                ('/api/media/video', 'relay')]:
+            with self.subTest(access=access):
+                response = example(2)
+                variant(response)['delivery']['sources'][0].update(
+                    url=primary, access=access,
+                    fallback_urls=['https://media.example.test/other.mp4'])
+                item(response)['default'].update(url=primary, access=access)
+                with self.assertRaises(ValueError):
+                    contract.validate(response)
+
     def test_reordering_and_browser_fetch_do_not_reselect(self):
         r = example(18)
         selected = deepcopy(item(r)['default'])
