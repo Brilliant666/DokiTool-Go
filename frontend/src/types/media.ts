@@ -253,6 +253,8 @@ export interface DownloadTask {
   progressKind?: "bytes" | "segments" | "archive";
   /** Manual source-link capability, not verified native attachment eligibility. */
   nativeAvailable?: boolean;
+  /** In-memory capability: refresh the owned, pinned complete-file task once. */
+  refreshAvailable?: boolean;
   error: string | null;
   statusText: string;
   show: boolean;
