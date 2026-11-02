@@ -3,6 +3,8 @@ import type { DeliveryStatus, DownloadTransport } from "../downloads/types";
 export interface Source {
   id?: string;
   url: string;
+  /** At most two alternate credentials within this same logical source. */
+  fallback_urls?: string[];
   access?: "direct" | "relay";
   expires_at?: string;
   size_bytes?: number;

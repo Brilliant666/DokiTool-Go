@@ -93,3 +93,42 @@ func ppxRenewedSourceIdentity(raw, group string) string {
 	}
 	return "pipixia:cdn-source:" + unified.PHPIdentityJSON(unified.Array{host, key}, false)
 }
+
+// Preserve at most two extra credential observations inside an already proven
+// logical CDN source. Do not reorder primary URLs, infer freshness, or combine
+// unknown representations. Every candidate gets the same ordered pool, so the
+// existing whole-observation merge/ranking remains authoritative.
+func preserveCredentialFallbacks(candidates unified.Array) {
+	pools := map[string][]string{}
+	for _, value := range candidates {
+		candidate := unified.Map(value)
+		key := unified.Str(candidate["private_source_identity"])
+		if key == "" {
+			continue
+		}
+		raw := unified.Str(candidate["url"])
+		pool := pools[key]
+		found := false
+		for _, prior := range pool {
+			if prior == raw {
+				found = true
+			}
+		}
+		if !found && len(pool) < 3 {
+			pools[key] = append(pool, raw)
+		}
+	}
+	for _, value := range candidates {
+		candidate := unified.Map(value)
+		key := unified.Str(candidate["private_source_identity"])
+		alternatives := unified.Array{}
+		for _, raw := range pools[key] {
+			if raw != candidate["url"] && len(alternatives) < 2 {
+				alternatives = append(alternatives, raw)
+			}
+		}
+		if len(alternatives) > 0 {
+			candidate["fallback_urls"] = alternatives
+		}
+	}
+}

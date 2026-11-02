@@ -25,7 +25,7 @@ func Source(raw any) Object {
 			source["size_bytes"] = integer
 		}
 	}
-	for _, field := range []string{"expires_at", "availability", "browser_fetch"} {
+	for _, field := range []string{"expires_at", "availability", "browser_fetch", "fallback_urls"} {
 		if nonNullField(entry, field) {
 			source[field] = CloneValue(entry[field])
 		}
