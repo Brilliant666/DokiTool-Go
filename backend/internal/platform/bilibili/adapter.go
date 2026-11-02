@@ -30,7 +30,7 @@ func adapt(raw object, sourceURL string, now int64) object {
 			item["duration_ms"] = int64(unified.PHPRound(duration*1000, 0))
 		}
 		if number == current {
-			variants := variants(raw, now)
+			variants := variants(raw, bvid, number, page["cid"], now)
 			if len(variants) == 0 {
 				delete(item, "resolve_url")
 				item["state"] = "unavailable"
@@ -87,7 +87,7 @@ func adapt(raw object, sourceURL string, now int64) object {
 	return data
 }
 
-func variants(raw object, now int64) array {
+func variants(raw object, bvid string, page int64, cid any, now int64) array {
 	if raw["private_error"] != nil {
 		return array{}
 	}
@@ -101,6 +101,7 @@ func variants(raw object, now int64) array {
 	if len(durl) == 1 {
 		part := unified.Map(durl[0])
 		candidate := object{"sources": partSources(part), "label": pick(raw["quality"], "规格未知")}
+		markSingleDURL(candidate, bvid, page, stringValue(cid), play, part)
 		// PHP array union keeps the first fact: part before play, video before audio.
 		union(candidate, unified.VideoFacts(part), unified.VideoFacts(play), unified.AudioFacts(part), unified.AudioFacts(play))
 		result = unified.FileVariants(array{candidate}, now)

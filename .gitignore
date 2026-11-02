@@ -63,9 +63,11 @@
 !/scripts/check-download-headers.py
 !/scripts/check-public-files.py
 !/scripts/check-upstream-updates.py
+!/scripts/download-browser-session.mjs
 !/scripts/go-migration/
 !/scripts/requirements-validation.txt
 !/scripts/test-download-browser.mjs
+!/scripts/test-download-claim.mjs
 !/scripts/test-unified-schema.py
 !/scripts/tests/
 !/scripts/third-party-notices.py
@@ -504,6 +506,8 @@
 !/backend/internal/platform/bilibili/helpers.go
 !/backend/internal/platform/bilibili/parser.go
 !/backend/internal/platform/bilibili/parser_test.go
+!/backend/internal/platform/bilibili/renewal.go
+!/backend/internal/platform/bilibili/renewal_test.go
 !/backend/internal/platform/bilibili/request.go
 !/backend/internal/platform/bilibili/testdata/
 /backend/internal/platform/douyin/*

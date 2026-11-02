@@ -11,6 +11,7 @@ import { createServer } from 'node:http'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { crc32, deflateSync, gzipSync } from 'node:zlib'
+import { connect, until } from './download-browser-session.mjs'
 
 const [command, directory, profile, only] = process.argv.slice(2)
 const workerRoot = new URL('../frontend/public/downloads/', import.meta.url)
@@ -73,13 +74,16 @@ async function serve() {
     return 'http://127.0.0.1:' + server.address().port
   }
   function sendMedia(req, res) {
-    const test = cases.find(test => req.url === '/fixture/' + test.name)
+    const test = command === 'serve-ui' && req.url === '/fixture/claim-video'
+      ? {name:'claim-video', file:'mp4', slow:true}
+      : cases.find(test => req.url === '/fixture/' + test.name)
     if (!test) { res.writeHead(404).end(); return }
     const { wire, headers } = specimen(test)
     res.writeHead(200, headers)
     if (test.broken || test.slow || test.sizeAdjustment === -1) {
-      res.write(wire.subarray(0, 4096))
-      const end = setTimeout(() => test.broken ? res.destroy() : res.end(wire.subarray(4096)), test.slow ? 6000 : 250)
+      const first = Math.min(4096, Math.ceil(wire.length / 2))
+      res.write(wire.subarray(0, first))
+      const end = setTimeout(() => test.broken ? res.destroy() : res.end(wire.subarray(first)), test.slow ? 6000 : 250)
       res.on('close', () => clearTimeout(end))
     } else if (test.chunked) {
       res.write(wire.subarray(0, 4096))
@@ -88,6 +92,22 @@ async function serve() {
   }
   const cdn = await listen(sendMedia)
   const app = await listen(async (req, res) => {
+    if (command === 'serve-ui') {
+      const pathname = new URL(req.url, 'http://localhost').pathname;
+      if (pathname === '/api/parse') {
+        const mediaUrl = cdn + '/fixture/claim-video';
+        const item = { id: 'video', type: 'video', variants: [{ id: 'mp4', metadata: { extension: 'mp4', mime_type: 'video/mp4', evidence: 'upstream' }, delivery: { kind: 'file', sources: [{ url: mediaUrl, size_bytes: media.mp4.length }] } }], default: { variant_id: 'mp4', url: mediaUrl } };
+        return res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ schema_version: '1.0', code: 'OK', data: { platform: 'douyin', title: 'Local claim check', items: [item] } }));
+      }
+      if (pathname === '/api/platforms') return res.writeHead(200, { 'Content-Type': 'application/json' })
+        .end(await readFile(new URL('../frontend/src/generated/platform-catalog.json', import.meta.url)));
+      const root = path.resolve(profile);
+      const file = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
+      if (!file.startsWith(root + path.sep)) return res.writeHead(404).end();
+      const type = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' }[path.extname(file)] || 'application/octet-stream';
+      try { const body = await readFile(file); return res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' }).end(body) }
+      catch (error) { if (error.code === 'ENOENT') return res.writeHead(404).end(); throw error }
+    }
     if (req.url?.startsWith('/fixture/')) return sendMedia(req, res)
     if (req.url === '/downloads/check') return res.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><title>Download test</title>')
     if (/^\/downloads\/[a-z][a-z-]*\.js$/.test(req.url)) {
@@ -96,43 +116,8 @@ async function serve() {
     }
     res.writeHead(404).end()
   })
-  await writeFile(path.join(runDir, 'servers.json'), JSON.stringify({ app, cdn }))
+  await writeFile(path.join(runDir, 'servers.json'), JSON.stringify({ app, cdn, ...(command === 'serve-ui' ? { claimFixture: { mime:'video/mp4', bytes: media.mp4.length, sha256: sha256(media.mp4) } } : {}) }))
   console.log('Loopback fixtures ready', app, cdn)
-}
-
-// Use the browser's debugging endpoint only for this dedicated test profile.
-// Native download naming remains browser-owned; the test never renames files.
-async function connect(profileDir) {
-  const [port, socketPath] = (await readFile(path.join(profileDir, 'DevToolsActivePort'), 'utf8')).trim().split(/\r?\n/)
-  const ws = new WebSocket('ws://127.0.0.1:' + Number(port) + socketPath)
-  await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject })
-  let sequence = 0
-  const pending = new Map()
-  ws.onmessage = message => {
-    const packet = JSON.parse(message.data)
-    const reply = pending.get(packet.id)
-    if (reply) {
-      pending.delete(packet.id)
-      if (packet.error) reply.reject(new Error(packet.error.message))
-      else reply.resolve(packet.result)
-    }
-  }
-  const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
-    const id = ++sequence
-    pending.set(id, { resolve, reject })
-    ws.send(JSON.stringify({ id, method, params, sessionId }))
-  })
-  return { send, close: () => ws.close() }
-}
-
-async function until(read, label) {
-  const deadline = Date.now() + 20_000
-  do {
-    const result = await read()
-    if (result) return result
-    await delay(75)
-  } while (Date.now() < deadline)
-  throw new Error('Timed out waiting for ' + label)
 }
 
 // Observe the native response at the SW fetch boundary and the synthetic
@@ -267,6 +252,6 @@ async function check() {
   console.log('Browser download fixtures passed:', report.cases.length, report.build)
 }
 
-if (command === 'serve') await serve()
+if (command === 'serve' || (command === 'serve-ui' && profile)) await serve()
 else if (command === 'check' && profile) await check()
 else throw new Error('Expected serve <run-dir> or check <run-dir> <browser-profile> [case]')
