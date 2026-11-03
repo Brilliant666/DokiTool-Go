@@ -28,6 +28,7 @@ function harness(fetcher, indexedDB) {
     fetch: fetcher, URL, Response, ReadableStream, AbortController, DOMException, TextDecoder,
     crypto: { randomUUID }, indexedDB,
     Date: class extends Date { static now() { return now; } },
+    performance: { now: () => now },
     setTimeout(callback, delay) { const handle = ++nextTimer; timers.set(handle, { callback, delay }); return handle; },
     clearTimeout: handle => timers.delete(handle),
   });
@@ -78,6 +79,72 @@ test('durable terminal survives a lost notification and a same-build execution r
   assert.equal(restored.status, 'completed'); assert.equal(restored.workerInstance, before.workerInstance);
   assert.equal(restored.revision, result.revision); assert.equal(restored.url, ''); assert.equal(fetches, 1);
   assert.equal(first.updates.some(value => value.status === 'completed'), false, 'the test deliberately loses the terminal notification');
+});
+
+test('terminal timing locates source and consumer waits by byte range and survives a Worker restart', async t => {
+  const db = fakeIndexedDB();
+  const delays = [73, 3000, 0, 765]; // First block, two more reads, then EOF.
+  const h = harness(async () => media([bytes[0], bytes[1], bytes[0]], 12, () => h.advance(delays.shift())), db);
+  t.after(() => h.close());
+  await h.admit(1);
+  const reader = (await h.download(1)).body.getReader();
+  await reader.read();
+  await reader.read();
+  h.advance(3400); // Browser holds the second chunk before asking for another.
+  await reader.read();
+  assert.equal((await reader.read()).done, true);
+  const result = await h.query(1);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.timing.firstBlockMs, 73);
+  const observed = Array.from(result.timing.windows, w => [w.from, w.to, w.ms, w.readMs, w.demandMs]);
+  assert.deepEqual(observed, [
+    [0, 8, 3000, 3000, 0],
+    [8, 12, 3400, 0, 3400],
+    [12, 12, 765, 765, 0],
+  ]);
+  const restored = harness(() => assert.fail('restoring timings must not fetch the media'), db);
+  t.after(() => restored.close());
+  assert.deepEqual(structuredClone((await restored.query(1)).timing), structuredClone(result.timing));
+});
+
+test('cancelling a pending source read keeps its elapsed wait and the last delivered offset', async t => {
+  let pulls = 0, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const h = harness(async () => new Response(new ReadableStream({
+    pull(controller) { if (++pulls === 1) controller.enqueue(bytes[0]); else entered(); },
+  }, { highWaterMark: 0 }), { headers: { 'content-type': 'video/mp4' } }));
+  t.after(() => h.close());
+  await h.admit(1);
+  const reader = (await h.download(1)).body.getReader();
+  await reader.read();
+  const interrupted = assert.rejects(reader.read(), { name: 'AbortError' });
+  await waiting;
+  h.advance(2700);
+  await h.cancel(1);
+  await interrupted;
+  const result = await h.query(1);
+  assert.equal(result.status, 'cancelled');
+  assert.equal(result.loaded, 4);
+  const last = result.timing.windows.at(-1);
+  assert.equal(last.to, 4); assert.equal(last.readMs, 2700); assert.equal(last.demandMs, 0);
+});
+
+test('long timing history preserves byte coverage and total wait with bounded snapshot size', async t => {
+  const count = 400;
+  const h = harness(() => media(Array(count).fill(bytes[0]), count * 4));
+  t.after(() => h.close());
+  await h.admit(1);
+  const reader = (await h.download(1)).body.getReader();
+  for (let i = 0; i < count; i++) { h.advance(2100); await reader.read(); }
+  assert.equal((await reader.read()).done, true);
+  const { windows } = (await h.query(1)).timing;
+  assert.ok(windows.length <= 129, 'history remains bounded after several compactions');
+  let end = 0, demandMs = 0;
+  for (const w of windows) {
+    assert.equal(w.from, end); assert.ok(w.to >= w.from);
+    end = w.to; demandMs += w.demandMs;
+  }
+  assert.equal(end, count * 4); assert.equal(demandMs, count * 2100);
 });
 
 test('same-build restart cannot adopt a durable active task or implicitly restart its stream', async t => {
@@ -524,7 +591,7 @@ test('finished elapsed time and average speed remain stable across later queries
 test('worker reports its build and separates total elapsed time from transfer speed', async t => {
   const h = harness(async () => media()); t.after(() => h.close());
   const ping = await h.send({ action: 'ping' });
-  assert.equal(ping.workerBuild, 'downloads-20261101.1');
+  assert.equal(ping.workerBuild, 'downloads-20261103.1');
   assert.equal(ping.capabilities.admission, true);
   await h.start(1, [], { startedAt: 995_000 });
   assert.equal((await h.query(1)).elapsed, 5);

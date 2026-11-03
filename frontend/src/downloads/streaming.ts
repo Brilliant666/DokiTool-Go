@@ -48,7 +48,7 @@ function saveTasks(): void {
     const { url: _url, ...last } = snapshot;
     return { id: key.id, token: key.token, filename: snapshot.filename, savedAt: key.savedAt,
       ...(key.recoveryDeadline ? { recoveryDeadline: key.recoveryDeadline } : {}), ...(key.ownerGone ? { ownerGone: true } : {}), ...(cancelRequested ? { cancelRequested: true } : {}),
-      ...(confirmed ? { last, ...(terminal(snapshot) ? { result: last } : {}) } : {}) };
+      ...(confirmed ? (terminal(snapshot) ? { result: last } : { last }) : {}) };
   });
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(retained(records))); } catch { /* Storage restrictions do not stop an active transfer. */ }
 }
