@@ -225,7 +225,7 @@ func TestLiveRedirectBoundaries(t *testing.T) {
 				calls++
 				return fetch.Response{StatusCode: 302, Header: http.Header{"Location": {target}}}, nil
 			}), nil)
-			value, err := parser.followLocation(context.Background(), buildOriginalPlayURL("fixture"))
+			value, err := parser.followLocation(context.Background(), OriginalPlayURL("fixture"))
 			if err != nil || value != "" || calls != 1 {
 				t.Fatalf("unsafe redirect followed or exposed: value=%q calls=%d error=%v", value, calls, err)
 			}
@@ -236,7 +236,7 @@ func TestLiveRedirectBoundaries(t *testing.T) {
 		calls++
 		return fetch.Response{StatusCode: 302, Header: http.Header{"Location": {"https://v5-test.douyinvod.com/loop"}}}, nil
 	}), nil)
-	if _, err := parser.followLocation(context.Background(), buildOriginalPlayURL("fixture")); err != nil || calls != 3 {
+	if _, err := parser.followLocation(context.Background(), OriginalPlayURL("fixture")); err != nil || calls != 3 {
 		t.Fatalf("live redirect budget failed: calls=%d err=%v", calls, err)
 	}
 }

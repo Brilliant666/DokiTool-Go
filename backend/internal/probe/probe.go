@@ -4,6 +4,8 @@ package probe
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/netip"
@@ -55,6 +57,39 @@ func (p *Probe) Probe(parent context.Context, rawURL string) (unified.Object, er
 	ctx, cancel := context.WithTimeout(parent, Timeout)
 	defer cancel()
 	r := reader{probe: p, ctx: ctx}
+	return r.inspect(rawURL, parent)
+}
+
+// Originals makes at most two official dispatches within a single reader budget.
+// Each dispatch starts at byte zero; credentials and byte offsets never cross
+// from one CDN representation to the next.
+func (p *Probe) Originals(parent context.Context, rawURL string) ([]unified.Object, error) {
+	if !p.allowedURL(rawURL) {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(parent, Timeout)
+	defer cancel()
+	entry, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	r := reader{probe: p, ctx: ctx, original: true, entryHost: entry.Hostname()}
+	var results []unified.Object
+	for attempt := 0; attempt < 2 && ctx.Err() == nil && r.requests < MaxRequests && MaxBytes-r.bytes > prefixBytes; attempt++ {
+		r.size = 0
+		r.objectPath = ""
+		value, err := r.inspect(rawURL, parent)
+		if err != nil {
+			return nil, err
+		}
+		if value != nil && value["prefix_sha256"] != nil {
+			results = append(results, value)
+		}
+	}
+	return results, parent.Err()
+}
+
+func (r *reader) inspect(rawURL string, parent context.Context) (unified.Object, error) {
 	current := rawURL
 	prefix := r.read(&current, 0, prefixBytes)
 	if err := parent.Err(); err != nil {
@@ -66,7 +101,7 @@ func (p *Probe) Probe(parent context.Context, rawURL string) (unified.Object, er
 	result := unified.Object{"url": current, "metadata": unified.Object{}}
 	var offset int64
 	for i := 0; i < maxTopAtoms && offset < r.size; i++ {
-		if ctx.Err() != nil {
+		if r.ctx.Err() != nil {
 			break
 		}
 		var head []byte
@@ -98,6 +133,11 @@ func (p *Probe) Probe(parent context.Context, rawURL string) (unified.Object, er
 				result["url"] = current
 				if metadata := Metadata(moov, r.size); metadata != nil {
 					result["metadata"] = metadata
+					if r.original && current != rawURL && hasAudioTrack(moov) {
+						metadata["has_audio"] = true
+						digest := sha256.Sum256(prefix)
+						result["prefix_sha256"] = hex.EncodeToString(digest[:])
+					}
 				}
 			}
 			break
@@ -111,12 +151,15 @@ func (p *Probe) Probe(parent context.Context, rawURL string) (unified.Object, er
 }
 
 type reader struct {
-	probe     *Probe
-	ctx       context.Context
-	bytes     int64
-	requests  int
-	redirects int
-	size      int64
+	entryHost  string
+	objectPath string
+	original   bool
+	probe      *Probe
+	ctx        context.Context
+	bytes      int64
+	requests   int
+	redirects  int
+	size       int64
 }
 
 var contentRange = regexp.MustCompile(`^bytes ([0-9]{1,10})-([0-9]{1,10})/([0-9]{1,10})$`)
@@ -166,6 +209,11 @@ func (r *reader) read(current *string, offset, length int64) []byte {
 		if remaining <= 0 {
 			return nil
 		}
+		// readBody uses one extra byte to reject overlong responses. Reserve it
+		// when multiple dispatches share a hard network budget.
+		if r.original && length+1 > MaxBytes-r.bytes {
+			return nil
+		}
 		r.requests++
 		response, err := r.probe.executor.Do(r.ctx, fetch.Request{
 			URL: *current, Method: http.MethodGet,
@@ -179,10 +227,14 @@ func (r *reader) read(current *string, offset, length int64) []byte {
 				Purpose: "media-probe", AllowedURL: safeTransportURL,
 				Timeout: remaining, MaxBytes: length, MaxHeaderBytes: maxHeaderBytes,
 				StrictMediaHeaders: true,
+				PartialMediaOnly:   r.original,
 				FollowRedirects:    false, MaxRedirects: 0,
 			},
 		})
 		if err != nil || r.ctx.Err() != nil || int64(len(response.Body)) > length {
+			if r.original {
+				r.bytes += length + 1
+			}
 			return nil
 		}
 		// No-follow is part of Executor's contract. Do not accept an injected
@@ -221,6 +273,12 @@ func (r *reader) read(current *string, offset, length int64) []byte {
 			if !safeTransportURL(next) {
 				return nil
 			}
+			if r.original {
+				u, _ := url.Parse(next)
+				if strings.EqualFold(u.Hostname(), r.entryHost) {
+					return nil
+				}
+			}
 			*current = next
 			continue
 		}
@@ -258,6 +316,13 @@ func (r *reader) read(current *string, offset, length int64) []byte {
 		}
 		if size < 8 || size > maxFileBytes || (r.size != 0 && r.size != size) {
 			return nil
+		}
+		if r.original {
+			path := unified.DouyinStoragePath(*current)
+			if path == "" || (r.objectPath != "" && path != r.objectPath) {
+				return nil
+			}
+			r.objectPath = path
 		}
 		r.size = size
 		return response.Body

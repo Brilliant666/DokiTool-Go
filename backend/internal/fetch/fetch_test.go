@@ -137,3 +137,26 @@ func TestRequestDeadlineCoversDNS(t *testing.T) {
 		t.Fatalf("deadline lost: %v", err)
 	}
 }
+
+type unreadableMedia struct{ read bool }
+
+func (b *unreadableMedia) Read([]byte) (int, error) { b.read = true; return 0, io.EOF }
+func (b *unreadableMedia) Close() error             { return nil }
+
+func TestPartialMediaOnlyRejectsWholeFileBeforeReading(t *testing.T) {
+	for _, tc := range []struct {
+		code int
+		span string
+	}{{200, ""}, {206, "bytes 0-9/10"}, {206, "bytes 4-15/10"}, {206, "malformed"}} {
+		body := new(unreadableMedia)
+		c := fixtureClient(func(*http.Request, []netip.Addr, Policy) (*http.Response, error) {
+			return &http.Response{StatusCode: tc.code, Header: http.Header{"Content-Range": {tc.span}}, Body: body}, nil
+		})
+		p := testPolicy()
+		p.PartialMediaOnly = true
+		_, err := c.Do(context.Background(), Request{URL: "https://api.example.test/video", Policy: p})
+		if !errors.Is(err, ErrPolicy) || body.read {
+			t.Fatalf("%d %q err=%v body read=%v", tc.code, tc.span, err, body.read)
+		}
+	}
+}

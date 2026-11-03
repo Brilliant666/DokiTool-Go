@@ -18,13 +18,22 @@ type Prober interface {
 	Probe(context.Context, string) (unified.Object, error)
 }
 
+type OriginalResolver interface {
+	ResolveOriginal(context.Context, string) ([]unified.Object, error)
+}
+
 type Parser struct {
 	executor fetch.Executor
 	prober   Prober
+	resolver OriginalResolver
 }
 
 func New(executor fetch.Executor, prober Prober) *Parser {
 	return &Parser{executor: executor, prober: prober}
+}
+
+func NewWithOriginalResolver(executor fetch.Executor, japan Prober, shanghai OriginalResolver) *Parser {
+	return &Parser{executor: executor, prober: japan, resolver: shanghai}
 }
 
 var shareURL = regexp.MustCompile(`(?i)https?://[^\s"'<>]+`)
