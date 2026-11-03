@@ -297,6 +297,12 @@ jobs:
         working-directory: backend
         run: go test -race -count=1 -v ./internal/platform/weibo
 
+      - name: Verify HTTP admission and stream leases
+        working-directory: backend
+        run: |
+          go vet ./internal/api ./cmd/dokitool
+          go test -race -count=1 ./internal/api -run TestAdmission
+
       - name: Verify real Weibo HTTP and PHP public parity with focused diagnostics
         working-directory: backend
         run: go test -race -count=1 -v ./internal/api ./internal/platform/weibo -run 'TestWeibo|TestFrozenPHPWeiboPublicAdapter'
