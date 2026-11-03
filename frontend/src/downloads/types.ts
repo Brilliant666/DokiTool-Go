@@ -33,6 +33,11 @@ export interface DownloadSnapshot {
   elapsed: number;
   averageSpeed: number;
   transferElapsed?: number;
+  /** Completed observation of a streaming attempt. Bytes are decoded body offsets. */
+  timing?: {
+    firstBlockMs: number;
+    windows: { from: number; to: number; ms: number; readMs: number; demandMs: number }[];
+  };
   workerBuild?: string;
   workerInstance?: string;
   finishedAt?: number;

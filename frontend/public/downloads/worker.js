@@ -3,7 +3,7 @@ import { createTaskStore, HISTORY_MS } from "./task-store.js";
 import { attachmentFormat, cleanFilename } from "./media-format.js";
 import { decodedLength } from "./decoded-length.js";
 const PROTOCOL = 1;
-const BUILD = "downloads-20261101.1";
+const BUILD = "downloads-20261103.1";
 const INSTANCE = crypto.randomUUID();
 const store = createTaskStore();
 const MAX_ACTIVE = 2;
@@ -31,6 +31,53 @@ const sourceUrl = value => {
   }
   return url.href;
 };
+
+// Observe the existing pull loop. No timers, media buffers, or per-chunk messages.
+function transferTiming(started, firstBlock) {
+  let windowStart = firstBlock, mark = firstBlock, phase = "demand";
+  let from = 0, readMs = 0, demandMs = 0, span = 2000;
+  const windows = [];
+  function enter(next, now) {
+    if (phase === "read") readMs += now - mark;
+    if (phase === "demand") demandMs += now - mark;
+    phase = next;
+    mark = now;
+  }
+  function close(to, now) {
+    windows.push({ from, to, ms: now - windowStart, readMs, demandMs });
+    from = to;
+    windowStart = now;
+    readMs = demandMs = 0;
+    // Keep coverage of the whole file, even during multi-hour transfers.
+    if (windows.length === 128) {
+      for (let i = 0; i < 64; i++) {
+        const a = windows[i * 2], b = windows[i * 2 + 1];
+        windows[i] = { from: a.from, to: b.to, ms: a.ms + b.ms,
+          readMs: a.readMs + b.readMs, demandMs: a.demandMs + b.demandMs };
+      }
+      windows.length = 64;
+      span *= 2;
+    }
+  }
+  return {
+    pull(hasFirst) { enter(hasFirst ? "work" : "read", performance.now()); },
+    received() { enter("work", performance.now()); },
+    delivered(to) {
+      const now = performance.now();
+      enter("demand", now);
+      if (now - windowStart >= span) close(to, now);
+    },
+    finish(to) {
+      const now = performance.now();
+      enter("done", now);
+      if (to !== from || now > windowStart || !windows.length) close(to, now);
+      return { firstBlockMs: Math.round(firstBlock - started), windows: windows.map(w => ({
+        from: w.from, to: w.to, ms: Math.round(w.ms),
+        readMs: Math.round(w.readMs), demandMs: Math.round(w.demandMs),
+      })) };
+    },
+  };
+}
 
 function snapshot(task) {
   if (task.result) return task.result;
@@ -105,6 +152,10 @@ function settle(task, status, error) {
   clearTimeout(task.claimTimer);
   clearTimeout(task.responseTimer);
   task.state.status = status;
+  if (task.timing) {
+    task.state.timing = task.timing.finish(task.state.loaded);
+    task.timing = undefined;
+  }
   task.state.error = error;
   task.finishedAt = Date.now();
   task.detachRequestAbort?.();
@@ -226,8 +277,10 @@ async function attachment(task) {
   if (task.controller.signal.aborted) throw abortError();
   task.state.status = "preparing";
   publish(task, true);
+  const prepareStarted = performance.now();
   const prepared = await prepare(task);
   if (task.controller.signal.aborted) throw abortError();
+  task.timing = transferTiming(prepareStarted, performance.now());
   let first = prepared.first;
   task.state.status = "downloading";
   task.transferStartedAt = Date.now();
@@ -239,7 +292,9 @@ async function attachment(task) {
       try {
         if (task.controller.signal.aborted) throw abortError();
         task.lastPullAt = Date.now();
+        task.timing?.pull(!!first);
         const item = first ? { value: first, done: false } : await timed(task, () => task.reader.read());
+        task.timing?.received();
         first = undefined;
         if (item.done) {
           if (!task.state.loaded || (task.state.total && task.state.loaded !== task.state.total)) throw new Error("下载不完整，请重新下载");
@@ -253,6 +308,7 @@ async function attachment(task) {
         task.lastReceivedAt = Date.now();
         controller.enqueue(item.value);
         publish(task);
+        task.timing?.delivered(task.state.loaded);
       } catch (error) {
         settle(task, task.controller.signal.aborted ? "cancelled" : "failed", error.message);
       }

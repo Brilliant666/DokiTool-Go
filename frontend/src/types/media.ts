@@ -1,4 +1,4 @@
-import type { DeliveryStatus, DownloadTransport } from "../downloads/types";
+import type { DeliveryStatus, DownloadSnapshot, DownloadTransport } from "../downloads/types";
 
 export interface Source {
   id?: string;
@@ -244,6 +244,7 @@ export interface DownloadTask {
   averageSpeed?: number;
   /** Active transfer duration, excluding preparation and queue waits. */
   transferElapsed?: number;
+  timing?: DownloadSnapshot["timing"];
   observation?: "unknown" | "stalled";
   workerBuild?: string;
   workerInstance?: string;

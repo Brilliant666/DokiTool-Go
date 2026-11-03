@@ -268,6 +268,7 @@ export function useMediaDownload({
       elapsed: snapshot.elapsed,
       averageSpeed: snapshot.averageSpeed,
       transferElapsed: snapshot.transferElapsed,
+      timing: snapshot.timing,
       observation: snapshot.observation,
       workerBuild: snapshot.workerBuild,
       workerInstance: snapshot.workerInstance,
@@ -369,6 +370,7 @@ export function useMediaDownload({
       nativeAvailable: true,
       observation: undefined,
       transferElapsed: undefined,
+      timing: undefined,
       workerBuild: undefined,
     });
     const context = sourceContexts.get(downloadId);
