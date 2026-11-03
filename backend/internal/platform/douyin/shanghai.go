@@ -75,7 +75,7 @@ func (p *Parser) probeOriginal(ctx context.Context, vid, entry string, detail ob
 		if key != "" && len(meta) > 0 {
 			// DouyinStoragePath has already parsed and validated this URL.
 			u, _ := url.Parse(raw)
-			id := originalFileID(vid, key, meta)
+			id := originalFileID(vid, key, unified.Str(probed["prefix_sha256"]), meta)
 			meta = unified.Clone(meta)
 			src := object{"url": raw, "size": meta["size"], "private_source_identity": id + "@" + strings.ToLower(u.Hostname())}
 			meta["sources"] = array{src}
@@ -100,7 +100,7 @@ func shanghaiOriginal(vid string, candidates []object, video object, known quali
 	if objectKey == "" || prefix == "" || size <= 0 || declaredMS <= 0 || duration <= 0 || math.Abs(duration*1000-declaredMS) > 1000 || !higherThanDeclared(metadata, known, video, objectKey) {
 		return nil
 	}
-	identity := originalFileID(vid, objectKey, metadata)
+	identity := originalFileID(vid, objectKey, prefix, metadata)
 	sources := array{}
 	for _, c := range candidates {
 		if c["object_key"] != objectKey || c["prefix_sha256"] != prefix || !unified.Equal(c["metadata"], observation["metadata"]) {
@@ -117,11 +117,9 @@ func shanghaiOriginal(vid string, candidates []object, video object, known quali
 	return object{"url": observation["url"], "metadata": metadata}
 }
 
-// The CDN's storage key and measured file facts are shared by both resolvers.
-// Prefix hashes authenticate the grouping of observed Shanghai routes; the
-// legacy Japan probe has no such hash, so it is not part of this shared ID.
-func originalFileID(vid, key string, m object) string {
-	return unified.PHPIdentityJSON(array{"douyin:original", vid, key, m["size"], m["width"], m["height"], m["codec"], m["duration"]}, false)
+// Both routes identify the storage object and fingerprint the same initial bytes.
+func originalFileID(vid, key, prefix string, m object) string {
+	return unified.PHPIdentityJSON(array{"douyin:original", vid, key, prefix, m["size"], m["width"], m["height"], m["codec"], m["duration"]}, false)
 }
 
 func higherThanDeclared(m object, known qualityVideo, video object, objectKey string) bool {

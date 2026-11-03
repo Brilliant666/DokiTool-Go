@@ -34,12 +34,19 @@ const (
 // Probe has no mutable request state. Every call receives a fresh byte, request,
 // redirect and time budget, including when one instance is used concurrently.
 type Probe struct {
-	executor   fetch.Executor
-	allowedURL func(string) bool
+	fingerprint bool
+	executor    fetch.Executor
+	allowedURL  func(string) bool
 }
 
 func New(executor fetch.Executor, allowedURL func(string) bool) *Probe {
 	return &Probe{executor: executor, allowedURL: allowedURL}
+}
+
+// WithFingerprint also identifies the bytes already read by the Japan probe.
+func (p Probe) WithFingerprint() *Probe {
+	p.fingerprint = true
+	return &p
 }
 
 // Probe returns a confirmed media URL and measured metadata, or nil when no
@@ -135,6 +142,8 @@ func (r *reader) inspect(rawURL string, parent context.Context) (unified.Object,
 					result["metadata"] = metadata
 					if r.original && current != rawURL && hasAudioTrack(moov) {
 						metadata["has_audio"] = true
+					}
+					if r.probe.fingerprint || r.original && metadata["has_audio"] == true {
 						digest := sha256.Sum256(prefix)
 						result["prefix_sha256"] = hex.EncodeToString(digest[:])
 					}

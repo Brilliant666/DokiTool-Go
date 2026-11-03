@@ -112,6 +112,14 @@ func TestShanghaiOriginalSelectionAndRefresh(t *testing.T) {
 			}
 		}
 	}
+	remoteErr = nil
+	replacement := candidate("v3-dy-o.zjcdn.com", "f")
+	replacement["prefix_sha256"] = strings.Repeat("b", 64)
+	remote = []object{replacement}
+	replaced, _ := observe()
+	if replaced["variant_id"] == firstDefault["variant_id"] {
+		t.Fatal("changed file prefix reused original identity")
+	}
 	if path := os.Getenv("DOKITOOL_SHANGHAI_EXAMPLES"); path != "" {
 		b, err := json.Marshal(views)
 		if err != nil {

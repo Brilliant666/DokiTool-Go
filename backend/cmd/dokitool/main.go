@@ -108,7 +108,7 @@ func run(args []string) error {
 		if err != nil {
 			log.Print("Shanghai original resolver disabled: invalid configuration")
 		} else {
-			douyinParser = douyin.NewWithOriginalResolver(executor, japan, shanghai)
+			douyinParser = douyin.NewWithOriginalResolver(executor, japan.WithFingerprint(), shanghai)
 		}
 	}
 	adapters := map[string]api.Adapter{
