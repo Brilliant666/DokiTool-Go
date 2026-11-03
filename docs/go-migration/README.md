@@ -4,25 +4,110 @@
 
 维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)；不部署 Go、不改变 PHP 生产，受控上游测试不等于真实平台或浏览器保存验收。
 
-**九平台实现和完整离线门禁已完成**：Go 3835 叶场景，独立响应 994/994，原前端消费 918/918；签发后微博和全部新平台的公开响应均严格对拍。最新证据见 [验收记录](acceptance.md)、[机器报告](nine-platform-checks.json) 和 [五平台实施说明](remaining-platforms-implementation.md)。原自动调度保持暂停，本轮由当前聊天直接接管完成；线上双实现对照与切换交付仍待验收。
+## 当前交付与历史证据
 
-[B 站实现与验收范围](bilibili.md)保留分 P、合集、单文件、分段和独立音轨的实际 PHP 行为；55 个固定 PHP 输入的 110 份 Go 公开响应已严格对拍通过。机器报告见 [bilibili-checks.json](bilibili-checks.json)，实际执行提交和 CI 链接见 [验收记录](acceptance.md)。
+Go 集成基线经 [PR #20](https://github.com/Brilliant666/DokiTool-Go/pull/20) 合入 `main`：`7641d65d9bdb2016a0425e189b9b35f9567d6813`，tree `ed2d4314c57cdee2631fef8ee2d87691ce85762d`。合并 tree 与已验 `e92cfdf` 相同，但后者 CI 不冒称为 merge SHA 的新 CI。当前构建交接见 [#9](https://github.com/Brilliant666/DokiTool-Go/issues/9)，平台和网络待验边界见 [#13](https://github.com/Brilliant666/DokiTool-Go/issues/13)。仅合并源码，未部署、未切 PHP 生产。
 
-**当前小红书专项分支**默认保留标准传输，显式启用 `serve -xhs-page-transport chrome131` 后，已在开发环境从正式 API 取得普通图集、视频、原画和 Live。原前端完整保存了一份 70,759,716 字节的 QuickTime 原画。单图保存长度不一致、MOV 落盘后缀为 `.mp4` 两项另列。构建、历史门禁和本轮证据见[专项验收](xhs-page-transport.md)与[脱敏机器报告](xhs-page-online-checks.json)。
+[验收记录](acceptance.md)、[机器报告](nine-platform-checks.json)、[B 站说明](bilibili.md) 和[五平台实施说明](remaining-platforms-implementation.md)中的 3835/994/918 等数字属于对应历史提交，不是每次构建的新门禁结果；不要为启动交接重复整套九平台矩阵。旧迁移自动调度不恢复；工程领取通过 #11 的唯一 dot 入口和明确任务进行。
+
+[小红书专项](xhs-page-transport.md)和[旧机器报告](xhs-page-online-checks.json)保留当时的真实原画与限制。旧单图长度/MOV 后缀观察不是当前版本必然仍失败的结论，亦不能直接改写为通过。后续下载/身份修正及限定真实验收见 PR #20/#9 的准确 SHA 记录；不外推所有平台、媒体与浏览器均通过。
 
 ## 当前运行方式
 
 Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**。基础解析和标准媒体传输沿用标准库；本专项另引入锁定的 `tls-client` / `fhttp` 页面传输依赖，版本及完整性以 `go.mod/go.sum` 为准。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
 
+### 1. 固定版本构建
+
+以下为 Bash，从干净的目标提交根目录执行；`go version` 必须实际显示 `go1.27.3`，不能仅凭命令名认定工具可用。Node/npm 使用可运行 Vite 5 的受支持版本，依赖以 `frontend/package-lock.json` 为准。默认构建不需要 PHP。
+
 ```sh
-cd backend
-go test ./...
-go test -race ./...
-go vet ./...
-go build -o /tmp/dokitool-go ./cmd/dokitool
-/tmp/dokitool-go catalog
-/tmp/dokitool-go serve -listen 127.0.0.1:9082
+set -eu
+ROOT="$PWD"
+SOURCE_SHA="$(git rev-parse HEAD)"
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/dokitool-go.XXXXXX")"
+go version
+(cd backend && GOTOOLCHAIN=local go build -trimpath \
+  -ldflags "-X main.version=$SOURCE_SHA" -o "$OUT/dokitool" ./cmd/dokitool)
+(cd frontend && npm ci && VITE_API_MODE=php VITE_API_BASE_URL='' npm run build)
+"$OUT/dokitool" version
+"$OUT/dokitool" catalog
+(cd backend && GOTOOLCHAIN=local go test ./cmd/dokitool)
+# 保存这次真实构建的来源/架构和摘要；不要复制旧二进制后改版本名。
+printf 'source_sha=%s\n' "$SOURCE_SHA" > "$OUT/build.txt"
+go version >> "$OUT/build.txt"
+go env GOOS GOARCH >> "$OUT/build.txt"
+sha256sum "$OUT/dokitool" >> "$OUT/build.txt"
+(cd frontend/dist && find . -type f -print0 | sort -z | xargs -0 sha256sum) \
+  > "$OUT/frontend.sha256"
+printf 'artifact_directory=%s\n' "$OUT"
 ```
+
+有完整、获准缓存时可用 `GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local` 和 `npm ci --offline` 复用缓存（本轮前端使用 `--ignore-scripts` 后正式 build 成功）；缓存缺项会失败，不能称构建通过。依赖下载被安全策略拒绝时停止该请求，不换镜像绕行。构建产物、日志、真实密钥不提交。`version` 未注入 `-X main.version=...` 时仅输出 `development`；没有 HTTP `/version` 路由。
+
+### 2. 配置与 CLI
+
+| 配置/入口 | 实际语义 |
+| --- | --- |
+| `dokitool serve -listen 127.0.0.1:9082` | 默认 `serve`；只接受明确回环 IP，端口 1024–65535，不接受 `0.0.0.0` 或主机名。 |
+| `-xhs-page-transport standard` | 默认标准传输；`chrome131` 仅显式影响小红书 HTTPS 页面，不改变媒体策略。 |
+| `dokitool version` / `catalog` | 构建版本 / 内嵌目录，均无需外网。 |
+| `dokitool validate < response.json` | stdin 读取统一响应，最多 8 MiB；不是 parse 命令或配置加载器。 |
+| `SNAP_MEDIA_SIGNING_KEY` | Go 服务启动前注入的服务端秘密，32–512 字节；微博公开视频签发和 relay 必需。未配置时服务/目录仍可启动，但微博相关服务返回未配置，不能算微博通过。不放进 `VITE_*`、命令日志或仓库。 |
+| `VITE_API_MODE=php` | 兼容统一 `/api/*` 的模式名，Go 同样使用；不是 PHP 进程依赖。`go` 无此模式，`secure` 需要本项目未实现的另一协议。 |
+| `VITE_API_BASE_URL=''` | 构建期留空，使浏览器请求同源；不要填 `/api` 路径。 |
+| `DEV_API_TARGET=http://127.0.0.1:9082` | Vite dev/preview 的 `/api` 代理目标，运行时给预览进程；默认值为旧 PHP 网关 8081，Go 必须显式覆盖。 |
+
+无通用 YAML 配置加载器、PHP 回退、内置前端静态服务器或公开任意 URL 代理。普通媒体仍由浏览器访问 CDN，API 同源代理不能保证 CDN 可访问或浏览器保存成功。
+
+### 3. 正式 Vue 产物同源启动、无外网冒烟、停止
+
+延续上面的 `ROOT` / `OUT`；先确认 9082/4173 未被占用（若改端口同时改代理和检查）。这使用 `npm run build` 的正式 `dist`，不是另一套演示 UI。**Vite preview 只做隔离本地验收，不是生产发布方案。** 不启动 PHP、不访问真实平台。
+
+```sh
+cd "$ROOT"
+"$OUT/dokitool" serve -listen 127.0.0.1:9082 > "$OUT/go.log" 2>&1 &
+GO_PID=$!
+(cd frontend && exec env DEV_API_TARGET=http://127.0.0.1:9082 \
+  node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4173 --strictPort) \
+  > "$OUT/vue.log" 2>&1 &
+VUE_PID=$!
+stop_local() {
+  kill "$VUE_PID" "$GO_PID" 2>/dev/null || true
+  wait "$VUE_PID" 2>/dev/null || true
+  wait "$GO_PID" 2>/dev/null || true
+}
+trap stop_local EXIT INT TERM
+# 等监听就绪；连接失败只在本地短暂重试，不触及上游。
+for i in $(seq 1 50); do
+  if curl -fsS 'http://127.0.0.1:4173/api/platforms?schema_version=1.0' \
+    > "$OUT/platforms.json"; then break; fi
+  sleep 0.1
+done
+curl -fsS 'http://127.0.0.1:9082/api/platforms?schema_version=1.0' > "$OUT/direct.json"
+cmp "$OUT/platforms.json" "$OUT/direct.json"
+curl -fsS http://127.0.0.1:4173/ > "$OUT/home.html"
+curl -fsS http://127.0.0.1:4173/downloads/worker.js > "$OUT/worker.js"
+curl -fsS http://127.0.0.1:4173/downloads/bridge.html > "$OUT/bridge.html"
+cmp "$OUT/worker.js" frontend/dist/downloads/worker.js
+cmp "$OUT/bridge.html" frontend/dist/downloads/bridge.html
+# 无 url 的错误应来自 Go JSON，不应误返回 SPA HTML；预期分别 400、400、409。
+curl -sS -o "$OUT/parse-error.json" -w '%{http_code}\n' 'http://127.0.0.1:4173/api/parse?schema_version=1.0'
+curl -sS -o "$OUT/resolve-error.json" -w '%{http_code}\n' 'http://127.0.0.1:4173/api/resolve?schema_version=1.0'
+curl -sS -o "$OUT/schema-error.json" -w '%{http_code}\n' 'http://127.0.0.1:4173/api/platforms'
+stop_local
+trap - EXIT INT TERM
+# 两个监听应均连接失败；还需结合进程退出码检查，不用 killall 影响其他服务。
+if curl -sS http://127.0.0.1:9082/ >/dev/null 2>&1; then echo 'Go listener still open'; exit 1; fi
+if curl -sS http://127.0.0.1:4173/ >/dev/null 2>&1; then echo 'Vue listener still open'; exit 1; fi
+```
+
+Go 接收 SIGTERM/SIGINT 后关闭监听并等待在途请求，shutdown 上限 310 秒；不要以一次命令退出 0 代替检查响应和停止。Worker/bridge 资源存在且 MIME 正确只证明资源交付，不能证明浏览器 Service Worker 注册、流式保存或真实媒体下载。HTTPS/生产代理、密钥注入、生产回滚与切流均需单独验收/授权。
+
+### 本轮隔离执行记录
+
+2026-11-02，task `go9-go-launch-handoff-7641d65`，dot Linux x86_64 云工作区，对上述 `7641d65` 的完整 tree 构建：Go 1.27.3、Node v24.22.1、npm 11.9.0、Python 3.12.14。离线 Go build、锁文件 `npm ci --offline --ignore-scripts`、正式前端 build（含 4 项 SSG 检查）、Go CLI tests 均 exit 0。既有 Vite preview 已继承 `server.proxy`，无需修改入口代码。
+
+实际使用独占回环端口 19082/14173：首页、Worker、bridge 均 200，Worker/bridge 与 dist 字节一致；catalog CLI 与 `/api/platforms?schema_version=1.0` JSON 一致；同源代理的 catalog 200、缺 schema 409、缺 URL 的 parse/resolve 400、无密钥微博 relay 503 均与直连 Go 响应逐字节一致。Go/preview 都正常退出 0，两个端口已释放。没有启动 PHP、访问上游或下载媒体，没有重跑九平台门禁。精确产物摘要、交付 SHA、CI 与日志由 #9 的同 task_key DOT_REPORT 保留；文档更新不能把这次 base 构建冒称为之后 SHA 的新产物。
 
 catalog 从原路径 `backend/config/platforms.json` 内嵌，公开字段与九平台 PHP 目录保持一致。目录表示项目的平台注册事实；某平台尚未绑定 Go adapter 时，其解析请求明确返回 `503 SERVICE_NOT_CONFIGURED`，不会把空媒体结果当迁移成功。本分支已绑定抖音、B站、微博、头条、快手、皮皮虾、皮皮搞笑、最右、小红书全部九个平台。两类 [历史基线合同问题](known-issues.md) 的公共修正已通过 PR #2 的完整离线门禁，Go 服务仍不能替代九平台生产入口。
 

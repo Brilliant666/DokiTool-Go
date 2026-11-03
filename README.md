@@ -1,8 +1,18 @@
 # DokiTool-Go
 
-本仓库是 `Brilliant666/DokiTool-Go` 的独立 Go 迁移工作区，按维护者决定在开发阶段公开协作。原 [DokiTool](https://github.com/Brilliant666/DokiTool) 的 main 继续维护 PHP；Go 提交和 Draft PR 进入本仓库，不整体反向合入 PHP 仓库。**九个平台已完成 Go 实现与完整离线验收**：Go 3835 叶场景、race/vet/build，独立响应 994/994，原前端消费 918/918；[执行证据与限制](docs/go-migration/acceptance.md)、[剩余五平台实施说明](docs/go-migration/remaining-platforms-implementation.md) 均已入库。公共合同的 fragment 与安全整数问题由 [PR #2](https://github.com/Brilliant666/DokiTool-Go/pull/2) 修复。真实在线验收、发布包与回滚演练仍待完成；当前保持 Draft，未部署或切流，不能据离线结果替代 PHP 生产。
+本仓库是 `Brilliant666/DokiTool-Go` 的独立 Go 工作区，前端为正式 Vue 3 应用。Go 集成基线已通过 [PR #20](https://github.com/Brilliant666/DokiTool-Go/pull/20) 合入 `main`（`7641d65d9bdb2016a0425e189b9b35f9567d6813`）。**合入不等于部署或九平台真实验收全部完成**；原 [DokiTool](https://github.com/Brilliant666/DokiTool) 的 PHP 生产入口不变，本仓库中的 PHP 为冻结参考。
 
-当前计划、版本化 PHP 对拍与证据见 [Go 迁移说明](docs/go-migration/README.md)，仓库、选择性同步及许可范围见 [维护边界](docs/go-migration/MAINTENANCE.md)。下方保留的功能与部署说明描述继承的 PHP/前端基线，不能据此认定 Go 已完成真实平台和生产交付验收。
+## 先运行 Go + 正式 Vue（无需 PHP）
+
+从仓库根目录按 [Go 构建、同源启动与停止说明](docs/go-migration/README.md#当前运行方式) 执行：固定 Go **1.27.3**，前端用 `npm ci` 安装 `package-lock.json`，构建 `backend/cmd/dokitool` 和 `frontend/dist`。Go API 默认只监听 `127.0.0.1:9082`；本地正式产物预览使用既有 Vite preview，将 `/api/*` 同源转发到 Go，而不是 PHP-FPM。
+
+注意：前端 `VITE_API_MODE=php` 是现有统一 API 的兼容模式名，**不是要求启动 PHP**；不要改成不存在的 `go` 模式。`VITE_API_BASE_URL` 留空，`DEV_API_TARGET` 指向 Go。微博公开视频/relay 需要服务端 `SNAP_MEDIA_SIGNING_KEY`，目录和其他平台不以此为启动前提；完整配置、无外网冒烟和停止步骤见上述说明。Vite preview 仅供隔离验收，不是生产服务器。
+
+当前交付范围与限制以 [#9](https://github.com/Brilliant666/DokiTool-Go/issues/9)、平台待验范围以 [#13](https://github.com/Brilliant666/DokiTool-Go/issues/13) 为准。历史离线统计（3835 场景、994 响应、918 消费等）及小红书阶段结果见 [验收记录](docs/go-migration/acceptance.md)，不是当前提交新跑结果或全平台在线通过声明。维护与许可边界见 [MAINTENANCE.md](docs/go-migration/MAINTENANCE.md)。
+
+## 继承的 PHP / 前端背景与历史说明
+
+下方保留原 PHP 项目的功能、构建和生产说明；其中 PHP-FPM、旧部署链接与事故结论不适用于上面的 Go 隔离启动，也不授权生产切换。
 
 DokiTool 是在同一仓库维护 Vue 3 前端与自建 PHP 解析接口的短视频工具，支持视频、图片、实况照片、画质与备用源选择，以及 B 站分 P 的展示、播放和下载。普通媒体优先由用户浏览器直接从媒体 CDN 获取。
 
@@ -62,14 +72,14 @@ SW 需要 HTTPS 或 localhost，同时传输最多两项任务；等待名额时
 ## 目录
 
 - `frontend/`：Vue 3、TypeScript、Vite 界面与契约测试。
-- `backend/`：PHP 控制器、明确启用的平台解析器及离线测试。
+- `backend/`：Go module、`cmd/dokitool`、`internal/` 和测试；PHP 控制器及基线同时保留为冻结参考。
 - `ops/examples/`：脱敏的 Caddy/PHP-FPM 配置示例。
 - `docs/`：[API 合同](docs/API.md)、[下载说明](docs/DOWNLOADS.md)、[部署说明](docs/DEPLOYMENT.md)和上游维护说明。
 - `scripts/`：依赖许可整理与公开文件清单检查工具。
 
 `public-files.json` 明确列出公开文件，`.gitignore` 默认忽略未列出的本地资料。新增源码时先审查并加入清单，再运行 `python scripts/check-public-files.py --write-ignore`；提交前用 `python scripts/check-public-files.py --staged` 核对暂存内容。本地备份、凭据、运行日志、生产配置和构建产物不进入仓库。
 
-## 本地构建
+## 继承 PHP / 前端基线的本地构建
 
 准备 Node.js（Vite 5 要求 Node 18+，建议使用受支持的 LTS）、npm，以及 Python 3.10+。生产环境只需前端静态文件和 PHP-FPM，不需要常驻 Vite 开发服务器。
 
