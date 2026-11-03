@@ -31,6 +31,7 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/xiaohongshu"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/zuiyou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
@@ -100,8 +101,18 @@ func run(args []string) error {
 		return err
 	}
 	executor := fetch.New()
+	japan := probe.New(executor, douyin.AllowedMediaURL)
+	douyinParser := douyin.New(executor, japan)
+	if endpoint := os.Getenv("DOKITOOL_SHANGHAI_ENDPOINT"); endpoint != "" {
+		shanghai, err := shresolver.NewClient(endpoint, os.Getenv("DOKITOOL_SHANGHAI_TOKEN"), executor)
+		if err != nil {
+			log.Print("Shanghai original resolver disabled: invalid configuration")
+		} else {
+			douyinParser = douyin.NewWithOriginalResolver(executor, japan.WithFingerprint(), shanghai)
+		}
+	}
 	adapters := map[string]api.Adapter{
-		"douyin":      douyin.New(executor, probe.New(executor, douyin.AllowedMediaURL)),
+		"douyin":      douyinParser,
 		"bilibili":    bilibili.New(executor),
 		"weibo":       weiboplatform.New(executor),
 		"toutiao":     toutiao.New(executor),

@@ -173,7 +173,7 @@ func (p *Parser) resolveVidBatch(ctx context.Context, vids []string) (map[string
 		if len(cache) >= vidResolveMax {
 			break
 		}
-		fallback := buildOriginalPlayURL(vid)
+		fallback := OriginalPlayURL(vid)
 		resolved, err := p.followLocation(ctx, fallback)
 		if err != nil {
 			return nil, err

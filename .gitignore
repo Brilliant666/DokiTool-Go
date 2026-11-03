@@ -90,6 +90,7 @@
 !/backend/bin/catalog.php
 /backend/cmd/*
 !/backend/cmd/dokitool/
+!/backend/cmd/shanghai-resolver/
 /backend/config/*
 !/backend/config/embed.go
 !/backend/config/platforms.json
@@ -104,6 +105,7 @@
 !/backend/internal/media/
 !/backend/internal/platform/
 !/backend/internal/probe/
+!/backend/internal/shresolver/
 !/backend/internal/testsupport/
 !/backend/internal/unified/
 /backend/lib/*
@@ -152,6 +154,7 @@
 !/docs/go-migration/acceptance.md
 !/docs/go-migration/bilibili-checks.json
 !/docs/go-migration/bilibili.md
+!/docs/go-migration/douyin-shanghai.md
 !/docs/go-migration/download-delivery-closeout.md
 !/docs/go-migration/frontend-checks.json
 !/docs/go-migration/known-issues.md
@@ -202,6 +205,7 @@
 !/frontend/scripts/test-media-integration.mjs
 !/frontend/scripts/test-pipixia-credentials.mjs
 !/frontend/scripts/test-pipixia-representation.mjs
+!/frontend/scripts/test-shanghai-original.mjs
 /frontend/src/*
 !/frontend/src/App.vue
 !/frontend/src/assets/
@@ -306,6 +310,8 @@
 /backend/cmd/dokitool/*
 !/backend/cmd/dokitool/main.go
 !/backend/cmd/dokitool/main_test.go
+/backend/cmd/shanghai-resolver/*
+!/backend/cmd/shanghai-resolver/main.go
 /backend/internal/api/*
 !/backend/internal/api/admission.go
 !/backend/internal/api/admission_test.go
@@ -354,8 +360,14 @@
 !/backend/internal/probe/cdn_policy_test.go
 !/backend/internal/probe/mp4.go
 !/backend/internal/probe/mp4_test.go
+!/backend/internal/probe/originals_test.go
 !/backend/internal/probe/probe.go
 !/backend/internal/probe/probe_test.go
+/backend/internal/shresolver/*
+!/backend/internal/shresolver/client.go
+!/backend/internal/shresolver/client_test.go
+!/backend/internal/shresolver/server.go
+!/backend/internal/shresolver/server_test.go
 /backend/internal/testsupport/*
 !/backend/internal/testsupport/publicoracle/
 /backend/internal/unified/*
@@ -523,6 +535,8 @@
 !/backend/internal/platform/douyin/parser_test.go
 !/backend/internal/platform/douyin/php_25beaee_test.go
 !/backend/internal/platform/douyin/request.go
+!/backend/internal/platform/douyin/shanghai.go
+!/backend/internal/platform/douyin/shanghai_test.go
 !/backend/internal/platform/douyin/testdata/
 !/backend/internal/platform/douyin/video.go
 /backend/internal/platform/kuaishou/*

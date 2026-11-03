@@ -64,6 +64,28 @@ var rawURLPattern = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([
 var domainLabelPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 var douyinSignedPath = regexp.MustCompile(`^/[a-f0-9]{32}/[a-f0-9]{8}(/video/tos/cn/tos-cn-[a-z0-9-]+/[A-Za-z0-9_-]+(?:/media-video-(?:hvc1|avc1))?/?)$`)
 
+// DouyinStoragePath identifies a signed CDN storage object across host/credential
+// changes. Only the observed video object shape is understood; unfamiliar
+// forms can continue through the established original probe without merging.
+func DouyinStoragePath(raw string) string {
+	if len(raw) > 8192 || MediaURL(raw) != raw || strings.Contains(raw, "\\") {
+		return ""
+	}
+	p, ok := splitRawURL(raw)
+	if !ok || p.scheme != "https" || p.userInfo || p.fragment != nil || p.port != nil && *p.port != 443 {
+		return ""
+	}
+	host := strings.ToLower(p.host)
+	if !strings.HasSuffix(host, ".douyinvod.com") && !strings.HasSuffix(host, ".zjcdn.com") {
+		return ""
+	}
+	match := douyinSignedPath.FindStringSubmatch(p.path)
+	if match == nil {
+		return ""
+	}
+	return strings.TrimSuffix(match[1], "/")
+}
+
 // Parse only URL components, retaining raw query/path bytes. net/url.Path is
 // decoded and would wrongly equate e.g. /aweme%2fv1/play with /aweme/v1/play.
 func splitRawURL(raw string) (rawURLParts, bool) {

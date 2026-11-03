@@ -236,7 +236,7 @@ func extractHighestQualityVideo(detail object) (qualityVideo, error) {
 			metadata.set("private_representation_id", representation)
 			result.metadata = metadata.values
 		} else if uri != "" {
-			result.url = buildOriginalPlayURL(uri)
+			result.url = OriginalPlayURL(uri)
 		}
 		urls := unified.Slice(child(video, "play_addr", "url_list"))
 		for index, entry := range urls {

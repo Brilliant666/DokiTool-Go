@@ -356,7 +356,8 @@ func ensureVideoMIME(raw string) string {
 	return result
 }
 
-func buildOriginalPlayURL(vid string) string {
+// OriginalPlayURL constructs the official dispatcher URL used by both exits.
+func OriginalPlayURL(vid string) string {
 	if vid == "" || vid == "0" {
 		return ""
 	}

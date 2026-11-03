@@ -193,3 +193,47 @@ func Metadata(moov []byte, fileSize int64) unified.Object {
 	}
 	return video
 }
+
+// hasAudioTrack requires an audio handler with actual sample bytes. A video
+// track alone cannot establish that Shanghai returned a complete presentation.
+func hasAudioTrack(moov []byte) bool {
+	root, ok := atom(moov, 0, int64(len(moov)), true)
+	if !ok || root.kind != "moov" {
+		return false
+	}
+	tracks, ok := children(moov[root.header:])
+	if !ok {
+		return false
+	}
+	for _, t := range tracks {
+		if t.kind != "trak" {
+			continue
+		}
+		mdia, _ := child(t.data, "mdia")
+		handler, _ := child(mdia, "hdlr")
+		if len(handler) < 12 || string(handler[8:12]) != "soun" {
+			continue
+		}
+		minf, _ := child(mdia, "minf")
+		stbl, _ := child(minf, "stbl")
+		sizes, _ := child(stbl, "stsz")
+		if len(sizes) < 12 {
+			continue
+		}
+		count, fixed := u32(sizes, 8), u32(sizes, 4)
+		if count < 1 || count > 1000000 {
+			continue
+		}
+		if fixed > 0 && len(sizes) == 12 {
+			return true
+		}
+		if fixed == 0 && int64(len(sizes)) == 12+count*4 {
+			for i := int64(0); i < count; i++ {
+				if u32(sizes, 12+4*i) > 0 {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
