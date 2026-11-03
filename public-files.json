@@ -35,6 +35,8 @@
     "backend/docs/视频解析统一JSON格式3.0.md",
     "backend/go.mod",
     "backend/go.sum",
+    "backend/internal/api/admission.go",
+    "backend/internal/api/admission_test.go",
     "backend/internal/api/bilibili_test.go",
     "backend/internal/api/douyin_test.go",
     "backend/internal/api/handler.go",

@@ -307,6 +307,8 @@
 !/backend/cmd/dokitool/main.go
 !/backend/cmd/dokitool/main_test.go
 /backend/internal/api/*
+!/backend/internal/api/admission.go
+!/backend/internal/api/admission_test.go
 !/backend/internal/api/bilibili_test.go
 !/backend/internal/api/douyin_test.go
 !/backend/internal/api/handler.go

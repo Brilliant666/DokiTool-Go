@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"net"
+	"strings"
+	"testing"
+)
 
 func TestXHSPageTransportSelection(t *testing.T) {
 	for _, mode := range []string{"standard", "chrome131"} {
@@ -19,5 +23,18 @@ func TestXHSPageTransportSelection(t *testing.T) {
 func TestUnknownXHSPageTransportFailsBeforeListener(t *testing.T) {
 	if err := run([]string{"serve", "-xhs-page-transport", "auto"}); err == nil {
 		t.Fatal("unknown transport accepted")
+	}
+}
+
+func TestAdmissionCaddyRequiresConfiguredKeyBeforeListener(t *testing.T) {
+	t.Setenv("SNAP_INGRESS_KEY", "")
+	occupied, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer occupied.Close()
+	err = run([]string{"serve", "-listen", occupied.Addr().String(), "-client-identity", "caddy"})
+	if err == nil || !strings.Contains(err.Error(), "SNAP_INGRESS_KEY") {
+		t.Fatalf("want missing proxy authentication before binding, got %v", err)
 	}
 }

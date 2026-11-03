@@ -169,18 +169,18 @@ func sendError(w http.ResponseWriter, status int, message string) {
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.EscapedPath()
-	switch path {
-	case "/api/short_videos", "/api/douyin", "/api/ksjx", "/api/bilibili", "/api/xhsjx", "/api/toutiao":
+	switch classify(path) {
+	case legacy:
 		sendError(w, 410, "接口已更新，请等待当前下载结束后刷新页面")
 		return
-	case "/api/media/weibo":
+	case media:
 		if h.weiboRelay != nil {
 			h.weiboRelay.ServeHTTP(w, r)
 			return
 		}
 		sendError(w, 503, "微博播放服务尚未配置，请联系站点维护者")
 		return
-	case "/api/parse", "/api/resolve", "/api/platforms":
+	case parser:
 	default:
 		sendError(w, 404, "接口不存在")
 		return

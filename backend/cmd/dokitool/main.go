@@ -82,6 +82,7 @@ func run(args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	listen := flags.String("listen", "127.0.0.1:9082", "loopback verification listener; production remains PHP")
 	xhsTransport := flags.String("xhs-page-transport", "standard", "XHS HTTPS pages only: standard or chrome131 (opt-in verification)")
+	clientIdentity := flags.String("client-identity", "direct", "client identity for admission: direct or authenticated caddy")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -117,7 +118,11 @@ func run(args []string) error {
 	// The route is present even without a configured key, where it returns the
 	// PHP-compatible legacy 503 media envelope without issuing network calls.
 	handler.SetWeiboRelay(weibo.NewMediaRelay(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
-	server := &http.Server{Addr: *listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 50 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 64 << 10}
+	entry, err := api.WithAdmission(handler, *clientIdentity, os.Getenv("SNAP_INGRESS_KEY"))
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Addr: *listen, Handler: entry, ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 50 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 64 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	done := make(chan error, 1)
