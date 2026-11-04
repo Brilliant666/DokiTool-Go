@@ -7,13 +7,13 @@ export interface WorkerReply {
   protocol?: number;
   workerBuild?: string;
   workerInstance?: string;
-  capabilities?: { admission?: boolean; recovery?: boolean };
+  capabilities?: { admission?: boolean; recovery?: boolean; tbvideo?: boolean };
   snapshot?: DownloadSnapshot;
   snapshots?: DownloadSnapshot[];
   unavailable?: { id: string; ownerGone: boolean }[];
   downloadUrl?: string;
 }
-export interface WorkerSession { worker: ServiceWorker; build: string; instance?: string; admission: boolean }
+export interface WorkerSession { worker: ServiceWorker; build: string; instance?: string; admission: boolean; tbvideo?: boolean }
 /** An explicit refusal is distinct from a lost reply after START. */
 export class WorkerRequestError extends Error {}
 const sessions = new WeakMap<ServiceWorker, WorkerSession>();
@@ -95,7 +95,7 @@ async function connect(create: boolean): Promise<WorkerSession | null> {
         const reply = await rpc(worker, { action: "ping" });
         if (reply.protocol !== PROTOCOL) throw new Error("下载服务版本不兼容，请刷新页面后重试");
         if (worker.state !== "activated" || reg.active !== worker) throw new Error("下载服务正在更新，请稍后重试");
-        session = { worker, build: reply.workerBuild || "legacy", instance: reply.workerInstance, admission: reply.capabilities?.admission === true };
+        session = { worker, build: reply.workerBuild || "legacy", instance: reply.workerInstance, admission: reply.capabilities?.admission === true, tbvideo: reply.capabilities?.tbvideo === true };
         sessions.set(worker, session);
       }
       if (!checkedUpdates.has(reg.scope)) {

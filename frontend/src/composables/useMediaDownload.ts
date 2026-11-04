@@ -29,6 +29,8 @@ import {
   mergeSegments,
   type HlsSegment,
 } from "../utils/segmentDownload";
+import type { TbvideoItem } from "../services/tbvideo";
+import { reportTbvideo } from "../../public/downloads/tbvideo.js";
 import { apiConfig } from "../services/apiConfig";
 import type { useVideoStore } from "../stores/video";
 import type { VideoSelection } from "./useVideoSelection";
@@ -82,6 +84,7 @@ export function useMediaDownload({
       variantId?: string;
       sources?: Source[];
       formatMime?: string;
+      tbvideo?: { item: TbvideoItem; candidate: string };
       selectionKey?: string;
     }
   >();
@@ -94,7 +97,7 @@ export function useMediaDownload({
     task.observation === "unknown" &&
     task.ownerGone === true && task.recoveryExpired === true;
   const clearable = (task: DownloadTask) => clearableUnknown(task) ||
-    (!task.observation && ["completed", "cancelled", "failed", "handed-off", "interrupted"].includes(task.status));
+    (!task.observation && ["completed", "cancelled", "failed", "handed-off", "interrupted", "manual"].includes(task.status));
   const matchesSettledAttempt = (snapshot: DownloadTask) => {
     const current = taskFor(snapshot.id);
     return (
@@ -234,6 +237,7 @@ export function useMediaDownload({
     cancelled: "已取消",
     "handed-off": "已交给浏览器",
     interrupted: "下载连接已中断",
+    manual: "打开源链接",
   };
 
   function applyDelivery(snapshot: DownloadSnapshot, restore = false): void {
@@ -392,8 +396,12 @@ export function useMediaDownload({
     try {
       const { downloadManager } = await import("../downloads/manager");
       checkAbort(controller.signal);
+      const metadata = context?.tbvideo?.item;
+      const tbvideoEvent = metadata && { platform: metadata.platform, pid: metadata.pid, vid: metadata.vid };
       const result = await downloadManager.run(
-        { id: deliveryId, url, filename, routes, sourceSizes, startedAt, probe, formatMime: context?.formatMime },
+        context?.tbvideo
+          ? { id: deliveryId, url: context.tbvideo.candidate, routes: [], filename, startedAt, formatMime: context.formatMime, tbvideo: true, tbvideoEvent }
+          : { id: deliveryId, url, filename, routes, sourceSizes, startedAt, probe, formatMime: context?.formatMime },
         controller.signal,
         (snapshot) => {
           if (
@@ -403,11 +411,17 @@ export function useMediaDownload({
             // Use this attempt's confirmed delivery, never a previous task error.
             cancellationReason = snapshot.status === "cancelled" && !snapshot.observation
               ? snapshot.error : undefined;
-            applyDelivery(snapshot);
+            applyDelivery(context?.tbvideo ? { ...snapshot, url } : snapshot);
           }
         },
       );
       if (!ownsTask(downloadId, controller)) return;
+      if (context?.tbvideo) {
+        // Every admitted Worker task (even an unclaimed one) owns its report.
+        // A pre-START fallback has no tbvideoAttempted marker.
+        if (result.status === "manual" && result.tbvideoAttempted === undefined) void reportTbvideo(tbvideoEvent, result);
+        return;
+      }
       // Finishing an older work must never alter a newly parsed work's player.
       if (
         result.status === "completed" &&
@@ -685,6 +699,7 @@ export function useMediaDownload({
     title?: string;
     version: number;
     selectionKey: string;
+    platform?: string;
     resource?: {
       id: string;
       role: Resource["role"];
@@ -717,6 +732,7 @@ export function useMediaDownload({
       // must not change the user's selection or the displayed server default.
       selectionKey: JSON.stringify(choice),
       title: videoStore.resultData?.title,
+      platform: videoStore.resultData?.platform,
       version: videoStore.resultVersion,
     });
   };
@@ -931,7 +947,12 @@ export function useMediaDownload({
       const filename = filenameFor(snapshot, suffixes.length && !suffixes.includes(extension) ? suffixes[0] : extension);
       videoStore.updateDownload(id, { filename });
       if (target.kind === "file") {
+        const hints = item.tbvideo;
+        const tbvideo = item.type === "video" && (snapshot.platform === "pipigx" || snapshot.platform === "zuiyou")
+          && hints?.platform === snapshot.platform ? hints : undefined;
+        const sourceId = target.source.id;
         sourceContexts.set(id, {
+          tbvideo: tbvideo && { item: tbvideo, candidate: sourceId && Object.hasOwn(tbvideo.sources, sourceId) ? tbvideo.sources[sourceId] : "" },
           routes: target.routes,
           selectedUrl: target.url,
           resultVersion: snapshot.version,
@@ -1008,6 +1029,9 @@ export function useMediaDownload({
     filename: string,
     retryId?: number,
   ) {
+    // These two video platforms only offer individually verified saves and the original player.
+    // ZIP's fetchBlob path cannot verify their ranged candidates.
+    if (snapshots.some(s => s.item.type === "video" && (s.platform === "pipigx" || s.platform === "zuiyou"))) return;
     const taskSnapshots = [...snapshots];
     await runArchive(
       filename,
@@ -1330,7 +1354,7 @@ export function useMediaDownload({
     // Opening a source is a recovery action. A stale click must not cancel a live transfer.
     if (
       task.observation ||
-      !["failed", "cancelled", "interrupted"].includes(task.status)
+      !["failed", "cancelled", "interrupted", "manual"].includes(task.status)
     )
       return;
     task.abortController?.abort();

@@ -211,7 +211,7 @@ func TestPHPPipigxBaseline(t *testing.T) {
 			t.Run("requests", func(t *testing.T) { oracleRequests(t, executor, *calls, expected) })
 			t.Run("legacy-wire", func(t *testing.T) {
 				legacyParser, legacyExecutor, legacyCalls := oracleParser(t, input)
-				legacy, err := legacyParser.parseLegacy(context.Background(), unified.Str(input["url"]))
+				legacy, err := legacyParser.parseLegacy(context.Background(), unified.Str(input["url"]), nil)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -112,6 +112,7 @@ def main():
         ("/downloads/task-store.js", 200, "DENY", "no-cache"),
         ("/downloads/decoded-length.js", 200, "DENY", "no-cache"),
         ("/downloads/media-format.js", 200, "DENY", "no-cache"),
+        ("/downloads/tbvideo.js", 200, "DENY", "no-cache"),
         ("/downloads/bridge-check-missing.html", 404, "DENY", None),
         # Caddy may reject a child path beneath a regular file as malformed.
         ("/downloads/bridge.html/missing", (400, 404), "DENY", None),

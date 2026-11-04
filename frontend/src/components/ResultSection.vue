@@ -94,6 +94,11 @@ const activeCollection = computed(
   () => props.selection?.sectionIndex.value || 0,
 );
 const selectedCount = computed(() => props.selection?.selectedCount.value || 0);
+const batchZipAvailable = computed(() => {
+  if (!["pipigx", "zuiyou"].includes(props.resultData?.platform)) return true;
+  const items = selectedCount.value ? props.selection.getBatchVideos() : props.selection.list.value;
+  return !items.some(item => item.type === "video");
+});
 const selectedTotal = computed(() => props.selection?.total.value || 0);
 const isResolving = computed(() =>
   props.resolvingIds?.has(currentItem.value?.id),
@@ -914,7 +919,7 @@ onUnmounted(() => {
               }}</span>
             </button>
             <button
-              v-if="isMulti"
+              v-if="isMulti && batchZipAvailable"
               @click="
                 emit(
                   'download-selected-zip',

@@ -2,8 +2,9 @@
 import { createTaskStore, HISTORY_MS } from "./task-store.js";
 import { attachmentFormat, cleanFilename } from "./media-format.js";
 import { decodedLength } from "./decoded-length.js";
+import { readCandidate, validCandidate, reportTbvideo } from "./tbvideo.js";
 const PROTOCOL = 1;
-const BUILD = "downloads-20261103.1";
+const BUILD = "downloads-20261104.1";
 const INSTANCE = crypto.randomUUID();
 const store = createTaskStore();
 const MAX_ACTIVE = 2;
@@ -20,7 +21,7 @@ const history = new Map();
 const queue = [];
 let active = 0;
 let historyTimer;
-const terminal = status => ["completed", "failed", "cancelled"].includes(status);
+const terminal = status => ["completed", "failed", "cancelled", "manual"].includes(status);
 const abortError = () => new DOMException("下载已取消", "AbortError");
 const validKey = value => typeof value === "string" && /^[a-zA-Z0-9_-]{16,100}$/.test(value);
 const sourceUrl = value => {
@@ -149,6 +150,10 @@ function drain() {
 
 function settle(task, status, error) {
   if (terminal(task.state.status)) return task.settling;
+  if (status === "failed" && task.tbvideo) {
+    status = "manual";
+    error = undefined;
+  }
   clearTimeout(task.claimTimer);
   clearTimeout(task.responseTimer);
   task.state.status = status;
@@ -184,7 +189,8 @@ function settle(task, status, error) {
   });
   // A fetch event may already be inactive at EOF. This protects only the short
   // result write where the browser permits it, never the whole transfer.
-  try { task.protect?.(task.settling); } catch { /* Stream/event lifetime is browser-owned. */ }
+  const reporting = task.tbvideoEvent ? reportTbvideo(task.tbvideoEvent, snapshot(task)) : undefined;
+  try { task.protect?.(reporting ? Promise.all([task.settling, reporting]) : task.settling); } catch { /* Stream/event lifetime is browser-owned. */ }
   drain();
   return task.settling;
 }
@@ -277,6 +283,7 @@ async function attachment(task) {
   if (task.controller.signal.aborted) throw abortError();
   task.state.status = "preparing";
   publish(task, true);
+  if (task.tbvideo) return candidateAttachment(task);
   const prepareStarted = performance.now();
   const prepared = await prepare(task);
   if (task.controller.signal.aborted) throw abortError();
@@ -315,9 +322,52 @@ async function attachment(task) {
     },
     cancel() { settle(task, "cancelled", "浏览器停止接收下载数据"); },
   }, { highWaterMark: 0 });
+  return fileResponse(task, stream, prepared.mime);
+}
+
+async function candidateAttachment(task) {
+  task.state.tbvideoAttempted = true;
+  task.state.status = "downloading";
+  task.transferStartedAt = Date.now();
+  task.speedSamples = [{ at: task.transferStartedAt, loaded: 0 }];
+  publish(task, true);
+  const file = await readCandidate(task.routes[0], task.controller.signal, operation => timed(task, operation),
+    (loaded, total) => {
+      task.state.loaded = loaded;
+      task.state.total = total;
+      task.lastReceivedAt = Date.now();
+      publish(task);
+    });
+  if (task.controller.signal.aborted) throw abortError();
+  const format = attachmentFormat(task.state.filename, "video/mp4", task.formatMime);
+  task.state.filename = format.filename;
+  // The browser can only start saving after the entire object is verified.
+  const reader = file.stream().getReader();
+  task.reader = reader;
+  const stream = new ReadableStream({
+    start(controller) { task.outputController = controller; },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (task.controller.signal.aborted) return;
+        if (done) {
+          controller.close();
+          task.outputController = undefined;
+          settle(task, "completed");
+        } else controller.enqueue(value);
+      } catch {
+        settle(task, "failed", "无法读取已校验的文件");
+      }
+    },
+    cancel() { settle(task, "cancelled", "浏览器停止接收下载数据"); },
+  }, { highWaterMark: 0 });
+  return fileResponse(task, stream, format.mime);
+}
+
+function fileResponse(task, stream, mime) {
   const encoded = encodeURIComponent(task.state.filename).replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   const headers = {
-    "Content-Type": prepared.mime,
+    "Content-Type": mime,
     "Content-Disposition": `attachment; filename="download.${task.state.filename.split(".").pop()}"; filename*=UTF-8''${encoded}`,
     "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
     "X-DokiTool-Worker-Build": BUILD,
@@ -341,7 +391,7 @@ self.addEventListener("message", event => {
     prune();
     const message = event.data;
     try {
-      if (message.action === "ping") { port.postMessage({ protocol: PROTOCOL, workerBuild: BUILD, workerInstance: INSTANCE, capabilities: { admission: true, recovery: true } }); return; }
+      if (message.action === "ping") { port.postMessage({ protocol: PROTOCOL, workerBuild: BUILD, workerInstance: INSTANCE, capabilities: { admission: true, recovery: true, tbvideo: true } }); return; }
       if (message.action === "start") {
         const request = message.request;
         if (!validKey(request?.id) || !validKey(message.token)) throw new Error("无效下载任务");
@@ -358,15 +408,20 @@ self.addEventListener("message", event => {
         let created = false;
         if (!task) {
           if (tasks.size >= 100) throw new Error("下载任务过多，请清理后重试");
+          const tbvideo = request.tbvideo === true;
+          if (tbvideo && (!validCandidate(request.url) || request.routes?.some(url => url !== request.url))) {
+            throw new Error("无效下载线路");
+          }
           const routes = [...new Set([request.url, ...(request.routes || [])].slice(0, 10).map(sourceUrl))].slice(0, 3);
           if (!routes.length) throw new Error("资源地址为空");
           const now = Date.now();
           const startedAt = Number.isFinite(request.startedAt) && request.startedAt > 0 && request.startedAt <= now ? request.startedAt : now;
           task = {
-            token: message.token, routes, sourceSizes: request.sourceSizes, formatMime: request.formatMime,
+            token: message.token, routes, tbvideo, tbvideoEvent: tbvideo ? request.tbvideoEvent : undefined, sourceSizes: request.sourceSizes, formatMime: request.formatMime,
             controller: new AbortController(), subscribers: new Set(),
             startedAt, publishedAt: now, revision: 0, admission: message.admission === true,
-            state: { id: request.id, transport: "browser_streaming", status: "queued", filename: cleanFilename(request.filename), url: routes[0], loaded: 0, total: 0, speed: 0, elapsed: 0, averageSpeed: 0,
+            state: { id: request.id, transport: "browser_streaming", status: "queued", filename: cleanFilename(request.filename), url: tbvideo ? "" : routes[0], loaded: 0, total: 0, speed: 0, elapsed: 0, averageSpeed: 0,
+              ...(tbvideo ? { tbvideoAttempted: false } : {}),
               ...(message.admission === true ? { delivery: "waiting" } : {}) },
           };
           tasks.set(request.id, task);
@@ -451,6 +506,7 @@ self.addEventListener("fetch", event => {
   // transfer to waitUntil: long downloads must outlive the setup event.
   event.respondWith(attachment(task).catch(error => {
     settle(task, task.controller.signal.aborted ? "cancelled" : "failed", error.message);
+    if (task.state.status === "manual") return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     return new Response("Download failed", { status: 502, headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" } });
   }).finally(() => { clearTimeout(task.responseTimer); }));
 });
