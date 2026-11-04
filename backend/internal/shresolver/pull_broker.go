@@ -19,7 +19,7 @@ import (
 const (
 	ClaimPath    = "/internal/shanghai/claim"
 	ResultPath   = "/internal/shanghai/result"
-	PullWait     = 20 * time.Second
+	PullWait     = 15 * time.Second
 	pullCapacity = 4
 )
 

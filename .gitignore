@@ -312,6 +312,7 @@
 !/backend/cmd/dokitool/main_test.go
 /backend/cmd/shanghai-resolver/*
 !/backend/cmd/shanghai-resolver/main.go
+!/backend/cmd/shanghai-resolver/main_test.go
 /backend/internal/api/*
 !/backend/internal/api/admission.go
 !/backend/internal/api/admission_test.go
@@ -369,6 +370,8 @@
 !/backend/internal/shresolver/pull_broker.go
 !/backend/internal/shresolver/pull_broker_test.go
 !/backend/internal/shresolver/pull_delivery_test.go
+!/backend/internal/shresolver/pull_worker.go
+!/backend/internal/shresolver/pull_worker_test.go
 !/backend/internal/shresolver/server.go
 !/backend/internal/shresolver/server_test.go
 /backend/internal/testsupport/*
