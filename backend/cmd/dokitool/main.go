@@ -35,6 +35,17 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
+// preparePublicMedia keeps platform-specific transformations at the public boundary.
+func preparePublicMedia(key string) api.PublicMedia {
+	weibo := weiboplatform.PreparePublic(key)
+	return func(ctx context.Context, platform string, payload unified.Object, now int64) (unified.Object, error) {
+		if platform == "xiaohongshu" {
+			return xiaohongshu.PreparePublic(ctx, platform, payload, now)
+		}
+		return weibo(ctx, platform, payload, now)
+	}
+}
+
 var version = "development"
 
 func main() {
@@ -121,7 +132,7 @@ func run(args []string) error {
 		"zuiyou":      zuiyou.New(executor),
 		"xiaohongshu": xiaohongshu.New(xhsExecutor),
 	}
-	handler, err := api.New(c, adapters, time.Now, weiboplatform.PreparePublic(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
+	handler, err := api.New(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
 	if err != nil {
 		return err
 	}
