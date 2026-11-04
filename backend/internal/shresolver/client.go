@@ -29,12 +29,21 @@ const (
 var errUnavailable = errors.New("Shanghai original address unavailable")
 
 type Client struct {
+	responseValidator
 	endpoint string
 	token    string
 	executor fetch.Executor
 	local    *http.Client
-	lookup   func(context.Context, string, string) ([]netip.Addr, error)
-	now      func() time.Time
+}
+
+// Both delivery modes validate untrusted wire observations before they reach the formatter.
+type responseValidator struct {
+	lookup func(context.Context, string, string) ([]netip.Addr, error)
+	now    func() time.Time
+}
+
+func newResponseValidator() responseValidator {
+	return responseValidator{lookup: net.DefaultResolver.LookupNetIP, now: time.Now}
 }
 
 // NewClient pins the service URL from operator configuration. Only a literal
@@ -47,7 +56,7 @@ func NewClient(endpoint, token string, executor fetch.Executor) (*Client, error)
 		!ValidToken(token) || executor == nil {
 		return nil, errUnavailable
 	}
-	c := &Client{endpoint: endpoint, token: token, executor: executor, lookup: net.DefaultResolver.LookupNetIP, now: time.Now}
+	c := &Client{endpoint: endpoint, token: token, executor: executor, responseValidator: newResponseValidator()}
 	ip, err := netip.ParseAddr(u.Hostname())
 	if err == nil && ip.IsLoopback() && ip.Zone() == "" {
 		c.local = &http.Client{
@@ -80,6 +89,13 @@ func (c *Client) ResolveOriginal(parent context.Context, videoID string) ([]unif
 	}
 	if err != nil {
 		return nil, err
+	}
+	return c.validateResponse(ctx, videoID, payload)
+}
+
+func (c responseValidator) validateResponse(ctx context.Context, videoID string, payload []byte) ([]unified.Object, error) {
+	if len(payload) > maxResponseBytes {
+		return nil, errUnavailable
 	}
 	d := json.NewDecoder(bytes.NewReader(payload))
 	d.UseNumber()

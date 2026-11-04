@@ -102,14 +102,13 @@ func run(args []string) error {
 	}
 	executor := fetch.New()
 	japan := probe.New(executor, douyin.AllowedMediaURL)
+	shanghai, control, err := configureShanghai(executor, os.Getenv)
+	if err != nil {
+		return err
+	}
 	douyinParser := douyin.New(executor, japan)
-	if endpoint := os.Getenv("DOKITOOL_SHANGHAI_ENDPOINT"); endpoint != "" {
-		shanghai, err := shresolver.NewClient(endpoint, os.Getenv("DOKITOOL_SHANGHAI_TOKEN"), executor)
-		if err != nil {
-			log.Print("Shanghai original resolver disabled: invalid configuration")
-		} else {
-			douyinParser = douyin.NewWithOriginalResolver(executor, japan.WithFingerprint(), shanghai)
-		}
+	if shanghai != nil {
+		douyinParser = douyin.NewWithOriginalResolver(executor, japan.WithFingerprint(), shanghai)
 	}
 	adapters := map[string]api.Adapter{
 		"douyin":      douyinParser,
@@ -129,7 +128,7 @@ func run(args []string) error {
 	// The route is present even without a configured key, where it returns the
 	// PHP-compatible legacy 503 media envelope without issuing network calls.
 	handler.SetWeiboRelay(weibo.NewMediaRelay(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
-	entry, err := api.WithAdmission(handler, *clientIdentity, os.Getenv("SNAP_INGRESS_KEY"))
+	entry, err := api.WithAdmission(handler, control, *clientIdentity, os.Getenv("SNAP_INGRESS_KEY"))
 	if err != nil {
 		return err
 	}
@@ -149,6 +148,46 @@ func run(args []string) error {
 		shutdown, cancel := context.WithTimeout(context.Background(), 310*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdown)
+	}
+}
+
+// An existing #27 endpoint remains opt-in for direct mode. Pull never invokes that endpoint.
+func configureShanghai(executor fetch.Executor, getenv func(string) string) (douyin.OriginalResolver, http.Handler, error) {
+	mode, endpoint := getenv("DOKITOOL_SHANGHAI_MODE"), getenv("DOKITOOL_SHANGHAI_ENDPOINT")
+	switch mode {
+	case "off":
+		return nil, nil, nil
+	case "", "direct":
+		if mode == "" && endpoint == "" {
+			return nil, nil, nil
+		}
+		client, err := shresolver.NewClient(endpoint, getenv("DOKITOOL_SHANGHAI_TOKEN"), executor)
+		if err != nil {
+			if mode == "" {
+				// Retain the legacy fail-soft behavior for pre-mode deployments.
+				log.Print("Shanghai original resolver disabled: invalid configuration")
+				return nil, nil, nil
+			}
+			return nil, nil, err
+		}
+		return client, nil, nil
+	case "pull":
+		if endpoint != "" {
+			return nil, nil, errors.New("remove DOKITOOL_SHANGHAI_ENDPOINT before enabling pull mode")
+		}
+		token := getenv("DOKITOOL_SHANGHAI_PULL_TOKEN")
+		for _, key := range []string{"SNAP_INGRESS_KEY", "SNAP_MEDIA_SIGNING_KEY", "DOKITOOL_SHANGHAI_TOKEN"} {
+			if token != "" && token == getenv(key) {
+				return nil, nil, errors.New("pull mode requires a dedicated control credential")
+			}
+		}
+		broker, err := shresolver.NewPullBroker(token)
+		if err != nil {
+			return nil, nil, err
+		}
+		return broker, broker, nil
+	default:
+		return nil, nil, errors.New("DOKITOOL_SHANGHAI_MODE must be off, direct or pull")
 	}
 }
 
