@@ -2,19 +2,21 @@
 
 后续 Go 开发在独立仓库 [Brilliant666/DokiTool-Go](https://github.com/Brilliant666/DokiTool-Go) 进行，维护者已将其公开用于开发协作。原 [Brilliant666/DokiTool](https://github.com/Brilliant666/DokiTool) 的 `main` 继续保留 PHP 开源版本，不整体合入 Go 迁移分支，也不以删除公开 PHP 为迁移目标。
 
-维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)；不部署 Go、不改变 PHP 生产，受控上游测试不等于真实平台或浏览器保存验收。
+维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)。该迁移阶段只做受控上游测试，不代表真实平台或浏览器保存验收。
 
 ## 当前交付与历史证据
 
-Go 集成基线经 [PR #20](https://github.com/Brilliant666/DokiTool-Go/pull/20) 合入 `main`：`7641d65d9bdb2016a0425e189b9b35f9567d6813`，tree `ed2d4314c57cdee2631fef8ee2d87691ce85762d`。合并 tree 与已验 `e92cfdf` 相同，但后者 CI 不冒称为 merge SHA 的新 CI。当前构建交接见 [#9](https://github.com/Brilliant666/DokiTool-Go/issues/9)，平台和网络待验边界见 [#13](https://github.com/Brilliant666/DokiTool-Go/issues/13)。仅合并源码，未部署、未切 PHP 生产。
+snap 的生产解析入口已是日本 Go。抖音原画的上海 pull 架构、#28 基线和 #30 后的运行组合见[生产版本与恢复入口](douyin-shanghai.md)；小红书实况及三平台无中继保存的范围见[下载说明](../DOWNLOADS.md#production-download-capabilities)。
 
-[验收记录](acceptance.md)、[机器报告](nine-platform-checks.json)、[B 站说明](bilibili.md) 和[五平台实施说明](remaining-platforms-implementation.md)中的 3835/994/918 等数字属于对应历史提交，不是每次构建的新门禁结果；不要为启动交接重复整套九平台矩阵。旧迁移自动调度不恢复；工程领取通过 #11 的唯一 dot 入口和明确任务进行。
+早期 Go 集成基线经 [PR #20](https://github.com/Brilliant666/DokiTool-Go/pull/20) 合入 `main`：`7641d65d9bdb2016a0425e189b9b35f9567d6813`，tree `ed2d4314c57cdee2631fef8ee2d87691ce85762d`。合并 tree 与已验 `e92cfdf` 相同，但后者 CI 不冒称为 merge SHA 的新 CI。后续抖音基线见 [#9](https://github.com/Brilliant666/DokiTool-Go/issues/9)，平台和网络待验边界见 [#13](https://github.com/Brilliant666/DokiTool-Go/issues/13)。PR #20 当时只合并源码，未切换生产。
+
+[验收记录](acceptance.md)、[机器报告](nine-platform-checks.json)、[B 站说明](bilibili.md) 和[五平台实施说明](remaining-platforms-implementation.md)中的 3835/994/918 等数字属于对应历史提交，不是每次构建的新门禁结果；不要为启动交接重复整套九平台矩阵。旧迁移自动调度不恢复；当前协作方式见 [#11 顶部说明](https://github.com/Brilliant666/DokiTool-Go/issues/11)。
 
 [小红书专项](xhs-page-transport.md)和[旧机器报告](xhs-page-online-checks.json)保留当时的真实原画与限制。旧单图长度/MOV 后缀观察不是当前版本必然仍失败的结论，亦不能直接改写为通过。后续下载/身份修正及限定真实验收见 PR #20/#9 的准确 SHA 记录；不外推所有平台、媒体与浏览器均通过。
 
 ## 当前运行方式
 
-Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**。基础解析和标准媒体传输沿用标准库；本专项另引入锁定的 `tls-client` / `fhttp` 页面传输依赖，版本及完整性以 `go.mod/go.sum` 为准。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
+Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**。基础解析和标准媒体传输沿用标准库；本专项另引入锁定的 `tls-client` / `fhttp` 页面传输依赖，版本及完整性以 `go.mod/go.sum` 为准。PHP 应用保留为冻结参考。下列本地 Go 示例使用独立的回环端口，没有 PHP 回退调用。
 
 ### 1. 固定版本构建
 
@@ -196,4 +198,4 @@ Python 校验依赖仍由 `scripts/requirements-validation.txt` 声明。导出�
 
 ## 阶段顺序
 
-骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；Go 发布和目标环境切流仍另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器仍在范围外；小红书新增页面传输已在独立 PR #5 获得实施授权，不追溯改变原迁移排除项，真实原画的专项结果见上文，生产切流仍需独立验收。
+骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；当时的实施授权不含生产切流。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器仍在范围外；小红书新增页面传输已在独立 PR #5 获得实施授权，不追溯改变原迁移排除项，真实原画的专项结果见上文。此处保留迁移阶段记录，现网状态见本文开头。
