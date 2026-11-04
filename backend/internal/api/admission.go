@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
@@ -42,7 +43,7 @@ const edgeHeader = "X-DokiTool-Edge-Key"
 
 // WithAdmission wraps the production HTTP entry point. All limits are local
 // to one serving instance; the two pools share neither clients nor leases.
-func WithAdmission(next http.Handler, mode, edgeKey string) (http.Handler, error) {
+func WithAdmission(next, pullControl http.Handler, mode, edgeKey string) (http.Handler, error) {
 	switch mode {
 	case "direct":
 		if edgeKey != "" {
@@ -55,24 +56,36 @@ func WithAdmission(next http.Handler, mode, edgeKey string) (http.Handler, error
 	default:
 		return nil, fmt.Errorf("client-identity must be direct or caddy")
 	}
-	return &admission{next: next, edgeKey: edgeKey, now: time.Now,
+	return &admission{next: next, pullControl: pullControl, edgeKey: edgeKey, now: time.Now,
 		public: newPool(4, 12.0/60, 8, 1, 1),
 		relay:  newPool(12, 1, 24, 2, 2)}, nil
 }
 
 type admission struct {
-	next          http.Handler
-	edgeKey       string
-	now           func() time.Time
-	public, relay *pool
+	next, pullControl http.Handler
+	edgeKey           string
+	now               func() time.Time
+	public, relay     *pool
 }
 
 func (a *admission) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	kind := classify(r.URL.EscapedPath())
+	path := r.URL.EscapedPath()
+	kind := classify(path)
 	client := a.client(r)
 	// These headers authenticate only this hop and never belong to an upstream.
 	r.Header.Del(edgeHeader)
 	r.Header.Del(clientHeader)
+	// Long polls and result submissions authenticate the ingress hop as usual.
+	// The control handler enforces its own bearer, byte, time and concurrency limits.
+	if a.pullControl != nil && (path == shresolver.ClaimPath || path == shresolver.ResultPath) {
+		if !client.IsValid() {
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		a.pullControl.ServeHTTP(w, r)
+		return
+	}
 	if kind == unknown {
 		a.next.ServeHTTP(w, r)
 		return

@@ -91,12 +91,23 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	observations, err := s.probe.Originals(r.Context(), douyin.OriginalPlayURL(req.VideoID))
+	out, err := probeOriginal(r.Context(), s.probe, req.VideoID)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
-	out := Response{VideoID: req.VideoID, Candidates: []Candidate{}}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// Both delivery modes construct the official play URL here. Control-plane
+// credentials and requests never enter the media probe.
+func probeOriginal(ctx context.Context, p originalProbe, videoID string) (Response, error) {
+	observations, err := p.Originals(ctx, douyin.OriginalPlayURL(videoID))
+	if err != nil {
+		return Response{}, err
+	}
+	out := Response{VideoID: videoID, Candidates: []Candidate{}}
 	seen := map[string]bool{}
 	for _, obs := range observations {
 		raw := unified.Str(obs["url"])
@@ -119,8 +130,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		out.Candidates = append(out.Candidates, Candidate{URL: raw, ObtainedAt: at, ExpiresAt: exp, PrefixSHA256: prefix, Metadata: meta})
 		seen[raw] = true
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(out)
+	return out, nil
 }
 
 // Only explicit, unambiguous epoch seconds are authoritative. Signature/path

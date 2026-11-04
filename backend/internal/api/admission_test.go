@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +23,7 @@ func protected(t *testing.T, mode string, next http.Handler) *admission {
 	if mode == "caddy" {
 		key = testEdgeKey
 	}
-	entry, err := WithAdmission(next, mode, key)
+	entry, err := WithAdmission(next, nil, mode, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +145,7 @@ func TestAdmissionGlobalRateAndIPGroups(t *testing.T) {
 
 func TestAdmissionClientTrust(t *testing.T) {
 	for _, tc := range []struct{ mode, key string }{{"caddy", ""}, {"caddy", "too-short"}, {"caddy", testEdgeKey + "\n"}, {"auto", testEdgeKey}, {"direct", testEdgeKey}} {
-		if _, err := WithAdmission(nil, tc.mode, tc.key); err == nil {
+		if _, err := WithAdmission(nil, nil, tc.mode, tc.key); err == nil {
 			t.Fatal("invalid identity configuration accepted")
 		}
 	}
@@ -287,5 +289,69 @@ func TestAdmissionBoundedClientsAndIdleExpiry(t *testing.T) {
 		t.Fatal(retry)
 	} else {
 		release()
+	}
+}
+func TestPullControlIngressIsolation(t *testing.T) {
+	entered := make(chan struct{})
+	unblock := make(chan struct{})
+	defer close(unblock)
+	normal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if classify(r.URL.EscapedPath()) == unknown {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	control := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(edgeHeader) != "" || r.Header.Get(clientHeader) != "" {
+			t.Error("forwarded hop credentials into control handler")
+		}
+		if r.URL.EscapedPath() == shresolver.ClaimPath {
+			close(entered)
+			select {
+			case <-r.Context().Done():
+			case <-unblock:
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	h, err := WithAdmission(normal, control, "caddy", testEdgeKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := "203.0.113.4"
+	r := edgeRequest(shresolver.ClaimPath, from)
+	r.Header.Del(edgeHeader)
+	if w := call(h, r); w.Code != 503 {
+		t.Fatalf("untrusted edge reached control: %d", w.Code)
+	}
+	if w := call(h, edgeRequest("/internal/shanghai/%63laim", from)); w.Code != 404 {
+		t.Fatalf("noncanonical path reached control: %d", w.Code)
+	}
+
+	start := edgeRequest(shresolver.ClaimPath, from)
+	ctx, cancel := context.WithCancel(start.Context())
+	defer cancel()
+	done := make(chan int, 1)
+	go func() { done <- call(h, start.WithContext(ctx)).Code }()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("control request did not reach handler")
+	}
+	for _, path := range []string{"/api/parse", "/api/resolve", "/api/platforms", "/api/bilibili", "/api/media/weibo"} {
+		if w := call(h, edgeRequest(path, from)); w.Code != 200 {
+			t.Fatalf("waiting control poll affected %s: %d", path, w.Code)
+		}
+	}
+	if w := call(h, edgeRequest("/api/parse", from)); w.Code != 429 {
+		t.Fatalf("expected exhausted user tokens: %d", w.Code)
+	}
+	if w := call(h, edgeRequest(shresolver.ResultPath, from)); w.Code != 204 {
+		t.Fatalf("parse quota blocked result: %d", w.Code)
+	}
+	cancel()
+	if code := <-done; code != 204 {
+		t.Fatalf("claim: %d", code)
 	}
 }

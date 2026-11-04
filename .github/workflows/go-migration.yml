@@ -329,6 +329,7 @@ jobs:
 
       - name: Verify Shanghai original resolver, Go responses and existing frontend consumer
         run: |
+          export DOKITOOL_PULL_EXAMPLES="$RUNNER_TEMP/shanghai-pull.json"
           export DOKITOOL_SHANGHAI_EXAMPLES="$RUNNER_TEMP/shanghai-originals.json"
           (
             cd backend
@@ -337,7 +338,9 @@ jobs:
             go build -o "$RUNNER_TEMP/shanghai-resolver" ./cmd/shanghai-resolver
           )
           "$RUNNER_TEMP/dokitool-validation/bin/python" -B scripts/validate-unified-schema.py "$DOKITOOL_SHANGHAI_EXAMPLES"
+          "$RUNNER_TEMP/dokitool-validation/bin/python" -B scripts/validate-unified-schema.py "$DOKITOOL_PULL_EXAMPLES"
           node frontend/scripts/test-shanghai-original.mjs "$DOKITOOL_SHANGHAI_EXAMPLES"
+          node frontend/scripts/test-shanghai-original.mjs "$DOKITOOL_PULL_EXAMPLES"
 
       - name: Build the Go executable
         working-directory: backend
