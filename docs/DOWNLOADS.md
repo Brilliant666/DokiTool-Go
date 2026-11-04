@@ -7,19 +7,25 @@ transport routes are retained. Ordinary
 CDN files travel directly to the user's browser.
 Weibo's signed `/api/media/weibo` route remains a server relay when required.
 
-The policy, ownership and deployment sections describe the current implementation
-(`downloads-20261031.2`, with the pending PR #11 client recovery fix). Dated acceptance entries preserve the investigation
-history; earlier blockers and fallback behavior are not the current release
-contract. The latest controlled refresh, saved-file integrity and natural upgrade results are in
-[the unified-media acceptance record](UNIFIED-MEDIA-ACCEPTANCE.md#下载恢复与候选精简验收2026-10-31).
-Publishing the source or passing a local
-build does not itself establish the production version.
+## Production download capabilities
 
-The open production incident and investigation lessons are recorded in
-[INC-20261031-001](incidents/INC-20261031-001-download-delivery.md).
-Bridge/cache, media-probe compatibility, task recovery and original-source
-throughput have separate evidence and acceptance states. The current closeout is
-in [the PR #11 acceptance summary](UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout).
+下表区分生产按钮验收、浏览器直接打开附件的实测，以及需要手动保存的入口。结论仅限所测作品、版本和网络；当前生产下载 Worker 为 `downloads-20261103.1`。
+
+| 平台 | 已确认的能力和边界 |
+| --- | --- |
+| 抖音 | 上海主动领取取址已启用，4K 原画有[生产基线及维护者保存记录](go-migration/douyin-shanghai.md)。上海提供候选地址，文件由浏览器从 CDN 下载。 |
+| 小红书实况 | #30 只为实况配对中 motion 的指定直连域名（`sns-v11.rednotecdn.com`、`sns-v27.rednotecdn.com`）升级同址 HTTPS。一笔生产样本的两个地址均已升级，原按钮保存了视频、对应封面及同组 ZIP；单视频和 ZIP 中的视频实取 v11，封面沿用自己的来源。视频和封面完整解码，ZIP 通过 CRC，成员与单项的长度及 SHA-256 一致。v27 未单独整存；这不是小红书 4K 全量验收。[发布回执](https://github.com/Brilliant666/DokiTool-Go/pull/30#issuecomment-6628340403) · [Chat 接收记录（非独立生产复测）](https://github.com/Brilliant666/DokiTool-Go/pull/30#issuecomment-6629159922) |
+| 今日头条 | 作品 `7501991960077500979` 原选 1080p：上游缺少允许网页读取的跨域响应头，现网按钮尚未接入原生附件路线。独立 Edge 直接接收该附件后，以系统命名 `download.mp4` 实际保存 25,912,280 字节，H.264 视频和 AAC 音轨全片解码通过。进度由浏览器下载管理器管理，页面只能确认交接。此前一次仅收到 15,662 字节，未证实慢的原因。 |
+| 皮皮搞笑、最右 | 已测作品（分别为 `860538173891`、`163566379`）的 HTTP 媒体被浏览器拦截。同址 HTTPS 可预览，但不允许网页跨域读取，直接打开也未触发附件下载。保留「打开原视频，手动保存」入口；没有已验证的同一所选视频的新附件或可跨域读取来源，不启动中继。 |
+
+后三个平台引自 2026-11-04 本地验收原件《三平台无中继保存能力：最终结果记录》。其中只有头条新增一次原生附件保存；皮皮搞笑与最右复用已有记录。非浏览器客户端下载成功不计为网页一键保存。
+
+## Historical download evidence
+
+The [production incident record](incidents/INC-20261031-001-download-delivery.md) and
+[PR #11 closeout](UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout) preserve earlier failures
+and their scope. Controlled refresh and upgrade results are in the
+[unified-media acceptance record](UNIFIED-MEDIA-ACCEPTANCE.md#下载恢复与候选精简验收2026-10-31).
 
 As of the 2026-10-31 closeout, the owner reports three normal production purple-button
 saves of approximately 540 MB, with playable beginning/end, audio and completed
@@ -33,8 +39,8 @@ The frozen a8 URL was reused after a time encoded in its path without checking i
 validity window. The resulting 403/zero-media attempts cannot support SW or route
 performance conclusions. The incident report explicitly records this serious
 investigation error, excessive repeated manual steps and the required stop rules.
-Do not repeat the old URL or the completed download matrix. Probe compatibility
-and automatic expired-result recovery still await release; the latter requires
+Do not repeat the old URL or the completed download matrix. At that checkpoint, probe compatibility
+and automatic expired-result recovery awaited release; the latter required
 post-release browser verification, preferably using an existing trusted terminal
 record without another transfer. The historical sections below do not prescribe
 new tests. A temporary source replacement alone still is not normal-parser acceptance.
@@ -261,7 +267,7 @@ Restored URL-only history, archives, Live pairs, active/unknown, completed or
 cancelled tasks do not gain a guessed recovery path. Fresh source size/format
 metadata replaces the prior attempt's data; this is a fresh download, not a byte
 resume. Existing transport fallback among the same variant's sources is unchanged.
-See [implementation evidence and remaining identity limitation](go-migration/refresh-recovery.md).
+See [implementation evidence and remaining identity limitation](https://github.com/Brilliant666/DokiTool-Go/blob/7a44c02fdc19fa85e7b959d9146e5e9ae322b188/docs/go-migration/refresh-recovery.md).
 
 ## Deployment
 

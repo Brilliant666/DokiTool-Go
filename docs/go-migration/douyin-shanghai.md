@@ -1,6 +1,10 @@
 # 抖音原画取址
 
-## 已验收生产基线（2026-11-04）
+## 当前生产组合（#30 发布后）
+
+日本 Go 运行受审源码 `dd5e66d`（与 #30 合并后的 main `5c8c2fd` 文件树一致），继续使用 pull。上海 worker 仍为 `f68a988`，生产前端为 `d2995fe`，浏览器下载 Worker 为 `downloads-20261103.1`。#30 仅更新日本 Go；见[发布回执](https://github.com/Brilliant666/DokiTool-Go/pull/30#issuecomment-6628340403)及 [Chat 对回执的审查](https://github.com/Brilliant666/DokiTool-Go/pull/30#issuecomment-6629159922)。
+
+## #28 抖音原画生产验收基线（2026-11-04）
 
 日本后端使用 `DOKITOOL_SHANGHAI_MODE=pull`。上海出站服务 `dokitool-sh-pull.service` 已启动并设为开机启用。上海先向日本领取任务，再用作品 detail 中的媒体 `video_id` 请求官方原画入口。日本校验候选并生成统一响应，浏览器直接从选中的 CDN 下载文件。
 
@@ -23,7 +27,11 @@
 
 上海从官方 play 入口（`ratio=default&line=0`）最多调度两次，共享 6 秒、1 MiB 和 12 次上游 HTTP 请求的探测预算。日本校验视频关联、媒体规格和作品已有转码，将同一原画的合格路线保存在 `delivery.sources`，由服务端决定默认项。显式选中的来源消失时需要重新选择。
 
-## 关闭 pull 和恢复旧版 Go
+## 日本 #30 回退与历史 #28 恢复入口
+
+只撤回 #30 时，日本保留了 `f68a988` 程序及配置。按上面的 #30 发布回执撤出 `30-xhs-binary.conf`，保留 `28-binary.conf`、`29-pull.conf` 和上海服务；daemon-reload 后排空、停止、确认退出再启动，核对程序摘要、pull 和健康状态。发布时没有触发或演练回退。
+
+以下是 **#28 当时**停用 pull 或恢复至 #28 上线前版本的操作入口，前提是已核对现场与 #28 配置相符；不能直接套用到有 #30 或其他后续覆盖配置的主机。
 
 按[发布操作单](https://github.com/Brilliant666/DokiTool-Go/issues/9#issuecomment-6621196023)及[实际生产回执](https://github.com/Brilliant666/DokiTool-Go/issues/9#issuecomment-6622576682)核对运行版本、当前配置和备份摘要，再分步执行：
 
