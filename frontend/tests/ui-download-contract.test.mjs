@@ -2110,3 +2110,40 @@ for (const acknowledgement of ['confirmed', 'rejected', 'reactivated']) test(`re
     assert.equal(store.downloads[0].status, 'completed');
   } else { assert.equal(resolves, 0); assert.equal(deliveries.length, 1); }
 });
+
+test('Go public XHS live pairs reach individual and ZIP downloads', {
+  skip: !process.env.DOKITOOL_XHS_PUBLIC_INTEGRATION_OUTPUT,
+}, async () => {
+  const outputs = JSON.parse(await readFile(process.env.DOKITOOL_XHS_PUBLIC_INTEGRATION_OUTPUT, 'utf8'));
+  assert.equal(outputs.length, 4);
+  for (const output of outputs) {
+    const { instance, store, selection, toasts } = harness(output.data);
+    const motions = store.resultData.items.map(item => item.variants[0].delivery.resources
+      .find(resource => resource.role === 'motion').delivery.sources[0].url);
+    assert.equal(new Set(motions).size, 2);
+    for (let i = 0; i < 2; i++) {
+      fetched = [];
+      instance.downloadLiveVideo(store.resultData.items[i]);
+      await settled(store.downloads.at(-1));
+      assert.equal(store.downloads.at(-1).status, 'completed');
+      assert.ok(fetched.length && fetched.every(url => url === motions[i]));
+    }
+    fetched = []; blobs = [];
+    await instance.downloadAllMedia('live');
+    assert.equal(store.downloads.at(-1).status, 'completed');
+    assert.deepEqual(fetched.filter(url => url.includes('rednotecdn.com')), motions);
+    const zip = await JSZip.loadAsync(await blobs.at(-1).arrayBuffer());
+    assert.equal(Object.keys(zip.files).length, 4);
+    selection.selectItem(store.resultData.items[0].id);
+    selection.choose({ variant_id: store.resultData.items[0].variants[0].id });
+    const replacement = JSON.parse(JSON.stringify(store.resultData.items[0]));
+    replacement.variants[0].id = 'replacement';
+    store.replaceItem(replacement);
+    const previous = store.downloads.length;
+    fetched = [];
+    instance.downloadLiveVideo(replacement);
+    assert.equal(store.downloads.length, previous);
+    assert.equal(fetched.length, 0);
+    assert.ok(toasts.some(([message]) => message.includes('所选实况版本已不可用')));
+  }
+});

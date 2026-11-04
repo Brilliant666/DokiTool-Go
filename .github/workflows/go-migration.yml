@@ -342,6 +342,14 @@ jobs:
           node frontend/scripts/test-shanghai-original.mjs "$DOKITOOL_SHANGHAI_EXAMPLES"
           node frontend/scripts/test-shanghai-original.mjs "$DOKITOOL_PULL_EXAMPLES"
 
+      - name: Validate Xiaohongshu live photo delivery through the original frontend
+        env:
+          DOKITOOL_XHS_PUBLIC_INTEGRATION_OUTPUT: ${{ runner.temp }}/xhs-live-delivery.json
+        run: |
+          (cd backend && go test -count=1 ./cmd/dokitool -run '^TestXHSPublicMediaIntegration$')
+          "$RUNNER_TEMP/dokitool-validation/bin/python" -B scripts/validate-unified-schema.py "$DOKITOOL_XHS_PUBLIC_INTEGRATION_OUTPUT"
+          (cd frontend && node --test --test-name-pattern='Go public XHS live pairs' tests/ui-download-contract.test.mjs)
+
       - name: Build the Go executable
         working-directory: backend
         run: go build -o "$RUNNER_TEMP/dokitool-go" ./cmd/dokitool
