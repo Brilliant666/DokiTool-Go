@@ -127,7 +127,7 @@ function harness(data, resolver, selectionFactory) {
 function resultProps(data, locale='zh-CN') { const context=harness(data);return {resultData:context.store.resultData,selection:context.selection,resultVersion:context.store.resultVersion,locale,formatNumber:String,formatDuration:String}; }
 async function settled(task) {
   for (let i = 0; i < 300; i++) {
-    if (['completed', 'failed', 'cancelled', 'handed-off', 'interrupted'].includes(task.status)) return;
+    if (['completed', 'failed', 'cancelled', 'handed-off', 'interrupted', 'manual'].includes(task.status)) return;
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
   throw new Error('download did not settle');
@@ -1723,8 +1723,11 @@ if (process.env.DOKITOOL_MEDIA_INTEGRATION === '1') {
       assert.deepEqual(selection.currentSelection.value, choice);
       assert.equal(selection.currentVideoUrl.value, selectedUrl);
       await instance.downloadMainVideo(); await settled(store.downloads[0]);
-      assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error);
-      assert.ok(fetched.length > 0 && fetched.every(url => url === selectedUrl), 'download uses the same explicitly selected media');
+      assert.equal(store.downloads[0].status, 'manual', 'the frozen PHP envelope has no verified download candidate');
+      assert.equal(store.downloads[0].url, selectedUrl);
+      instance.handleBrowserDownload(store.downloads[0].id);
+      assert.equal(clicked.at(-1).href, selectedUrl, 'manual fallback retains the resolved, explicitly selected media');
+      assert.ok(!fetched.includes(selectedUrl), 'no CORS fetch to the original host');
     }
     assert.equal(resolveRequests.length, 1);
     assert.equal(new URL(resolveRequests[0], 'https://snap.example.test').searchParams.get('item_id'), original.id);

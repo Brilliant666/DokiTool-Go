@@ -1,6 +1,6 @@
 /** Complete files only. Playlists, muxing and archives keep their own pipelines. */
 export type DownloadTransport = "browser_native" | "browser_streaming" | "browser_blob";
-export type DeliveryStatus = "queued" | "preparing" | "downloading" | "completed" | "failed" | "cancelled" | "handed-off" | "interrupted";
+export type DeliveryStatus = "queued" | "preparing" | "downloading" | "completed" | "failed" | "cancelled" | "handed-off" | "interrupted" | "manual";
 
 /** Metadata from this attempt's complete-file probe; never reused across attempts. */
 export interface SourceProbe {
@@ -19,6 +19,9 @@ export interface DownloadRequest {
   formatMime?: string;
   startedAt?: number;
   probe?: SourceProbe;
+  /** Only the fixed-host verified-range Worker may receive this request. */
+  tbvideo?: boolean;
+  tbvideoEvent?: { platform: "pipigx" | "zuiyou"; pid: string; vid: string };
 }
 
 export interface DownloadSnapshot {
@@ -38,6 +41,7 @@ export interface DownloadSnapshot {
     firstBlockMs: number;
     windows: { from: number; to: number; ms: number; readMs: number; demandMs: number }[];
   };
+  tbvideoAttempted?: boolean;
   workerBuild?: string;
   workerInstance?: string;
   finishedAt?: number;

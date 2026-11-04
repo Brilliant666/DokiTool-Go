@@ -121,6 +121,14 @@ func run(args []string) error {
 	if shanghai != nil {
 		douyinParser = douyin.NewWithOriginalResolver(executor, japan.WithFingerprint(), shanghai)
 	}
+	pipigxSave, err := enableTBVideo("DOKITOOL_TBVIDEO_REWRITE_PIPIGX")
+	if err != nil {
+		return err
+	}
+	zuiyouSave, err := enableTBVideo("DOKITOOL_TBVIDEO_REWRITE_ZUIYOU")
+	if err != nil {
+		return err
+	}
 	adapters := map[string]api.Adapter{
 		"douyin":      douyinParser,
 		"bilibili":    bilibili.New(executor),
@@ -128,8 +136,8 @@ func run(args []string) error {
 		"toutiao":     toutiao.New(executor),
 		"kuaishou":    kuaishou.New(executor),
 		"pipixia":     pipixia.New(executor),
-		"pipigx":      pipigx.New(executor),
-		"zuiyou":      zuiyou.New(executor),
+		"pipigx":      pipigx.NewWithTBVideo(executor, pipigxSave),
+		"zuiyou":      zuiyou.NewWithTBVideo(executor, zuiyouSave),
 		"xiaohongshu": xiaohongshu.New(xhsExecutor),
 	}
 	handler, err := api.New(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
@@ -220,4 +228,17 @@ func emit(value any) error {
 	}
 	_, err = fmt.Fprintln(os.Stdout, string(encoded))
 	return err
+}
+
+// The two deployment switches apply independently when the API process starts.
+func enableTBVideo(key string) (bool, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return true, nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean", key)
+	}
+	return enabled, nil
 }

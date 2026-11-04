@@ -107,7 +107,7 @@ func TestPHPZuiyouParserAndEntry(t *testing.T) {
 			input, expected := unified.Map(entry["input"]), unified.Map(entry["expected"])
 			tape := &oracleTape{t: t, responses: unified.Slice(input["http_responses"]), requests: unified.Slice(expected["http_requests"])}
 			parser := New(tape)
-			legacy, err := parser.parseLegacy(context.Background(), unified.Str(input["url"]))
+			legacy, err := parser.parseLegacy(context.Background(), unified.Str(input["url"]), nil)
 			if err != nil {
 				t.Fatal(err)
 			}

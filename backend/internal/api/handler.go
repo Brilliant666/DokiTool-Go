@@ -170,6 +170,9 @@ func sendError(w http.ResponseWriter, status int, message string) {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.EscapedPath()
 	switch classify(path) {
+	case telemetry:
+		receiveTBVideoOutcome(w, r, tbvideoLogger)
+		return
 	case legacy:
 		sendError(w, 410, "接口已更新，请等待当前下载结束后刷新页面")
 		return

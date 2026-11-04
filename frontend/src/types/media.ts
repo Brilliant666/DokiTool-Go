@@ -121,6 +121,8 @@ export interface MediaError {
   retry_after_seconds?: number;
 }
 export interface ItemBase {
+  /** Client binding for isolated tbvideo delivery; preview continues to use variants. */
+  tbvideo?: import("../services/tbvideo").TbvideoItem;
   id: string;
   type: "video" | "image" | "live_photo" | "audio";
   index?: number;

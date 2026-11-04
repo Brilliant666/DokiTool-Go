@@ -90,7 +90,7 @@ PHP 使用受支持的 8.x 版本，代码最低要求 8.1，启用 cURL、OpenS
 
 访问控制默认覆盖 HTML、静态资源与 API。Caddy 外层 `route` 保证访问门先执行；不要将访问门与 `handle` 并列后依赖书写顺序，因为 Caddy 会重新排序。发布路径使用版本软链时，示例的 `resolve_root_symlink` 可让 FastCGI 使用实际根目录。修改后对实际安装版本执行配置检查，保留局部配置及上一版本以便回退。
 
-密码保护的测试站还必须验证模块 Worker 的实际注册，不能用带认证的静态 GET 通过代替。香港测试站曾因全站 Basic Auth 使 `/downloads/worker.js` 返回 401，注册在媒体传输前失败。仅对 `/downloads/worker.js` 和其唯一模块依赖 `/downloads/task-store.js` 设置精确静态访问例外即可解除这项脚本门禁；两者须匿名返回 200、正确 JavaScript MIME、与构建一致的内容及 `no-cache`，不返回登录页或 SPA HTML。保留首页、API、bridge 和相邻路径的既有认证，不能放开整个 `/downloads/*`、源码或媒体接口。该例外只公开静态脚本，不公开用户浏览器中的任务数据，也不增加服务器媒体中转。
+密码保护的测试站还必须验证模块 Worker 的实际注册，不能用带认证的静态 GET 通过代替。香港测试站曾因全站 Basic Auth 使 `/downloads/worker.js` 返回 401，注册在媒体传输前失败。仅对 `/downloads/worker.js` 和其实际导入的静态模块（`task-store.js`、`decoded-length.js`、`media-format.js`、`tbvideo.js`，均在 `/downloads/` 下）设置精确静态访问例外；这些文件须匿名返回 200、正确 JavaScript MIME、与构建一致的内容及 `no-cache`，不返回登录页或 SPA HTML。保留首页、API、bridge 和相邻路径的既有认证，不能放开整个 `/downloads/*`、源码或媒体接口。该例外只公开静态脚本，不公开用户浏览器中的任务数据，也不增加服务器媒体中转。
 
 部署验收须分别记录匿名脚本响应、认证边界、浏览器注册/模块加载/激活、协议握手，以及认证后的 bridge 控制关系；后者继续遵守上文 SAMEORIGIN、no-store 和完整 200 要求。注册作用域仍为 `/downloads/`，无需扩大到 `/`。如 bridge 嵌入仍失败，按实际响应与浏览器错误另行定位，不默认扩大匿名例外。配置、下载服务启动和整文件保存是三层验收，任一层通过均不能代替后一层。
 

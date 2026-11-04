@@ -14,14 +14,22 @@ import (
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/media/tbvideo"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 const endpoint = "https://h5.pipigx.com/ppapi/share/fetch_content"
 
-type Parser struct{ executor fetch.Executor }
+type Parser struct {
+	executor fetch.Executor
+	save     *bool
+}
 
 func New(executor fetch.Executor) *Parser { return &Parser{executor: executor} }
+
+func NewWithTBVideo(executor fetch.Executor, enabled bool) *Parser {
+	return &Parser{executor: executor, save: &enabled}
+}
 
 var pidPattern = regexp.MustCompile(`^[1-9][0-9]{0,18}$`)
 var midPattern = regexp.MustCompile(`^[0-9]{1,19}$`)
@@ -49,7 +57,11 @@ func ExtractParams(raw string) (int64, int64, bool) {
 	return p, m, true
 }
 func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Object, error) {
-	legacy, err := p.parseLegacy(ctx, input)
+	var post *tbvideo.Post
+	if p != nil && p.save != nil {
+		post = &tbvideo.Post{Platform: "pipigx", Enabled: *p.save}
+	}
+	legacy, err := p.parseLegacy(ctx, input, post)
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +69,9 @@ func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Ob
 	if err != nil {
 		return nil, err
 	}
-	return adaptLegacy(wire, input, now), nil
+	return adaptLegacy(wire, input, now, post), nil
 }
-func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Object, error) {
+func (p *Parser) parseLegacy(parent context.Context, input string, save *tbvideo.Post) (unified.Object, error) {
 	if err := parent.Err(); err != nil {
 		return nil, err
 	}
@@ -96,9 +108,19 @@ func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Obje
 		return failure(500, "响应中缺少 data.post 字段"), nil
 	}
 	videos := unified.Array{}
-	for _, video := range values(field(post, "videos")) {
+	if save != nil {
+		save.PID = strconv.FormatInt(pid, 10)
+	}
+	mapping := field(post, "videos")
+	for n, video := range values(mapping) {
 		if isArray(video) {
 			videos = append(videos, video)
+			if obj, ok := mapping.(*phpObject); ok {
+				save.Observe(obj.keys[n])
+			} else {
+				vid, _ := unified.Text(field(video, "vid"))
+				save.Observe(vid)
+			}
 		}
 	}
 	var firstVideo any
@@ -116,7 +138,7 @@ func failure(code int, message string) unified.Object {
 	return unified.Object{"code": code, "msg": message, "data": unified.Array{}}
 }
 
-func adaptLegacy(legacy unified.Object, source string, now int64) unified.Object {
+func adaptLegacy(legacy unified.Object, source string, now int64, save *tbvideo.Post) unified.Object {
 	code, ok := unified.PHPInt(legacy["code"])
 	if !ok {
 		return unified.ContractError("UPSTREAM_INVALID_RESPONSE", "解析器返回格式异常", false)
@@ -152,6 +174,7 @@ func adaptLegacy(legacy unified.Object, source string, now int64) unified.Object
 			hash := sha256.Sum256([]byte(upstream))
 			id = "video-" + hex.EncodeToString(hash[:])[:24]
 		}
+		save.Bind(index, id, variants, unified.Map(video)["url"])
 		items = append(items, unified.Object{"id": id, "type": "video", "default": nil, "variants": variants, "resolve_url": unified.ResolveURL(source, id)})
 	}
 	if len(items) > 0 {
@@ -165,5 +188,6 @@ func adaptLegacy(legacy unified.Object, source string, now int64) unified.Object
 	if len(unified.Slice(data["items"])) == 0 {
 		return unified.ContractError("NO_MEDIA", "作品未提供可用媒体", false)
 	}
+	save.Publish(data)
 	return unified.FinalizeData(data, now)
 }

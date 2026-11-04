@@ -2,6 +2,7 @@ import { shallowRef, watch, type Ref } from "vue";
 import { useButtonControl } from "./useButtonControl";
 import { apiConfig } from "../services/apiConfig";
 import { secureApiClient } from "../services/secureApiClient";
+import { withTbvideoItems } from "../services/tbvideo";
 import { validateMediaEnvelope, readyItem } from "../utils/mediaContract";
 import type { useVideoStore } from "../stores/video";
 import type { MediaItem, ToastType } from "../types/media";
@@ -103,7 +104,7 @@ export function useVideoParser(options: {
               `${apiConfig.parseUrl}?schema_version=1.0&platform=${encodeURIComponent(currentPlatform.value)}&url=${encodeURIComponent(url)}`,
               controller.signal,
             );
-      const data = validateMediaEnvelope(payload);
+      const data = withTbvideoItems(validateMediaEnvelope(payload));
       if (run === generation && !controller.signal.aborted)
         videoStore.setResult(data);
     } catch (error) {
@@ -126,9 +127,9 @@ export function useVideoParser(options: {
       if (readyItem(item)) return item;
       throw new Error("条目缺少解析入口");
     }
-    const data = validateMediaEnvelope(
+    const data = withTbvideoItems(validateMediaEnvelope(
       await fetchJSON(resolveApiUrl(item.resolve_url), signal),
-    );
+    ));
     const resolved = data.items.find((candidate) => candidate.id === item.id);
     if (!resolved) throw new Error("解析响应缺少所请求条目");
     return resolved;

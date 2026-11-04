@@ -21,6 +21,7 @@ const (
 	unknown route = iota
 	parser
 	legacy
+	telemetry
 	media
 )
 
@@ -31,6 +32,8 @@ func classify(path string) route {
 		return parser
 	case "/api/short_videos", "/api/douyin", "/api/ksjx", "/api/bilibili", "/api/xhsjx", "/api/toutiao":
 		return legacy
+	case tbvideoOutcomePath:
+		return telemetry
 	case "/api/media/weibo":
 		return media
 	default:
@@ -42,7 +45,7 @@ const clientHeader = "X-DokiTool-Client-IP"
 const edgeHeader = "X-DokiTool-Edge-Key"
 
 // WithAdmission wraps the production HTTP entry point. All limits are local
-// to one serving instance; the two pools share neither clients nor leases.
+// to one serving instance; the pools share neither clients nor leases.
 func WithAdmission(next, pullControl http.Handler, mode, edgeKey string) (http.Handler, error) {
 	switch mode {
 	case "direct":
@@ -57,15 +60,16 @@ func WithAdmission(next, pullControl http.Handler, mode, edgeKey string) (http.H
 		return nil, fmt.Errorf("client-identity must be direct or caddy")
 	}
 	return &admission{next: next, pullControl: pullControl, edgeKey: edgeKey, now: time.Now,
-		public: newPool(4, 12.0/60, 8, 1, 1),
-		relay:  newPool(12, 1, 24, 2, 2)}, nil
+		public:  newPool(4, 12.0/60, 8, 1, 1),
+		reports: newPool(10, 1, 60, 5, 2),
+		relay:   newPool(12, 1, 24, 2, 2)}, nil
 }
 
 type admission struct {
-	next, pullControl http.Handler
-	edgeKey           string
-	now               func() time.Time
-	public, relay     *pool
+	next, pullControl      http.Handler
+	edgeKey                string
+	now                    func() time.Time
+	public, relay, reports *pool
 }
 
 func (a *admission) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +101,8 @@ func (a *admission) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	budget := a.public
 	if kind == media {
 		budget = a.relay
+	} else if kind == telemetry {
+		budget = a.reports
 	}
 	release, retry := budget.acquire(client, a.now())
 	if retry > 0 {

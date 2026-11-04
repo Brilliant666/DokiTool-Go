@@ -2,7 +2,7 @@
 export const HISTORY_MS = 24 * 60 * 60_000;
 const LIMIT = 100;
 const BUDGET_MS = 1500;
-const terminal = record => ["completed", "failed", "cancelled"].includes(record.snapshot.status);
+const terminal = record => ["completed", "failed", "cancelled", "manual"].includes(record.snapshot.status);
 
 export function createTaskStore(database = globalThis.indexedDB) {
   let connection;
