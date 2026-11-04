@@ -310,6 +310,7 @@
 /backend/cmd/dokitool/*
 !/backend/cmd/dokitool/main.go
 !/backend/cmd/dokitool/main_test.go
+!/backend/cmd/dokitool/xhs_public_integration_test.go
 /backend/cmd/shanghai-resolver/*
 !/backend/cmd/shanghai-resolver/main.go
 !/backend/cmd/shanghai-resolver/main_test.go
@@ -609,6 +610,8 @@
 !/backend/internal/platform/xiaohongshu/parser.go
 !/backend/internal/platform/xiaohongshu/parser_test.go
 !/backend/internal/platform/xiaohongshu/probe.go
+!/backend/internal/platform/xiaohongshu/public_media.go
+!/backend/internal/platform/xiaohongshu/public_media_test.go
 !/backend/internal/platform/xiaohongshu/testdata/
 !/backend/internal/platform/xiaohongshu/wire.go
 !/backend/internal/platform/xiaohongshu/wire_test.go
