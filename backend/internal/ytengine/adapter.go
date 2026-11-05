@@ -490,7 +490,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 
 	// 1. High-Resolution DASH Video-Only Tracks as Directly Downloadable Files (kind == "file", has_audio == false)
 	for i, vf := range filteredDASHVideo {
-		sources := buildFormatSources(vf, now)
+		sources := buildFormatSourcesWithTitle(vf, itemTitle, now)
 		if len(sources) == 0 {
 			continue
 		}
@@ -516,7 +516,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 
 	// 2. Deliverable Progressive MP4s with Embedded Audio (kind == "file")
 	for i, f := range dedupedMP4 {
-		sources := buildFormatSources(f, now)
+		sources := buildFormatSourcesWithTitle(f, itemTitle, now)
 		if len(sources) == 0 {
 			continue
 		}
@@ -550,7 +550,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 	// 3. Standalone Audio Track (both as a downloadable file variant in quality options and as a background_audio attachment)
 	if opts.EnableDASHMux && hasSplitSilentTracks && len(dashAudioFormats) > 0 {
 		bestAudio := dashAudioFormats[0]
-		audioSources := buildFormatSources(bestAudio, now)
+		audioSources := buildFormatSourcesWithTitle(bestAudio, itemTitle, now)
 		if len(audioSources) > 0 {
 			audioKey := nonEmptyOr(bestAudio.FormatID, "audio")
 			audioVariantID := "v-" + shortDigest(opts.PlatformID+":dasha-file:"+entryKey+":"+audioKey)
@@ -568,7 +568,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 				variants = append(variants, audioVariant)
 			}
 		}
-		if audioResource := buildMuxTrackResource(bestAudio, "audio", now); audioResource != nil {
+		if audioResource := buildMuxTrackResourceWithTitle(bestAudio, "audio", itemTitle, now); audioResource != nil {
 			attID := "att-" + shortDigest(opts.PlatformID+":att-audio:"+opts.ContentID+":"+entryKey)
 			attTitle := formatAudioAttachmentTitle(itemTitle, bestAudio)
 			audioAttachment = unified.Object{
@@ -639,7 +639,11 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 }
 
 func buildMuxTrackResource(f Format, role string, now int64) unified.Object {
-	sources := buildFormatSources(f, now)
+	return buildMuxTrackResourceWithTitle(f, role, "", now)
+}
+
+func buildMuxTrackResourceWithTitle(f Format, role, itemTitle string, now int64) unified.Object {
+	sources := buildFormatSourcesWithTitle(f, itemTitle, now)
 	if len(sources) == 0 {
 		return nil
 	}
@@ -760,13 +764,77 @@ func buildAudioFileMetadata(af Format) unified.Object {
 }
 
 func buildFormatSources(f Format, now int64) unified.Array {
+	return buildFormatSourcesWithTitle(f, "", now)
+}
+
+func buildFormatSourcesWithTitle(f Format, itemTitle string, now int64) unified.Array {
 	rawSource := unified.Object{
-		"url": f.URL,
+		"url": decorateYouTubeSourceURL(f.URL, itemTitle),
 	}
 	if f.Filesize != nil && *f.Filesize > 0 && *f.Filesize <= maxSafeInteger {
 		rawSource["size_bytes"] = *f.Filesize
 	}
 	return unified.Sources(unified.Array{rawSource}, now)
+}
+
+func decorateYouTubeSourceURL(rawURL, itemTitle string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.RawQuery == "" {
+		return rawURL
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if host != "googlevideo.com" && !strings.HasSuffix(host, ".googlevideo.com") {
+		return rawURL
+	}
+	q := u.Query()
+	if q.Get("title") != "" {
+		return rawURL
+	}
+	for _, param := range strings.Split(q.Get("sparams"), ",") {
+		if strings.EqualFold(strings.TrimSpace(param), "title") {
+			return rawURL
+		}
+	}
+	cleanTitle := sanitizeDownloadTitle(itemTitle)
+	if cleanTitle == "" {
+		return rawURL
+	}
+	return rawURL + "&title=" + url.QueryEscape(cleanTitle)
+}
+
+func sanitizeDownloadTitle(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastUnderscore := false
+	count := 0
+	for _, r := range trimmed {
+		if count >= 80 {
+			break
+		}
+		switch {
+		case r < 0x20 || r == 0x7f,
+			r == '/', r == '\\', r == ':', r == '*', r == '?', r == '"', r == '<', r == '>', r == '|':
+			if !lastUnderscore && b.Len() > 0 {
+				b.WriteByte('_')
+				lastUnderscore = true
+				count++
+			}
+		case r == ' ' || r == '\t':
+			if !lastUnderscore && b.Len() > 0 {
+				b.WriteByte('_')
+				lastUnderscore = true
+				count++
+			}
+		default:
+			b.WriteRune(r)
+			lastUnderscore = false
+			count++
+		}
+	}
+	return strings.Trim(b.String(), "_.")
 }
 
 func buildFormatMetadata(f Format, hasAudio, isFile bool) unified.Object {

@@ -59,6 +59,16 @@ function triggerBrowserDownload(
   anchor.remove();
 }
 
+function isCorsBlockedDirectCdn(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    return host === "googlevideo.com" || host.endsWith(".googlevideo.com");
+  } catch {
+    return false;
+  }
+}
+
 export function useMediaDownload({
   videoStore,
   showToast,
@@ -342,6 +352,36 @@ export function useMediaDownload({
       globalThis.crypto?.randomUUID?.() ??
       `page-${Date.now()}-${++pageTaskSequence}`;
     deliveryTasks.set(deliveryId, downloadId);
+    if (isCorsBlockedDirectCdn(url)) {
+      videoStore.updateDownload(downloadId, {
+        deliveryId,
+        transport: "browser_native",
+        status: "handed-off",
+        statusText: "已交给浏览器",
+        abortController: null,
+        percent: 0,
+        loaded: 0,
+        total: 0,
+        speed: 0,
+        elapsed: 0,
+        averageSpeed: 0,
+        transferred: 0,
+        error: null,
+        progressKind: "bytes",
+        nativeAvailable: true,
+        observation: undefined,
+        transferElapsed: undefined,
+        timing: undefined,
+        workerBuild: undefined,
+      });
+      triggerBrowserDownload(url, filename, true);
+      showToast(
+        "已交给浏览器直接拉取源流（若在标签页打开播放，可右键或点右下角菜单保存）",
+        "info",
+        6000,
+      );
+      return;
+    }
     videoStore.updateDownload(downloadId, {
       deliveryId,
       abortController: controller,
