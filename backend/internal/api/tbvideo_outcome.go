@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"time"
 )
 
 const tbvideoOutcomePath = "/api/downloads/tbvideo-result"
@@ -33,6 +34,11 @@ func receiveTBVideoOutcome(w http.ResponseWriter, r *http.Request, logger *slog.
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	// A byte cap does not bound a slow request body. Keep this deadline local
+	// to telemetry; parsing, Shanghai long polls and media streams are unchanged.
+	controller := http.NewResponseController(w)
+	_ = controller.SetReadDeadline(time.Now().Add(3 * time.Second))
+	defer controller.SetReadDeadline(time.Time{})
 	var e struct {
 		Platform  string `json:"platform"`
 		PID       string `json:"pid"`
@@ -48,6 +54,12 @@ func receiveTBVideoOutcome(w http.ResponseWriter, r *http.Request, logger *slog.
 		(e.Platform != "pipigx" && e.Platform != "zuiyou") || !tbvideoID.MatchString(e.PID) || !tbvideoID.MatchString(e.VID) ||
 		e.Candidate == nil || e.Bytes == nil || *e.Bytes < 0 || e.Elapsed == nil || *e.Elapsed < 0 ||
 		(e.Result != "saved" && e.Result != "fallback") || (e.Result == "saved" && (!*e.Candidate || *e.Bytes == 0)) {
+		// Never drain an incomplete HTTP/1 body after clearing its deadline.
+		// Do not close unrelated streams on an HTTP/2 connection.
+		if r.ProtoMajor == 1 {
+			r.Close = true
+			w.Header().Set("Connection", "close")
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
