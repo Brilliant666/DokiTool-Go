@@ -8,7 +8,10 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
-// PreparePublic upgrades only known Live Photo motion CDN sources on a copy.
+// PreparePublic prepares adapter-selected Live Photo motion URLs for HTTPS pages.
+// Upstream CDN membership is data, not a hard-coded node/domain list. This pure
+// delivery transform issues no requests and does not authorize server-side fetches.
+// TLS/CORS/readability must still be established by the actual browser transfer.
 func PreparePublic(ctx context.Context, platform string, payload unified.Object, now int64) (unified.Object, error) {
 	if platform != "xiaohongshu" || payload["code"] != "OK" {
 		return payload, nil
@@ -50,16 +53,26 @@ func upgradePair(pair unified.Object) {
 			if raw, ok := source["url"].(string); ok {
 				source["url"] = httpsMotionURL(raw)
 			}
+			fallbacks := unified.Slice(source["fallback_urls"])
+			for i, value := range fallbacks {
+				if raw, ok := value.(string); ok {
+					fallbacks[i] = httpsMotionURL(raw)
+				}
+			}
 		}
 	}
 }
 
 func httpsMotionURL(raw string) string {
-	if !strings.HasPrefix(raw, "http://") || strings.ContainsAny(raw, "\\\r\n\t ") {
+	if len(raw) < 7 || !strings.EqualFold(raw[:7], "http://") || strings.IndexFunc(raw, func(r rune) bool {
+		return r <= 0x20 || r == 0x7f || r == '\\'
+	}) >= 0 {
 		return raw
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.User != nil || u.Opaque != "" {
+	// An explicit port cannot be silently changed while preserving signed URL
+	// bytes. Leave unusual/invalid authorities as declared instead of guessing.
+	if err != nil || u.User != nil || u.Opaque != "" || u.Hostname() == "" || u.Port() != "" || strings.HasSuffix(u.Host, ":") {
 		return raw
 	}
 	for _, b := range []byte(u.Host) {
@@ -67,8 +80,7 @@ func httpsMotionURL(raw string) string {
 			return raw
 		}
 	}
-	if !strings.EqualFold(u.Host, "sns-v11.rednotecdn.com") && !strings.EqualFold(u.Host, "sns-v27.rednotecdn.com") {
-		return raw
-	}
+	// Do not round-trip through URL.String: only the scheme changes; path,
+	// escaped bytes, query order and signature text stay byte-for-byte intact.
 	return "https" + raw[4:]
 }

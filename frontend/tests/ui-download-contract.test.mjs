@@ -2130,6 +2130,11 @@ test('Go public XHS live pairs reach individual and ZIP downloads', {
     const motions = store.resultData.items.map(item => item.variants[0].delivery.resources
       .find(resource => resource.role === 'motion').delivery.sources[0].url);
     assert.equal(new Set(motions).size, 2);
+    assert.ok(motions.every(url => url.startsWith('https://')), 'new upstream hosts must reach both consumers over HTTPS');
+    assert.equal(new URL(motions[0]).hostname, 'sns-v28.rednotecdn.com');
+    assert.equal(new URL(motions[1]).hostname, 'media.next-provider.example.test');
+    const covers = store.resultData.items.map(item => item.variants[0].delivery.resources
+      .find(resource => resource.role === 'image').delivery.sources[0].url);
     for (let i = 0; i < 2; i++) {
       fetched = [];
       instance.downloadLiveVideo(store.resultData.items[i]);
@@ -2140,7 +2145,8 @@ test('Go public XHS live pairs reach individual and ZIP downloads', {
     fetched = []; blobs = [];
     await instance.downloadAllMedia('live');
     assert.equal(store.downloads.at(-1).status, 'completed');
-    assert.deepEqual(fetched.filter(url => url.includes('rednotecdn.com')), motions);
+    assert.deepEqual(fetched.filter(url => !covers.includes(url)), motions, 'ZIP must use the same first motion sources as single saves, without a CDN-name filter');
+    assert.ok(fetched.every(url => [...covers, ...motions].includes(url)), 'no undeclared or HTTP source is fetched');
     const zip = await JSZip.loadAsync(await blobs.at(-1).arrayBuffer());
     assert.equal(Object.keys(zip.files).length, 4);
     selection.selectItem(store.resultData.items[0].id);
