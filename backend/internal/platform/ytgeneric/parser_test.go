@@ -112,8 +112,8 @@ func TestUniversalAdapterBlocksPrivateIPResolution(t *testing.T) {
 	for _, privateIP := range []string{"127.0.0.1", "10.0.0.1", "169.254.169.254", "::1"} {
 		resolver := stubResolver{
 			ips: map[string][]netip.Addr{
-				"vimeo.com":         {netip.MustParseAddr(privateIP)},
-				"cdn.vimeocdn.com":  {netip.MustParseAddr(privateIP)},
+				"vimeo.com":        {netip.MustParseAddr(privateIP)},
+				"cdn.vimeocdn.com": {netip.MustParseAddr(privateIP)},
 			},
 		}
 		parser := NewWithResolver(spec, &stubExtractor{enabled: true}, nil, resolver)

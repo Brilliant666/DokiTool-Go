@@ -270,10 +270,10 @@ echo '{"id":"ok","formats":[{"format_id":"18","url":"https://video.twimg.com/ext
 `
 	binPath, hashes := writeFakeYTDLP(t, script)
 	baseEng, err := New(Config{
-		BinaryPath:    binPath,
-		AllowedHashes: hashes,
+		BinaryPath:     binPath,
+		AllowedHashes:  hashes,
 		MaxConcurrency: 2,
-		Timeout:       5 * time.Second,
+		Timeout:        5 * time.Second,
 	})
 	if err != nil || !baseEng.Enabled() {
 		t.Fatalf("New baseEng failed: %v", err)
@@ -512,12 +512,12 @@ func TestSizeProberRejectsErrorPagesAndInvalidContentRange(t *testing.T) {
 	mediaURL := "https://rr1---sn-test.googlevideo.com/videoplayback?itag=18"
 
 	cases := []struct {
-		name       string
-		status     int
-		headers    http.Header
-		body       []byte
-		wantSize   int64
-		wantOK     bool
+		name     string
+		status   int
+		headers  http.Header
+		body     []byte
+		wantSize int64
+		wantOK   bool
 	}{
 		{
 			name:   "200-text-html-error-page-rejected",
