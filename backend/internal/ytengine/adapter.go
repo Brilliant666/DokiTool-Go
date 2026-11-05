@@ -701,6 +701,9 @@ func formatSilentVideoSuffix(vf Format) string {
 	} else if shortEdge(vf) >= 1440 || longEdge(vf) >= 2560 {
 		parts = append(parts, "2K")
 	}
+	if hdr := mapDynamicRange(vf.DynamicRange); hdr != "" && hdr != "sdr" {
+		parts = append(parts, "HDR")
+	}
 	parts = append(parts, "仅视频无声")
 	return strings.Join(parts, " · ")
 }
@@ -844,10 +847,15 @@ func buildFormatMetadata(f Format, hasAudio, isFile bool) unified.Object {
 	}
 	if isFile {
 		ext := strings.ToLower(strings.TrimSpace(f.Ext))
-		if ext == "" || ext == "mp4" {
+		switch ext {
+		case "", "mp4":
 			meta["container"] = "mp4"
 			meta["extension"] = "mp4"
 			meta["mime_type"] = "video/mp4"
+		case "webm":
+			meta["container"] = "webm"
+			meta["extension"] = "webm"
+			meta["mime_type"] = "video/webm"
 		}
 	}
 	if f.Width != nil && *f.Width > 0 && f.Height != nil && *f.Height > 0 {
