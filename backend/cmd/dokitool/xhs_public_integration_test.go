@@ -43,7 +43,19 @@ func TestXHSPublicMediaIntegration(t *testing.T) {
 			sources := unified.Slice(unified.Map(resource["delivery"])["sources"])
 			source := unified.Map(sources[0])
 			if resource["role"] == "motion" {
-				source["url"] = "http://sns-v11.rednotecdn.com/" + id + "?sig=a%2Bb"
+				// A newly observed first node and an unfamiliar provider must reach
+				// both the original single-file and ZIP consumers without code lists.
+				hosts := []string{"sns-v28.rednotecdn.com", "media.next-provider.example.test"}
+				source["url"] = "http://" + hosts[i] + "/" + id + "?sig=a%2Bb+z&part=1&part=2&empty="
+				source["id"] = id + "-first"
+				alternates := unified.Array{source}
+				for _, host := range []string{"sns-v11.rednotecdn.com", "sns-v27.rednotecdn.com"} {
+					backup := unified.Clone(source)
+					backup["id"] = id + "-" + host
+					backup["url"] = "http://" + host + "/" + id + "?sig=backup%2Btoken"
+					alternates = append(alternates, backup)
+				}
+				unified.Map(resource["delivery"])["sources"] = alternates
 			} else {
 				source["url"] = "https://sns-webpic.xhscdn.com/" + id
 			}
@@ -97,8 +109,24 @@ func TestXHSPublicMediaIntegration(t *testing.T) {
 						continue
 					}
 					sources := unified.Slice(unified.Map(r["delivery"])["sources"])
-					if len(sources) != 1 || unified.Str(unified.Map(sources[0])["url"]) != "https://sns-v11.rednotecdn.com/live-"+string(rune('1'+i))+"?sig=a%2Bb" {
-						t.Fatalf("motion mapping changed: %v", sources)
+					originalItem := unified.Map(items[i])
+					originalVariant := unified.Map(unified.Slice(originalItem["variants"])[0])
+					originalResources := unified.Slice(unified.Map(originalVariant["delivery"])["resources"])
+					var originalSources unified.Array
+					for _, candidate := range originalResources {
+						if resource := unified.Map(candidate); resource["role"] == "motion" {
+							originalSources = unified.Slice(unified.Map(resource["delivery"])["sources"])
+						}
+					}
+					if len(sources) != 3 || len(originalSources) != 3 {
+						t.Fatal("source count changed")
+					}
+					for n, value := range sources {
+						gotSource, originalSource := unified.Map(value), unified.Map(originalSources[n])
+						want := "https" + unified.Str(originalSource["url"])[4:]
+						if gotSource["url"] != want || gotSource["id"] != originalSource["id"] {
+							t.Fatalf("source %d changed identity/order or was not upgraded", n)
+						}
 					}
 				}
 			}
