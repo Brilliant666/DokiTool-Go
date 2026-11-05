@@ -183,7 +183,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		sendError(w, 503, "微博播放服务尚未配置，请联系站点维护者")
 		return
-	case parser:
+	case parser, catalogRoute:
 	default:
 		sendError(w, 404, "接口不存在")
 		return

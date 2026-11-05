@@ -20,6 +20,7 @@ type route uint8
 const (
 	unknown route = iota
 	parser
+	catalogRoute
 	legacy
 	telemetry
 	media
@@ -28,8 +29,10 @@ const (
 // Match the same exact escaped paths for admission and dispatch.
 func classify(path string) route {
 	switch path {
-	case "/api/parse", "/api/resolve", "/api/platforms":
+	case "/api/parse", "/api/resolve":
 		return parser
+	case "/api/platforms":
+		return catalogRoute
 	case "/api/short_videos", "/api/douyin", "/api/ksjx", "/api/bilibili", "/api/xhsjx", "/api/toutiao":
 		return legacy
 	case tbvideoOutcomePath:
@@ -47,6 +50,15 @@ const edgeHeader = "X-DokiTool-Edge-Key"
 // WithAdmission wraps the production HTTP entry point. All limits are local
 // to one serving instance; the pools share neither clients nor leases.
 func WithAdmission(next, pullControl http.Handler, mode, edgeKey string) (http.Handler, error) {
+	return WithAdmissionConfig(next, pullControl, mode, edgeKey, DefaultAdmissionConfig())
+}
+
+// WithAdmissionConfig preserves trusted client identity while giving each route
+// its own independently tunable visitor and service budgets.
+func WithAdmissionConfig(next, pullControl http.Handler, mode, edgeKey string, config AdmissionConfig) (http.Handler, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
 	switch mode {
 	case "direct":
 		if edgeKey != "" {
@@ -60,16 +72,17 @@ func WithAdmission(next, pullControl http.Handler, mode, edgeKey string) (http.H
 		return nil, fmt.Errorf("client-identity must be direct or caddy")
 	}
 	return &admission{next: next, pullControl: pullControl, edgeKey: edgeKey, now: time.Now,
-		public:  newPool(4, 12.0/60, 8, 1, 1),
-		reports: newPool(10, 1, 60, 5, 2),
-		relay:   newPool(12, 1, 24, 2, 2)}, nil
+		public:  newConfiguredPool(config.Parse, config.MaxClients),
+		catalog: newConfiguredPool(config.Catalog, config.MaxClients),
+		reports: newConfiguredPool(config.Reports, config.MaxClients),
+		relay:   newConfiguredPool(config.Relay, config.MaxClients)}, nil
 }
 
 type admission struct {
-	next, pullControl      http.Handler
-	edgeKey                string
-	now                    func() time.Time
-	public, relay, reports *pool
+	next, pullControl               http.Handler
+	edgeKey                         string
+	now                             func() time.Time
+	public, catalog, relay, reports *pool
 }
 
 func (a *admission) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +116,8 @@ func (a *admission) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		budget = a.relay
 	} else if kind == telemetry {
 		budget = a.reports
+	} else if kind == catalogRoute {
+		budget = a.catalog
 	}
 	release, retry := budget.acquire(client, a.now())
 	if retry > 0 {
@@ -166,14 +181,20 @@ type clientState struct {
 type pool struct {
 	mu                                               sync.Mutex
 	clientBurst, clientRate, globalBurst, globalRate float64
-	clientSlots, active                              int
+	clientSlots, globalSlots, maxClients, active     int
 	global                                           bucket
 	clients                                          map[netip.Addr]*clientState
 }
 
-func newPool(clientBurst, clientRate, globalBurst, globalRate float64, clientSlots int) *pool {
+func newConfiguredPool(c PoolConfig, maxClients int) *pool {
+	return newPool(c.ClientBurst, c.ClientRPS, c.GlobalBurst, c.GlobalRPS,
+		c.ClientConcurrency, c.GlobalConcurrency, maxClients)
+}
+
+func newPool(clientBurst, clientRate, globalBurst, globalRate float64, clientSlots, globalSlots, maxClients int) *pool {
 	return &pool{clientBurst: clientBurst, clientRate: clientRate, globalBurst: globalBurst,
-		globalRate: globalRate, clientSlots: clientSlots, clients: make(map[netip.Addr]*clientState)}
+		globalRate: globalRate, clientSlots: clientSlots, globalSlots: globalSlots,
+		maxClients: maxClients, clients: make(map[netip.Addr]*clientState)}
 }
 
 func (p *pool) acquire(ip netip.Addr, now time.Time) (release func(), retrySeconds int) {
@@ -186,13 +207,13 @@ func (p *pool) acquire(ip netip.Addr, now time.Time) (release func(), retrySecon
 	}
 	c := p.clients[ip]
 	if c == nil {
-		if len(p.clients) >= 1024 {
+		if len(p.clients) >= p.maxClients {
 			for ip, state := range p.clients {
-				if state.active == 0 && now.Sub(state.at) >= 10*time.Minute {
+				if state.active == 0 && state.available(now, p.clientBurst, p.clientRate) >= p.clientBurst {
 					delete(p.clients, ip)
 				}
 			}
-			if len(p.clients) >= 1024 {
+			if len(p.clients) >= p.maxClients {
 				return nil, 60
 			}
 		}
@@ -203,7 +224,7 @@ func (p *pool) acquire(ip netip.Addr, now time.Time) (release func(), retrySecon
 	if local < 1 || global < 1 {
 		return nil, int(math.Ceil(max(1, (1-local)/p.clientRate, (1-global)/p.globalRate)))
 	}
-	if c.active >= p.clientSlots || p.active >= 2 {
+	if c.active >= p.clientSlots || p.active >= p.globalSlots {
 		return nil, 1
 	}
 	c.bucket = bucket{tokens: local - 1, at: now}
@@ -211,11 +232,14 @@ func (p *pool) acquire(ip netip.Addr, now time.Time) (release func(), retrySecon
 	c.active++
 	p.active++
 	p.clients[ip] = c
+	var once sync.Once
 	return func() {
-		p.mu.Lock()
-		c.active--
-		p.active--
-		p.mu.Unlock()
+		once.Do(func() {
+			p.mu.Lock()
+			c.active--
+			p.active--
+			p.mu.Unlock()
+		})
 	}, 0
 }
 
@@ -230,7 +254,7 @@ func rejectAdmission(w http.ResponseWriter, r *http.Request, kind route, status,
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(retry))
 	payload := unified.Object{"code": status, "msg": message, "data": nil}
-	if kind == parser {
+	if kind == parser || kind == catalogRoute {
 		payload = unified.ContractError(code, message, status == 429)
 		if status == 429 {
 			unified.Map(payload["error"])["retry_after_seconds"] = retry

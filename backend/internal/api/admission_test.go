@@ -17,13 +17,22 @@ import (
 
 const testEdgeKey = "synthetic-test-key-32-bytes-not-a-deployment-key"
 
+// Keep the historical policy as an explicit fixture, not the production default.
+func legacyAdmissionConfig() AdmissionConfig {
+	c := DefaultAdmissionConfig()
+	c.Parse = PoolConfig{4, 12.0 / 60, 8, 1, 1, 2}
+	c.Relay = PoolConfig{12, 1, 24, 2, 2, 2}
+	c.MaxClients = 1024
+	return c
+}
+
 func protected(t *testing.T, mode string, next http.Handler) *admission {
 	t.Helper()
 	key := ""
 	if mode == "caddy" {
 		key = testEdgeKey
 	}
-	entry, err := WithAdmission(next, nil, mode, key)
+	entry, err := WithAdmissionConfig(next, nil, mode, key, legacyAdmissionConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +62,7 @@ func TestAdmissionRateAndContracts(t *testing.T) {
 	now := time.Unix(1000, 0)
 	entry := protected(t, "caddy", next)
 	entry.now = func() time.Time { return now }
-	paths := []string{"/api/parse", "/api/resolve", "/api/platforms", "/api/bilibili"}
+	paths := []string{"/api/parse", "/api/resolve", "/api/parse", "/api/bilibili"}
 	for _, path := range paths {
 		if got := call(entry, edgeRequest(path, "::ffff:198.51.100.11")); got.Code != 200 {
 			t.Fatalf("%s: %d", path, got.Code)
@@ -103,7 +112,7 @@ func TestAdmissionGlobalRateAndIPGroups(t *testing.T) {
 		step     time.Duration
 		path     string
 	}{
-		{"public", 8, time.Second, "/api/platforms"}, {"relay", 24, time.Second / 2, "/api/media/weibo"},
+		{"public", 8, time.Second, "/api/parse"}, {"relay", 24, time.Second / 2, "/api/media/weibo"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Unix(1000, 0)
@@ -253,7 +262,7 @@ func TestAdmissionFullStreamLeaseAndRelease(t *testing.T) {
 	p1 := hold("/api/parse", "192.0.2.1")
 	defer p1.Body.Close()
 	check("/api/resolve", "192.0.2.1", 429)
-	p2 := hold("/api/platforms", "192.0.2.2")
+	p2 := hold("/api/resolve", "192.0.2.2")
 	defer p2.Body.Close()
 	check("/api/resolve", "192.0.2.3", 429)
 	m1 := hold("/api/media/weibo", "192.0.2.1")
@@ -272,7 +281,7 @@ func TestAdmissionFullStreamLeaseAndRelease(t *testing.T) {
 
 func TestAdmissionBoundedClientsAndIdleExpiry(t *testing.T) {
 	now := time.Unix(1000, 0)
-	p := newPool(12, 1, 24, 2, 2)
+	p := newPool(12, 1, 24, 2, 2, 2, 1024)
 	for i := 0; i < 1024; i++ {
 		release, retry := p.acquire(netip.AddrFrom4([4]byte{192, 0, byte(i >> 8), byte(i)}), now)
 		if retry != 0 {
@@ -282,8 +291,13 @@ func TestAdmissionBoundedClientsAndIdleExpiry(t *testing.T) {
 		now = now.Add(time.Second / 2)
 	}
 	ip := netip.MustParseAddr("198.51.100.5")
-	if release, retry := p.acquire(ip, now); release != nil || retry != 60 {
-		t.Fatal(retry)
+	if release, retry := p.acquire(ip, now); release == nil || retry != 0 {
+		t.Fatal("idle full buckets should be safely reclaimed", retry)
+	} else {
+		release()
+	}
+	if len(p.clients) > 1024 {
+		t.Fatal("client table exceeded capacity")
 	}
 	if release, retry := p.acquire(ip, now.Add(10*time.Minute)); release == nil || retry != 0 {
 		t.Fatal(retry)
@@ -315,7 +329,7 @@ func TestPullControlIngressIsolation(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	h, err := WithAdmission(normal, control, "caddy", testEdgeKey)
+	h, err := WithAdmissionConfig(normal, control, "caddy", testEdgeKey, legacyAdmissionConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +353,7 @@ func TestPullControlIngressIsolation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("control request did not reach handler")
 	}
-	for _, path := range []string{"/api/parse", "/api/resolve", "/api/platforms", "/api/bilibili", "/api/media/weibo"} {
+	for _, path := range []string{"/api/parse", "/api/resolve", "/api/platforms", "/api/bilibili", "/api/parse", "/api/media/weibo"} {
 		if w := call(h, edgeRequest(path, from)); w.Code != 200 {
 			t.Fatalf("waiting control poll affected %s: %d", path, w.Code)
 		}
