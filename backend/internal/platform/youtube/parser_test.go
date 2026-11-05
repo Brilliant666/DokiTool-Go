@@ -183,20 +183,40 @@ func TestParseYouTube4KMuxAndProgressiveFile(t *testing.T) {
 		t.Fatalf("ValidateEnvelopeAt(PublicView) failed: %v", err)
 	}
 
-	item := unified.Map(unified.Slice(unified.Map(pub["data"])["items"])[0])
+	data := unified.Map(pub["data"])
+	item := unified.Map(unified.Slice(data["items"])[0])
 	def := unified.Map(item["default"])
-	if def == nil || !strings.Contains(unified.Str(def["url"]), "itag=18") {
-		t.Fatalf("expected 360p progressive file (itag=18) as default, got %+v", def)
+	if def == nil || !strings.Contains(unified.Str(def["url"]), "itag=401") {
+		t.Fatalf("expected 4K file (itag=401) as highest-resolution default, got %+v", def)
 	}
 
-	higher := unified.Slice(item["higher_quality_variants"])
-	if len(higher) != 3 {
-		t.Fatalf("expected 3 higher_quality_variants (1080p60, 1440p60, 2160p60 mux), got %d: %+v", len(higher), higher)
+	variants := unified.Slice(item["variants"])
+	if len(variants) != 5 {
+		t.Fatalf("expected 5 file variants (2160p60, 1440p60, 1080p60, 360p, audio M4A), got %d: %+v", len(variants), variants)
 	}
-	for _, h := range higher {
-		reqs := unified.Slice(unified.Map(h)["requires"])
-		if len(reqs) != 1 || unified.Str(reqs[0]) != "mux" {
-			t.Fatalf("expected requires=['mux'], got %+v", h)
+	wantLabels := []string{
+		"2160p60 (4K · 仅视频无声)",
+		"1440p60 (2K · 仅视频无声)",
+		"1080p60 (仅视频无声)",
+		"360p (含音频)",
+		"仅音频 M4A (129 kbps)",
+	}
+	for i, want := range wantLabels {
+		v := unified.Map(variants[i])
+		if got := unified.Str(v["label"]); got != want {
+			t.Fatalf("variant[%d] label = %q, want %q", i, got, want)
 		}
+		if kind := unified.Str(unified.Map(v["delivery"])["kind"]); kind != "file" {
+			t.Fatalf("variant[%d] kind = %q, want file", i, kind)
+		}
+	}
+
+	attachments := unified.Slice(data["attachments"])
+	if len(attachments) != 1 {
+		t.Fatalf("expected 1 background_audio attachment, got %d", len(attachments))
+	}
+	att := unified.Map(attachments[0])
+	if unified.Str(att["role"]) != "background_audio" {
+		t.Fatalf("expected role=background_audio, got %v", att["role"])
 	}
 }
