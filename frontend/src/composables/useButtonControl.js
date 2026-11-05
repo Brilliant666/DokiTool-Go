@@ -1,6 +1,4 @@
-import { ref, computed, watch } from 'vue'
-import { debounce, throttle } from '../utils/rateLimit'
-import { antiReplayInstance } from '../utils/antiReplay'
+import { ref, computed } from 'vue'
 import { operationLogger } from '../services/operationLogger'
 import { RetryManager } from '../services/retryManager'
 
@@ -17,7 +15,6 @@ export const useButtonControl = (options = {}) => {
     action = 'button',
     debounceDelay = 0,
     throttleDelay = 0,
-    antiReplay = true,
     timeout = 30000,
     retry = false,
     retryOptions = {},
@@ -31,25 +28,9 @@ export const useButtonControl = (options = {}) => {
   const isDisabled = computed(() => [ButtonState.LOADING, ButtonState.DISABLED].includes(state.value))
   const canClick = computed(() => state.value === ButtonState.IDLE || state.value === ButtonState.ERROR)
   const lastResult = ref(null)
-  const token = ref(null)
   const internalTimeoutId = ref(null)
   const lastClickTime = ref(0)
   const isThrottled = ref(false)
-
-  const validateToken = () => {
-    if (!antiReplay || !token.value) return true
-    const result = antiReplayInstance.validateToken(token.value, action)
-    if (!result.valid) {
-      operationLogger.warn('Anti-replay validation failed', { action, reason: result.reason })
-      return false
-    }
-    return true
-  }
-
-  const generateToken = () => {
-    if (!antiReplay) return
-    token.value = antiReplayInstance.generateToken(action)
-  }
 
   const clearInternalTimeout = () => {
     if (internalTimeoutId.value) {
@@ -87,7 +68,6 @@ export const useButtonControl = (options = {}) => {
 
   const execute = async (fn, execOptions = {}) => {
     const {
-      disableAntiReplay = false,
       disableTimeout = false,
       disableRetry = false
     } = execOptions
@@ -105,20 +85,6 @@ export const useButtonControl = (options = {}) => {
       return null
     }
     lastClickTime.value = now
-
-    if (!disableAntiReplay && antiReplay) {
-      generateToken()
-      if (!validateToken()) {
-        error.value = new Error('请求验证失败，请稍后重试')
-        state.value = ButtonState.ERROR
-        setTimeout(() => {
-          if (state.value === ButtonState.ERROR) {
-            state.value = ButtonState.IDLE
-          }
-        }, 3000)
-        return null
-      }
-    }
 
     state.value = ButtonState.LOADING
     error.value = null
@@ -194,7 +160,6 @@ export const useButtonControl = (options = {}) => {
     canClick,
     isThrottled,
     lastResult,
-    token,
     reset,
     setLoading,
     execute

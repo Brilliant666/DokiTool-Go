@@ -53,7 +53,6 @@ export function useVideoParser(options: {
     currentPlatform = shallowRef("all");
   const parseButton = useButtonControl({
     action: "parse",
-    antiReplay: false,
     timeout: 0,
     retry: false,
   });

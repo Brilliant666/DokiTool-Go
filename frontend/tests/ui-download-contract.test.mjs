@@ -13,7 +13,7 @@ import { ref, computed, h, createSSRApp, createRenderer, nextTick, markRaw } fro
 import { renderToString } from '@vue/server-renderer';
 import JSZip from 'jszip';
 
-let vite, downloads, ResultSection, HeroSection, DownloadCard, platforms, parser, antiReplay, mediaSources, mediaContract, selectionModule, configuration;
+let vite, downloads, ResultSection, HeroSection, DownloadCard, platforms, parser, mediaSources, mediaContract, selectionModule, configuration;
 let clicked, blobs, fetched, nativeFrames;
 const originals = { fetch: globalThis.fetch, document: globalThis.document, window: globalThis.window, location: globalThis.location, cryptoDescriptor: Object.getOwnPropertyDescriptor(globalThis, 'crypto'), createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
 before(async () => {
@@ -51,7 +51,6 @@ before(async () => {
   mediaSources = await vite.ssrLoadModule('/src/utils/mediaSources.ts');
   platforms = await vite.ssrLoadModule('/src/utils/platforms.ts');
   parser = await vite.ssrLoadModule('/src/composables/useVideoParser.ts');
-  antiReplay = (await vite.ssrLoadModule('/src/utils/antiReplay.js')).antiReplayInstance;
   globalThis.window = { setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} };
   globalThis.location = { href: 'https://snap.dokitool.com/', origin: 'https://snap.dokitool.com' };
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto });
@@ -68,7 +67,7 @@ after(async () => {
   if (originals.cryptoDescriptor) Object.defineProperty(globalThis, 'crypto', originals.cryptoDescriptor);
   else delete globalThis.crypto;
   URL.createObjectURL = originals.createObjectURL; URL.revokeObjectURL = originals.revokeObjectURL;
-  antiReplay?.destroy();
+
   await vite?.close();
 });
 
@@ -1156,6 +1155,8 @@ test('ZIP cancellation aborts lazy resolution without waiting for its ignored si
 test('cancelling during ZIP library preparation never starts media requests or saves a file', async () => {
   const { instance, store } = harness({ ...base, url: null, images: ['https://media.test/zip-preparation.jpg'] });
   const pending = instance.downloadAllMedia('images');
+  assert.equal(store.downloads[0].status, 'queued');
+  await Promise.resolve(); // The uncontended buffered slot is acquired before library loading.
   assert.equal(store.downloads[0].status, 'preparing');
   instance.handleCancelDownload(store.downloads[0].id);
   await pending;
@@ -1940,7 +1941,12 @@ function refreshFixture() {
   fresh.default = { ...fresh.default, url: source.url };
   return { original, fresh, freshURL: source.url };
 }
-for (const explicit of [false, true]) test(`refresh recovery: unknown expiry refreshes ${explicit ? 'explicit' : 'default'} once and keeps source facts`, async () => {
+for (const explicit of [false, true]) test(`refresh recovery: unknown expiry refreshes ${explicit ? 'explicit' : 'default'} once and keeps source facts`, async t => {
+  if (explicit) {
+    const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
+    Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });
+    t.after(() => Object.defineProperty(AbortSignal, 'any', descriptor));
+  }
   const { original, fresh, freshURL } = refreshFixture();
   let resolves = 0;
   const { instance, store, selection } = harness({ items: [original], default_item_id: original.id }, async (item, signal) => {
@@ -2149,4 +2155,30 @@ test('Go public XHS live pairs reach individual and ZIP downloads', {
     assert.equal(fetched.length, 0);
     assert.ok(toasts.some(([message]) => message.includes('所选实况版本已不可用')));
   }
+});
+
+test('two page ZIP jobs serialize; cancelling the queued job fetches nothing and releases no extra slot', async () => {
+  const first = harness({ ...base, url: null, images: ['https://media.test/queued-first.jpg'] });
+  const second = harness({ ...base, url: null, images: ['https://media.test/queued-second.jpg'] });
+  let finish;
+  globalThis.fetch = async url => {
+    fetched.push(url);
+    if (url.includes('queued-first')) return new Promise(resolve => { finish = () => resolve(new Response(new Uint8Array([1, 2]), { headers: { 'Content-Type': 'image/jpeg', 'Content-Length': '2' } })); });
+    return new Response(new Uint8Array([3, 4]), { headers: { 'Content-Type': 'image/jpeg', 'Content-Length': '2' } });
+  };
+  const running = first.instance.downloadAllMedia('images');
+  await waitUntil(() => finish);
+  const queued = second.instance.downloadAllMedia('images');
+  assert.equal(second.store.downloads[0].status, 'queued');
+  second.instance.handleCancelDownload(second.store.downloads[0].id);
+  await queued;
+  assert.equal(second.store.downloads[0].status, 'cancelled');
+  assert.deepEqual(fetched, ['https://media.test/queued-first.jpg']);
+  finish(); await running;
+  assert.equal(first.store.downloads[0].status, 'completed');
+  const third = harness({ ...base, url: null, images: ['https://media.test/queued-third.jpg'] });
+  await third.instance.downloadAllMedia('images');
+  assert.equal(third.store.downloads[0].status, 'completed');
+  assert.deepEqual(fetched, ['https://media.test/queued-first.jpg', 'https://media.test/queued-third.jpg']);
+  assert.equal(clicked.length, 2);
 });

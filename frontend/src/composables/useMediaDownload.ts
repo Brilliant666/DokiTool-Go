@@ -10,7 +10,7 @@ import type {
   ToastType,
 } from "../types/media";
 import { buildMediaFilename } from "../utils/videoFilename";
-import { decodedLength } from "../../public/downloads/decoded-length.js";
+import { fetchMediaBlob, linkAbortSignals, acquireBufferedSlot } from "../downloads/buffered";
 import {
   getDownloadTarget,
   readyItem,
@@ -195,23 +195,8 @@ export function useMediaDownload({
   }
 
   /** 单文件抓取（用于 ZIP 打包） */
-  async function fetchBlob(
-    url: string,
-    signal?: AbortSignal,
-    expectedSize?: number,
-  ): Promise<Blob> {
-    const response = await fetch(url, { method: "GET", mode: "cors", signal });
-    if (!response.ok)
-      throw new Error(`资源请求失败（HTTP ${response.status}）`);
-    const blob = await response.blob();
-    if (signal) checkAbort(signal);
-    if (!blob.size) throw new Error("资源为空");
-    const declared = decodedLength(response);
-    if ((declared && blob.size !== declared) || (expectedSize && blob.size !== expectedSize))
-      throw new Error("资源下载不完整");
-    if (/text\/html|application\/json/i.test(blob.type))
-      throw new Error("资源地址返回了错误页面");
-    return blob;
+  async function fetchBlob(url: string, signal?: AbortSignal, expectedSize?: number): Promise<Blob> {
+    return fetchMediaBlob(url, { signal, expectedSize });
   }
 
   let pageTaskSequence = 0;
@@ -508,7 +493,11 @@ export function useMediaDownload({
       startedAt,
       false,
     );
+    let release: (() => void) | undefined;
     try {
+      videoStore.updateDownload(downloadId, { status: "queued", statusText: "等待分片或打包任务..." });
+      release = await acquireBufferedSlot(abortController.signal);
+      checkAbort(abortController.signal);
       videoStore.updateDownload(downloadId, {
         status: "downloading",
         statusText: "下载分片中...",
@@ -561,6 +550,7 @@ export function useMediaDownload({
       });
       showToast("分片下载失败：" + message, "error");
     } finally {
+      release?.();
       monitor.finish();
     }
   }
@@ -601,7 +591,12 @@ export function useMediaDownload({
       averageSpeed: 0,
     });
     const monitor = monitorTransfer(id, controller, Date.now(), false);
+    let release: (() => void) | undefined;
     try {
+      videoStore.updateDownload(id, { status: "queued", statusText: "等待分片或打包任务..." });
+      release = await acquireBufferedSlot(controller.signal);
+      checkAbort(controller.signal);
+      videoStore.updateDownload(id, { status: "preparing", statusText: "准备打包..." });
       // Only ZIP actions need this library. The import itself cannot be aborted,
       // so cancellation must settle the task and guard all work after it resolves.
       const { default: JSZip } = await abortable(
@@ -626,7 +621,9 @@ export function useMediaDownload({
       if (!ownsTask(id, controller)) return;
       if (!entries.length) throw new Error("没有可打包的资源");
       const zip = new JSZip();
-      for (const entry of entries) {
+      const entryCount = entries.length;
+      while (entries.length) {
+        const entry = entries.shift()!;
         checkAbort(controller.signal);
         // ArrayBuffer works consistently in browsers and Node's offline regression harness.
         const data =
@@ -661,7 +658,7 @@ export function useMediaDownload({
         abortController: null,
       });
       archiveRetries.delete(id);
-      showToast(`已打包 ${entries.length} 个文件`);
+      showToast(`已打包 ${entryCount} 个文件`);
     } catch (error) {
       if (
         videoStore.downloads.find((task) => task.id === id)?.abortController !==
@@ -689,6 +686,7 @@ export function useMediaDownload({
       });
       showToast("打包失败：" + message, "error");
     } finally {
+      release?.();
       monitor.finish();
     }
   }
@@ -856,7 +854,8 @@ export function useMediaDownload({
         () => deadline.abort(new Error("解析准备超过 30 秒，请重试")),
         30000,
       );
-      const combined = AbortSignal.any([signal, deadline.signal]);
+      const linked = linkAbortSignals([signal, deadline.signal]);
+      const combined = linked.signal;
       try {
         item = await abortable(resolveItem(item, combined), combined);
       } catch (error) {
@@ -865,6 +864,7 @@ export function useMediaDownload({
         throw error;
       } finally {
         clearTimeout(timeout);
+        linked.dispose();
       }
       checkAbort(signal);
       if (item.id !== snapshot.item.id || item.type !== snapshot.item.type)

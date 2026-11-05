@@ -1108,3 +1108,34 @@ test('multi-range delivery freezes total and object identity, with a metadata HE
     }
   }
 });
+
+// The candidate buffers until verified. Preserve the existing two-minute
+// preparation budget rather than silently turning it into an unlimited wait.
+test('tbvideo preparation deadline cancels a pending read, returns no attachment and releases admission', async t => {
+  let waiting, calls = 0, cancelled = 0;
+  const entered = new Promise(resolve => { waiting = resolve; });
+  const h = harness(async url => {
+    calls++;
+    if (url !== tbvideoUrl) return media();
+    return tbvideoResponse(new ReadableStream({
+      start(controller) { controller.enqueue(mp4Fixture.subarray(0, 10)); },
+      pull() { waiting(); },
+      cancel() { cancelled++; },
+    }, { highWaterMark: 0 }));
+  });
+  t.after(() => h.close());
+  await h.start(1, [], { url: tbvideoUrl, tbvideo: true });
+  const pending = h.download(1);
+  await entered;
+  h.tick(120_000);
+  const response = await pending;
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.has('content-disposition'), false);
+  assert.equal(response.body, null);
+  assert.equal((await h.query(1)).status, 'manual');
+  assert.equal(cancelled, 1); assert.equal(calls, 1, 'deadline never retries or downloads the original host');
+  await h.admit(2);
+  assert.equal((await h.query(2)).delivery, 'ready');
+  assert.equal((await (await h.download(2)).arrayBuffer()).byteLength, 8);
+  assert.equal((await h.query(2)).status, 'completed');
+});

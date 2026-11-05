@@ -108,6 +108,8 @@ const duplicatedPlatforms = computed(() => [
             target="_blank"
             rel="noopener noreferrer"
             class="platform-card"
+            :aria-hidden="idx >= allPlatforms.length ? true : undefined"
+            :tabindex="idx >= allPlatforms.length ? -1 : undefined"
             :aria-label="`${platform.name}: ${getDesc(locale, idx % allPlatforms.length)}`"
           >
             <div class="platform-icon-container">
@@ -380,14 +382,9 @@ const duplicatedPlatforms = computed(() => [
   .platform-card {
     transition: none;
   }
-}
 
-@media (prefers-reduced-motion: reduce) and (max-width: 768px) {
-  .marquee-content {
-    animation: marquee 50s linear infinite;
-    -webkit-animation: marquee 50s linear infinite;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
+  .platform-card[aria-hidden="true"] {
+    display: none;
   }
 }
 
