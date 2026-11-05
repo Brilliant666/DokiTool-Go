@@ -69,3 +69,21 @@ func TestPHPWeiboFullFormatter(t *testing.T) {
 		t.Fatalf("incorrect formatter kind inventory: %#v", counts)
 	}
 }
+
+func TestWeiboStatusLoginEnvelope(t *testing.T) {
+	for _, tc := range []struct{ body, want string }{
+		{`{"ok":-100,"url":"https://weibo.com/login.php?return=fixture"}`, "UPSTREAM_BLOCKED"},
+		{`{"ok":-100,"url":"https://example.org/login.php"}`, "UPSTREAM_INVALID_RESPONSE"},
+		{`{"ok":-100,"url":"https://weibo.com/elsewhere"}`, "UPSTREAM_INVALID_RESPONSE"},
+		{`{"ok":1,"url":"https://weibo.com/login.php"}`, "UPSTREAM_INVALID_RESPONSE"},
+	} {
+		status, err := unified.Decode([]byte(tc.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := adaptLegacy(legacyWeiboFormatStatus(status), "https://weibo.com/123/Test", 1730000000)
+		if got["code"] != tc.want {
+			t.Errorf("%s: got %v, want %s", tc.body, got["code"], tc.want)
+		}
+	}
+}

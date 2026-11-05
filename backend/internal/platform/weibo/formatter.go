@@ -3,6 +3,7 @@ package weibo
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,14 @@ import (
 // unified-v1 adaptation. Raw URL order must be recovered from the original
 // bounded component JSON, never from Go map iteration.
 func legacyWeiboFormatStatus(status unified.Object) unified.Object {
+	if code, valid := unified.Numeric(status["ok"]); valid && code == -100 {
+		// An anonymous status response may contain only this login instruction.
+		// Classify it locally; do not follow or expose the return URL.
+		u, err := url.Parse(unified.Str(status["url"]))
+		if err == nil && u.Scheme == "https" && u.User == nil && u.Host == "weibo.com" && u.Path == "/login.php" {
+			return weiboFormatFailure(403, "微博要求登录后查看这条正文，当前无法匿名解析")
+		}
+	}
 	if ok, exists := status["ok"]; exists && ok != nil && !phpGuestTruthy(ok) {
 		return weiboFormatFailure(503, "微博未返回可用的正文数据，可能暂时限制访问或作品不可见")
 	}
