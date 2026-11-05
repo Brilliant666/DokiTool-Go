@@ -74,25 +74,37 @@ func AdaptInfo(info *ytengine.Info, tweetID, sourceURL string, selectedIndex int
 		data["tags"] = tags
 	}
 
-	items := make(unified.Array, 0, len(entries))
-	usedItemIDs := make(map[string]bool, len(entries))
+	items := make(unified.Array, 0, len(entries)+1)
+	usedItemIDs := make(map[string]bool, len(entries)+1)
+	hasDeliverableItem := false
+	selectedItemID := ""
+
 	for idx := range entries {
+		position := idx + 1
 		entry := &entries[idx]
 		entryKey := strings.TrimSpace(entry.ID)
 		if entryKey == "" {
-			entryKey = strconv.Itoa(idx + 1)
+			entryKey = strconv.Itoa(position)
 		}
-		variants := buildEntryVariants(entry, entryKey, now)
+		variants := buildEntryVariants(entry, contentID, entryKey, now)
 		if len(variants) == 0 {
+			if selectedIndex == position {
+				itemID := buildItemID(entry.ID, position, usedItemIDs)
+				usedItemIDs[itemID] = true
+				unavail := buildUnavailableVideoItem(entry, data, itemID, position, len(entries) > 1)
+				items = append(items, unavail)
+				selectedItemID = itemID
+			}
 			continue
 		}
-		itemID := buildItemID(entry.ID, idx+1, usedItemIDs)
+		hasDeliverableItem = true
+		itemID := buildItemID(entry.ID, position, usedItemIDs)
 		usedItemIDs[itemID] = true
 
 		item := unified.Object{
 			"id":          itemID,
 			"type":        "video",
-			"index":       idx + 1,
+			"index":       position,
 			"default":     nil,
 			"variants":    variants,
 			"resolve_url": unified.ResolveURL(sourceURL, itemID),
@@ -114,18 +126,60 @@ func AdaptInfo(info *ytengine.Info, tweetID, sourceURL string, selectedIndex int
 			}
 		}
 		items = append(items, item)
+		if selectedIndex == position {
+			selectedItemID = itemID
+		}
 	}
 
-	if len(items) == 0 {
+	if !hasDeliverableItem {
 		return unified.ContractError("NO_MEDIA", "作品未提供可用媒体", false)
 	}
-	defaultIdx := 0
-	if selectedIndex >= 1 && selectedIndex <= len(items) {
-		defaultIdx = selectedIndex - 1
+	if selectedIndex > len(entries) {
+		itemID := buildItemID("", selectedIndex, usedItemIDs)
+		usedItemIDs[itemID] = true
+		items = append(items, buildUnavailableVideoItem(nil, data, itemID, selectedIndex, true))
+		selectedItemID = itemID
+	}
+	if selectedItemID == "" {
+		selectedItemID = unified.Str(unified.Map(items[0])["id"])
 	}
 	data["items"] = items
-	data["default_item_id"] = unified.Map(items[defaultIdx])["id"]
+	data["default_item_id"] = selectedItemID
 	return unified.FinalizeData(data, now)
+}
+
+func buildUnavailableVideoItem(entry *ytengine.Info, data unified.Object, itemID string, position int, multiEntry bool) unified.Object {
+	item := unified.Object{
+		"id":                         itemID,
+		"type":                       "video",
+		"index":                      position,
+		"default":                    nil,
+		"state":                      "unavailable",
+		"default_unavailable_reason": "unavailable",
+		"error": unified.Object{
+			"code":    "CONTENT_UNAVAILABLE",
+			"message": fmt.Sprintf("所选第 %d 个视频不存在或不可用", position),
+		},
+	}
+	if entry != nil {
+		if multiEntry {
+			if title := strings.TrimSpace(entry.Title); title != "" {
+				item["title"] = title
+			}
+		}
+		if cover := pickEntryCover(entry); cover != nil {
+			item["cover"] = cover
+		} else if data["cover"] != nil {
+			item["cover"] = unified.CloneValue(data["cover"])
+		}
+		if entry.Duration != nil && *entry.Duration > 0 {
+			durMS := int64(unified.PHPRound(*entry.Duration*1000, 0))
+			if durMS > 0 {
+				item["duration_ms"] = durMS
+			}
+		}
+	}
+	return item
 }
 
 func buildItemID(upstreamID string, position int, used map[string]bool) string {
@@ -140,7 +194,7 @@ func buildItemID(upstreamID string, position int, used map[string]bool) string {
 	return "video-" + strconv.Itoa(position)
 }
 
-func buildEntryVariants(entry *ytengine.Info, entryKey string, now int64) unified.Array {
+func buildEntryVariants(entry *ytengine.Info, contentID, entryKey string, now int64) unified.Array {
 	var mp4Formats []ytengine.Format
 	var hlsVideoFormats []ytengine.Format
 	var hlsAudioFormats []ytengine.Format
@@ -180,13 +234,13 @@ func buildEntryVariants(entry *ytengine.Info, entryKey string, now int64) unifie
 	// 1. Deliverable progressive MP4s (kind == "file")
 	dedupedMP4 := deduplicateVideoFormats(mp4Formats)
 	for i, f := range dedupedMP4 {
-		sources := buildFormatSources(f, now)
+		formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("mp4-%d", i+1))
+		sources := buildFormatSources(f, contentID, entryKey, formatKey, now)
 		if len(sources) == 0 {
 			continue
 		}
 		hasAudio := !isNoCodec(f.ACodec)
 		metadata := buildFormatMetadata(f, hasAudio, true)
-		formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("mp4-%d", i+1))
 		variantID := "v-" + shortDigest("x:file:"+entryKey+":"+formatKey)
 		if seenVariantIDs[variantID] {
 			continue
@@ -210,13 +264,13 @@ func buildEntryVariants(entry *ytengine.Info, entryKey string, now int64) unifie
 	// 2. Non-single-file HLS variants (kind == "hls", scope == "adaptive", marked as requiring hls/mux processing)
 	dedupedHLS := deduplicateVideoFormats(hlsVideoFormats)
 	for i, f := range dedupedHLS {
-		sources := buildFormatSources(f, now)
+		formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("hls-%d", i+1))
+		sources := buildFormatSources(f, contentID, entryKey, formatKey, now)
 		if len(sources) == 0 {
 			continue
 		}
 		hasEmbeddedAudio := !isNoCodec(f.ACodec) && strings.TrimSpace(f.ACodec) != ""
 		metadata := buildFormatMetadata(f, hasEmbeddedAudio, false)
-		formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("hls-%d", i+1))
 		variantID := "v-" + shortDigest("x:hls:"+entryKey+":"+formatKey)
 		if seenVariantIDs[variantID] {
 			continue
@@ -251,15 +305,46 @@ func buildEntryVariants(entry *ytengine.Info, entryKey string, now int64) unifie
 	return variants
 }
 
-func buildFormatSources(f ytengine.Format, now int64) unified.Array {
+func buildFormatSources(f ytengine.Format, contentID, entryKey, formatKey string, now int64) unified.Array {
 	rawSource := unified.Object{
 		"url": f.URL,
 	}
+	var sizeVal int64
 	// Strictly require exact Filesize; never populate size_bytes from FilesizeApprox.
 	if f.Filesize != nil && *f.Filesize > 0 {
 		rawSource["size_bytes"] = *f.Filesize
+		sizeVal = *f.Filesize
+	}
+	if id := buildXSourceIdentity(f, contentID, entryKey, formatKey, sizeVal); id != "" {
+		rawSource["private_source_identity"] = id
 	}
 	return unified.Sources(unified.Array{rawSource}, now)
+}
+
+func buildXSourceIdentity(f ytengine.Format, contentID, entryKey, formatKey string, sizeBytes int64) string {
+	if contentID == "" || entryKey == "" || f.URL == "" {
+		return ""
+	}
+	var w, h int64
+	if f.Width != nil && *f.Width > 0 {
+		w = *f.Width
+	}
+	if f.Height != nil && *f.Height > 0 {
+		h = *f.Height
+	}
+	return unified.PHPIdentityJSON(unified.Array{
+		"x-source",
+		contentID,
+		entryKey,
+		formatKey,
+		strings.ToLower(strings.TrimSpace(f.Ext)),
+		strings.TrimSpace(f.VCodec),
+		strings.TrimSpace(f.ACodec),
+		w,
+		h,
+		sizeBytes,
+		unified.SourceIdentity(f.URL),
+	}, true)
 }
 
 func buildFormatMetadata(f ytengine.Format, hasAudio bool, isMP4File bool) unified.Object {

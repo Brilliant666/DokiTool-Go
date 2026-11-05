@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -144,7 +145,7 @@ func run(args []string) error {
 		"zuiyou":      zuiyou.NewWithTBVideo(executor, zuiyouSave),
 		"xiaohongshu": xiaohongshu.New(xhsExecutor),
 	}
-	if err := configureYTDLPX(c, adapters, os.Getenv); err != nil {
+	if err := configureYTDLPX(c, adapters, executor, os.Getenv); err != nil {
 		return err
 	}
 	handler, err := api.New(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
@@ -255,9 +256,10 @@ func enableTBVideo(key string) (bool, error) {
 }
 
 // configureYTDLPX optionally registers the X / Twitter, YouTube, and Instagram
-// platforms when their respective DOKITOOL_YTDLP_*_ENABLED switches are true.
+// platforms when their respective DOKITOOL_YTDLP_*_ENABLED switches are true
+// and the shared yt-dlp binary preflight succeeds.
 // Production defaults all switches to false.
-func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, getenv func(string) string) error {
+func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, executor fetch.Executor, getenv func(string) string) error {
 	parseSwitch := func(key string) (bool, error) {
 		raw := getenv(key)
 		if raw == "" {
@@ -282,43 +284,56 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, getenv
 	if err != nil {
 		return err
 	}
+	if !xEnabled && !ytEnabled && !igEnabled {
+		return nil
+	}
 
-	proxyURL := getenv("DOKITOOL_YTDLP_PROXY")
+	baseEngine, err := ytengine.NewFromEnv(getenv, nil)
+	if err != nil || !baseEngine.Enabled() {
+		log.Printf("dokitool: yt-dlp engine preflight failed (platforms not registered in catalog): %v", err)
+		return nil
+	}
+	log.Printf("dokitool: yt-dlp shared engine verified (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, baseEngine.BinaryAsset(), baseEngine.BinarySHA256())
+
+	proxyURL := strings.TrimSpace(getenv("DOKITOOL_YTDLP_PROXY"))
 	if xEnabled {
 		if err := c.Register(catalog.XPlatform()); err != nil {
 			return err
 		}
-		engine, err := ytengine.NewFromEnv(getenv, x.AllowedTargetURL)
-		if err != nil {
-			log.Printf("dokitool: yt-dlp engine disabled for x: %v", err)
+		xEngine := baseEngine.WithTargetPolicy(x.AllowedTargetURL, x.AllowedOutboundHost)
+		var prober x.SizeProber
+		if proxyURL == "" && executor != nil {
+			prober = x.NewSizeProber(executor)
 		} else {
-			log.Printf("dokitool: yt-dlp engine enabled for x (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+			prober = x.NewHTTPSizeProber(proxyURL)
 		}
-		adapters["x"] = x.NewWithSizeProber(engine, x.NewHTTPSizeProber(proxyURL))
+		adapters["x"] = x.NewWithSizeProber(xEngine, prober)
 	}
 	if ytEnabled {
 		if err := c.Register(catalog.YouTubePlatform()); err != nil {
 			return err
 		}
-		engine, err := ytengine.NewFromEnv(getenv, youtube.AllowedTargetURL)
-		if err != nil {
-			log.Printf("dokitool: yt-dlp engine disabled for youtube: %v", err)
+		ytEngine := baseEngine.WithTargetPolicy(youtube.AllowedTargetURL, youtube.AllowedOutboundHost)
+		var prober ytengine.SizeProber
+		if proxyURL == "" && executor != nil {
+			prober = ytengine.NewSizeProber(executor, youtube.AllowedMediaURL)
 		} else {
-			log.Printf("dokitool: yt-dlp engine enabled for youtube (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+			prober = ytengine.NewHTTPSizeProber(proxyURL, youtube.AllowedMediaURL)
 		}
-		adapters["youtube"] = youtube.NewWithSizeProber(engine, ytengine.NewHTTPSizeProber(proxyURL, youtube.AllowedMediaURL))
+		adapters["youtube"] = youtube.NewWithSizeProber(ytEngine, prober)
 	}
 	if igEnabled {
 		if err := c.Register(catalog.InstagramPlatform()); err != nil {
 			return err
 		}
-		engine, err := ytengine.NewFromEnv(getenv, instagram.AllowedTargetURL)
-		if err != nil {
-			log.Printf("dokitool: yt-dlp engine disabled for instagram: %v", err)
+		igEngine := baseEngine.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)
+		var prober ytengine.SizeProber
+		if proxyURL == "" && executor != nil {
+			prober = ytengine.NewSizeProber(executor, instagram.AllowedMediaURL)
 		} else {
-			log.Printf("dokitool: yt-dlp engine enabled for instagram (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+			prober = ytengine.NewHTTPSizeProber(proxyURL, instagram.AllowedMediaURL)
 		}
-		adapters["instagram"] = instagram.NewWithSizeProber(engine, ytengine.NewHTTPSizeProber(proxyURL, instagram.AllowedMediaURL))
+		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, prober)
 	}
 	return nil
 }

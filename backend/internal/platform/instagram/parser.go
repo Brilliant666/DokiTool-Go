@@ -115,6 +115,17 @@ func AllowedTargetURL(raw string) bool {
 	return ok && raw == canonical
 }
 
+// AllowedOutboundHost restricts yt-dlp subprocess outbound connections to official Instagram/Meta CDN domains.
+func AllowedOutboundHost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	for _, domain := range []string{"instagram.com", "cdninstagram.com", "fbcdn.net"} {
+		if h == domain || strings.HasSuffix(h, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
 // AllowedMediaURL restricts public media and cover URLs to official Instagram CDN hosts.
 func AllowedMediaURL(raw string) bool {
 	u, err := url.Parse(raw)

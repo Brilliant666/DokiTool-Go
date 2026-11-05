@@ -2,14 +2,10 @@ package x
 
 import (
 	"context"
-	"io"
-	"net/http"
-	"net/url"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
@@ -24,91 +20,27 @@ const (
 // Returning (0, false) leaves the format's Filesize unset (fail-soft).
 type SizeProber func(ctx context.Context, rawURL string) (int64, bool)
 
+func allowedXMediaURL(raw string) bool {
+	return sanitizeXMediaURL(raw) != ""
+}
+
+// NewSizeProber creates a bounded, no-redirect HTTP Range size prober backed by
+// fetch.Executor (enforcing public-IP DNS verification, pinned IP dialing, and
+// no environment proxy inheritance) restricted to AllowedXMediaURL hosts.
+func NewSizeProber(executor fetch.Executor) SizeProber {
+	prober := ytengine.NewSizeProber(executor, allowedXMediaURL)
+	return func(ctx context.Context, rawURL string) (int64, bool) {
+		return prober(ctx, rawURL)
+	}
+}
+
 // NewHTTPSizeProber creates a bounded, no-redirect HTTP size prober restricted
 // to AllowedXMediaURL hosts (video.twimg.com / pbs.twimg.com).
 func NewHTTPSizeProber(proxyURL string) SizeProber {
-	transport := &http.Transport{
-		Proxy:               http.ProxyFromEnvironment,
-		MaxIdleConns:        16,
-		MaxIdleConnsPerHost: 8,
-		IdleConnTimeout:     30 * time.Second,
-		TLSHandshakeTimeout: 1200 * time.Millisecond,
-	}
-	if trimmed := strings.TrimSpace(proxyURL); trimmed != "" {
-		if parsed, err := url.Parse(trimmed); err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https" || parsed.Scheme == "socks5" || parsed.Scheme == "socks5h") {
-			transport.Proxy = http.ProxyURL(parsed)
-		}
-	}
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   sizeProbeTotalTimeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
+	prober := ytengine.NewHTTPSizeProber(proxyURL, allowedXMediaURL)
 	return func(ctx context.Context, rawURL string) (int64, bool) {
-		cleanURL := sanitizeXMediaURL(rawURL)
-		if cleanURL == "" {
-			return 0, false
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cleanURL, nil)
-		if err != nil {
-			return 0, false
-		}
-		req.Header.Set("Range", "bytes=0-0")
-		req.Header.Set("Accept", "*/*")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return 0, false
-		}
-		defer func() {
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64))
-			_ = resp.Body.Close()
-		}()
-
-		switch resp.StatusCode {
-		case http.StatusPartialContent:
-			if size, ok := parseContentRangeTotal(resp.Header.Get("Content-Range")); ok {
-				return size, true
-			}
-		case http.StatusOK:
-			if size, ok := parsePositiveContentLength(resp.Header.Get("Content-Length")); ok {
-				return size, true
-			}
-		}
-		return 0, false
+		return prober(ctx, rawURL)
 	}
-}
-
-func parseContentRangeTotal(raw string) (int64, bool) {
-	// Format: "bytes 0-0/1404023"
-	slash := strings.LastIndexByte(strings.TrimSpace(raw), '/')
-	if slash < 0 {
-		return 0, false
-	}
-	totalStr := strings.TrimSpace(raw[slash+1:])
-	if totalStr == "" || totalStr == "*" {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(totalStr, 10, 64)
-	if err != nil || n <= 0 || n > maxSafeInteger {
-		return 0, false
-	}
-	return n, true
-}
-
-func parsePositiveContentLength(raw string) (int64, bool) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(trimmed, 10, 64)
-	if err != nil || n <= 0 || n > maxSafeInteger {
-		return 0, false
-	}
-	return n, true
 }
 
 // populateMissingMP4Sizes concurrently probes exact byte lengths for progressive MP4

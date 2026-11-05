@@ -186,8 +186,8 @@ func TestParseYouTube4KMuxAndProgressiveFile(t *testing.T) {
 	data := unified.Map(pub["data"])
 	item := unified.Map(unified.Slice(data["items"])[0])
 	def := unified.Map(item["default"])
-	if def == nil || !strings.Contains(unified.Str(def["url"]), "itag=401") {
-		t.Fatalf("expected 4K file (itag=401) as highest-resolution default, got %+v", def)
+	if def == nil || !strings.Contains(unified.Str(def["url"]), "itag=18") {
+		t.Fatalf("expected complete audiovisual file (itag=18 360p) as default, got %+v", def)
 	}
 
 	variants := unified.Slice(item["variants"])
@@ -218,5 +218,64 @@ func TestParseYouTube4KMuxAndProgressiveFile(t *testing.T) {
 	att := unified.Map(attachments[0])
 	if unified.Str(att["role"]) != "background_audio" {
 		t.Fatalf("expected role=background_audio, got %v", att["role"])
+	}
+}
+
+func TestYouTubeSourceIdentityPreservedAcrossSignatureRenewal(t *testing.T) {
+	const now int64 = 1762300800
+	sourceURL := "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+
+	makeFormat := func(urlStr, itag string, size int64) ytengine.Format {
+		return ytengine.Format{
+			FormatID: itag,
+			URL:      urlStr,
+			Ext:      "mp4",
+			Protocol: "https",
+			Width:    int64Ptr(640),
+			Height:   int64Ptr(360),
+			VCodec:   "avc1.42001E",
+			ACodec:   "mp4a.40.2",
+			Filesize: int64Ptr(size),
+		}
+	}
+
+	url1 := "https://rr1---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762322400&ei=AAA&ip=1.2.3.4&id=o-abc123&itag=18&source=youtube&requiressl=yes&clen=28523658&dur=634.566&lmt=1700000000000000&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cclen%2Cdur%2Clmt&sig=SIG_ONE"
+	url2 := "https://rr5---sn-ogueln67.googlevideo.com/videoplayback?expire=1762350000&ei=BBB&ip=5.6.7.8&id=o-abc123&itag=18&source=youtube&requiressl=yes&clen=28523658&dur=634.566&lmt=1700000000000000&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cclen%2Cdur%2Clmt&sig=SIG_TWO"
+	urlDiffItag := "https://rr5---sn-ogueln67.googlevideo.com/videoplayback?expire=1762350000&ei=BBB&ip=5.6.7.8&id=o-abc123&itag=22&source=youtube&requiressl=yes&clen=28523658&dur=634.566&lmt=1700000000000000&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cclen%2Cdur%2Clmt&sig=SIG_TWO"
+
+	runParse := func(f ytengine.Format, ts int64) unified.Object {
+		p := New(&stubExtractor{
+			enabled: true,
+			extract: func(ctx context.Context, rawURL string) (*ytengine.Info, error) {
+				return &ytengine.Info{
+					ID:      "aqz-KE-bpKQ",
+					Title:   "Big Buck Bunny",
+					Formats: []ytengine.Format{f},
+				}, nil
+			},
+		})
+		out, err := p.Parse(context.Background(), sourceURL, ts)
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+		return unified.PublicView(out, false, ts)
+	}
+
+	pub1 := runParse(makeFormat(url1, "18", 28523658), now)
+	pub2 := runParse(makeFormat(url2, "18", 28523658), now+120)
+	pubDiff := runParse(makeFormat(urlDiffItag, "22", 28523658), now+120)
+
+	def1 := unified.Map(unified.Map(unified.Slice(unified.Map(pub1["data"])["items"])[0])["default"])
+	def2 := unified.Map(unified.Map(unified.Slice(unified.Map(pub2["data"])["items"])[0])["default"])
+	defDiff := unified.Map(unified.Map(unified.Slice(unified.Map(pubDiff["data"])["items"])[0])["default"])
+
+	if unified.Str(def1["variant_id"]) != unified.Str(def2["variant_id"]) || unified.Str(def1["source_id"]) != unified.Str(def2["source_id"]) {
+		t.Fatalf("expected YouTube variant_id and source_id to stay stable across signature renewal: %+v vs %+v", def1, def2)
+	}
+	if !strings.HasPrefix(unified.Str(def2["url"]), url2) {
+		t.Fatalf("expected renewed url2 prefix to be preserved in default.url, got %q", unified.Str(def2["url"]))
+	}
+	if unified.Str(def1["source_id"]) == unified.Str(defDiff["source_id"]) {
+		t.Fatalf("expected YouTube source_id to change when itag changes")
 	}
 }

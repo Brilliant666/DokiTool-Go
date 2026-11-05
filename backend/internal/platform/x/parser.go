@@ -143,6 +143,17 @@ func AllowedTargetURL(raw string) bool {
 	return ok && raw == canonical
 }
 
+// AllowedOutboundHost restricts yt-dlp subprocess outbound connections to official X/Twitter domains.
+func AllowedOutboundHost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	for _, domain := range []string{"x.com", "twitter.com", "twimg.com"} {
+		if h == domain || strings.HasSuffix(h, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
 func splitNonEmptyPath(escapedPath string) []string {
 	trimmed := strings.Trim(escapedPath, "/")
 	if trimmed == "" {

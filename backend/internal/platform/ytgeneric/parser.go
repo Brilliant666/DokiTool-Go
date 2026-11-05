@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
@@ -34,10 +35,17 @@ type Parser struct {
 	spec       SiteSpec
 	engine     ytengine.Extractor
 	sizeProber ytengine.SizeProber
+	resolver   ytengine.Resolver
 }
 
 // New creates a universal yt-dlp parser for the given SiteSpec.
 func New(spec SiteSpec, engine ytengine.Extractor, prober ytengine.SizeProber) *Parser {
+	return NewWithResolver(spec, engine, prober, nil)
+}
+
+// NewWithResolver creates a universal yt-dlp parser with an explicit DNS resolver
+// that enforces public-IP resolution on input and media hosts.
+func NewWithResolver(spec SiteSpec, engine ytengine.Extractor, prober ytengine.SizeProber, resolver ytengine.Resolver) *Parser {
 	if spec.MaxEntries <= 0 {
 		spec.MaxEntries = 4
 	}
@@ -45,6 +53,7 @@ func New(spec SiteSpec, engine ytengine.Extractor, prober ytengine.SizeProber) *
 		spec:       spec,
 		engine:     engine,
 		sizeProber: prober,
+		resolver:   resolver,
 	}
 }
 
@@ -52,6 +61,53 @@ func New(spec SiteSpec, engine ytengine.Extractor, prober ytengine.SizeProber) *
 func (p *Parser) AllowedInputURL(raw string) bool {
 	_, ok := p.sanitizeInputURL(raw)
 	return ok
+}
+
+// AllowedOutboundHost checks whether host matches spec.InputHosts or spec.MediaHostSuffix.
+func (p *Parser) AllowedOutboundHost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if p == nil || h == "" || net.ParseIP(h) != nil {
+		return false
+	}
+	for _, allowed := range p.spec.InputHosts {
+		ah := strings.ToLower(strings.TrimSpace(allowed))
+		if ah == "" {
+			continue
+		}
+		if h == ah || (strings.HasPrefix(ah, ".") && strings.HasSuffix(h, ah) && len(h) > len(ah)) {
+			return true
+		}
+	}
+	for _, suffix := range p.spec.MediaHostSuffix {
+		s := strings.ToLower(strings.TrimSpace(suffix))
+		if s == "" {
+			continue
+		}
+		if h == strings.TrimPrefix(s, ".") || (strings.HasPrefix(s, ".") && strings.HasSuffix(h, s) && len(h) > len(s)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Parser) verifyPublicHost(ctx context.Context, host string) bool {
+	if p == nil || p.resolver == nil {
+		return true
+	}
+	cleanHost := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if cleanHost == "" || net.ParseIP(cleanHost) != nil {
+		return false
+	}
+	ips, err := p.resolver.LookupNetIP(ctx, "ip", cleanHost)
+	if err != nil || len(ips) == 0 {
+		return false
+	}
+	for _, ip := range ips {
+		if !fetch.PublicIP(ip) {
+			return false
+		}
+	}
+	return true
 }
 
 // AllowedMediaURL checks whether a media/thumbnail URL belongs to spec.MediaHostSuffix.
@@ -77,16 +133,21 @@ func (p *Parser) AllowedMediaURL(raw string) bool {
 	if p == nil || len(p.spec.MediaHostSuffix) == 0 {
 		return false
 	}
+	matched := false
 	for _, suffix := range p.spec.MediaHostSuffix {
 		s := strings.ToLower(strings.TrimSpace(suffix))
 		if s == "" {
 			continue
 		}
 		if host == strings.TrimPrefix(s, ".") || (strings.HasPrefix(s, ".") && strings.HasSuffix(host, s) && len(host) > len(s)) {
-			return true
+			matched = true
+			break
 		}
 	}
-	return false
+	if !matched {
+		return false
+	}
+	return p.verifyPublicHost(context.Background(), host)
 }
 
 func (p *Parser) sanitizeInputURL(raw string) (string, bool) {
@@ -145,6 +206,9 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	}
 	if p == nil || p.engine == nil || !p.engine.Enabled() {
 		return unified.ContractError("SERVICE_NOT_CONFIGURED", "当前平台解析服务暂不可用", false), nil
+	}
+	if parsedURL, err := url.Parse(cleanURL); err != nil || !p.verifyPublicHost(ctx, parsedURL.Hostname()) {
+		return unified.ContractError("UPSTREAM_BLOCKED", "目标地址解析到受限网络，已拒绝访问", false), nil
 	}
 
 	info, err := p.engine.Extract(ctx, cleanURL)

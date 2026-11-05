@@ -2,6 +2,7 @@
 package ytengine
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,12 +12,14 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
@@ -25,6 +28,14 @@ const (
 	sizeProbeTotalTimeout       = 1500 * time.Millisecond
 	sizeProbeConcurrency        = 4
 	maxProbedURLs               = 12
+	maxProbeBodyBytes           = 4096
+)
+
+var (
+	strictContentRangePattern = regexp.MustCompile(`^bytes 0-([0-9]{1,4})/([1-9][0-9]{0,15})$`)
+	strictPositiveIntPattern  = regexp.MustCompile(`^[1-9][0-9]{0,15}$`)
+	googlevideoEdgePattern    = regexp.MustCompile(`^rr[0-9]+---sn-[a-z0-9-]+\.googlevideo\.com$`)
+	instagramEdgePattern      = regexp.MustCompile(`^(?:scontent|instagram)[a-z0-9.-]*\.(?:cdninstagram\.com|fbcdn\.net)$`)
 )
 
 // AdaptOptions configures how yt-dlp -J Info is converted into a unified-v1 envelope.
@@ -44,21 +55,65 @@ type AdaptOptions struct {
 // Returning (0, false) leaves the format's Filesize unset (fail-soft).
 type SizeProber func(ctx context.Context, rawURL string) (int64, bool)
 
+// NewSizeProber creates a bounded, no-redirect HTTP Range size prober backed by
+// fetch.Executor (enforcing public-IP DNS verification, pinned IP dialing, and
+// no environment proxy inheritance) and strict media header/magic validation.
+func NewSizeProber(executor fetch.Executor, allowedMediaURL func(string) bool) SizeProber {
+	if executor == nil {
+		executor = fetch.New()
+	}
+	return func(ctx context.Context, rawURL string) (int64, bool) {
+		cleanURL := SanitizeMediaURL(rawURL, allowedMediaURL)
+		if cleanURL == "" {
+			return 0, false
+		}
+		resp, err := executor.Do(ctx, fetch.Request{
+			Method: http.MethodGet,
+			URL:    cleanURL,
+			Header: http.Header{
+				"Range":           {"bytes=0-0"},
+				"Accept":          {"*/*"},
+				"Accept-Encoding": {"identity"},
+			},
+			Policy: fetch.Policy{
+				Purpose: "ytengine_size_probe",
+				AllowedURL: func(candidate string) bool {
+					return SanitizeMediaURL(candidate, allowedMediaURL) != ""
+				},
+				Timeout:         sizeProbeTotalTimeout,
+				MaxBytes:        maxProbeBodyBytes,
+				FollowRedirects: false,
+			},
+		})
+		if err != nil {
+			return 0, false
+		}
+		return ValidateProbedMediaResponse(resp.StatusCode, resp.Header, resp.Body)
+	}
+}
+
 // NewHTTPSizeProber creates a bounded, no-redirect HTTP Range size prober
-// restricted to URLs permitted by allowedMediaURL.
+// restricted to URLs permitted by allowedMediaURL. When proxyURL is empty, it
+// delegates directly to NewSizeProber(fetch.New(), allowedMediaURL) and never
+// inherits environment proxies.
 func NewHTTPSizeProber(proxyURL string, allowedMediaURL func(string) bool) SizeProber {
+	trimmed := strings.TrimSpace(proxyURL)
+	if trimmed == "" {
+		return NewSizeProber(fetch.New(), allowedMediaURL)
+	}
+	if err := validateProxyURL(trimmed); err != nil {
+		return func(context.Context, string) (int64, bool) { return 0, false }
+	}
+	parsedProxy, err := url.Parse(trimmed)
+	if err != nil {
+		return func(context.Context, string) (int64, bool) { return 0, false }
+	}
 	transport := &http.Transport{
-		Proxy:               http.ProxyFromEnvironment,
+		Proxy:               http.ProxyURL(parsedProxy),
 		MaxIdleConns:        16,
 		MaxIdleConnsPerHost: 8,
 		IdleConnTimeout:     30 * time.Second,
 		TLSHandshakeTimeout: 1200 * time.Millisecond,
-	}
-	if trimmed := strings.TrimSpace(proxyURL); trimmed != "" {
-		if parsed, err := url.Parse(trimmed); err == nil &&
-			(parsed.Scheme == "http" || parsed.Scheme == "https" || parsed.Scheme == "socks5" || parsed.Scheme == "socks5h") {
-			transport.Proxy = http.ProxyURL(parsed)
-		}
 	}
 	client := &http.Client{
 		Transport: transport,
@@ -79,49 +134,114 @@ func NewHTTPSizeProber(proxyURL string, allowedMediaURL func(string) bool) SizeP
 		}
 		req.Header.Set("Range", "bytes=0-0")
 		req.Header.Set("Accept", "*/*")
+		req.Header.Set("Accept-Encoding", "identity")
 
 		resp, err := client.Do(req)
 		if err != nil {
 			return 0, false
 		}
-		defer func() {
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64))
-			_ = resp.Body.Close()
-		}()
+		defer resp.Body.Close()
 
-		switch resp.StatusCode {
-		case http.StatusPartialContent:
-			if size, ok := parseContentRangeTotal(resp.Header.Get("Content-Range")); ok {
-				return size, true
-			}
-		case http.StatusOK:
-			if size, ok := parsePositiveContentLength(resp.Header.Get("Content-Length")); ok {
-				return size, true
-			}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxProbeBodyBytes+1))
+		if err != nil || len(body) > maxProbeBodyBytes {
+			return 0, false
 		}
-		return 0, false
+		return ValidateProbedMediaResponse(resp.StatusCode, resp.Header, body)
 	}
 }
 
-func parseContentRangeTotal(raw string) (int64, bool) {
-	slash := strings.LastIndexByte(strings.TrimSpace(raw), '/')
-	if slash < 0 {
+// ValidateProbedMediaResponse validates an HTTP Range probe response and extracts
+// an exact media byte size only when headers and body prove a genuine media response.
+func ValidateProbedMediaResponse(status int, headers http.Header, body []byte) (int64, bool) {
+	if !validCriticalProbeHeaders(headers) {
 		return 0, false
 	}
-	totalStr := strings.TrimSpace(raw[slash+1:])
-	if totalStr == "" || totalStr == "*" {
+	encoding := strings.ToLower(strings.TrimSpace(headers.Get("Content-Encoding")))
+	if encoding != "" && encoding != "identity" {
 		return 0, false
 	}
-	n, err := strconv.ParseInt(totalStr, 10, 64)
-	if err != nil || n <= 0 || n > maxSafeInteger {
+	if !isAllowedMediaContentType(headers.Get("Content-Type")) {
 		return 0, false
 	}
-	return n, true
+
+	switch status {
+	case http.StatusPartialContent:
+		cr := strings.TrimSpace(headers.Get("Content-Range"))
+		m := strictContentRangePattern.FindStringSubmatch(cr)
+		if m == nil {
+			return 0, false
+		}
+		end, err1 := strconv.ParseInt(m[1], 10, 64)
+		total, err2 := strconv.ParseInt(m[2], 10, 64)
+		if err1 != nil || err2 != nil || end < 0 || total <= end || total > maxSafeInteger {
+			return 0, false
+		}
+		expectedWindow := end + 1
+		if cl := strings.TrimSpace(headers.Get("Content-Length")); cl != "" {
+			clVal, ok := parsePositiveContentLength(cl)
+			if !ok || clVal != expectedWindow {
+				return 0, false
+			}
+		}
+		if int64(len(body)) > expectedWindow {
+			return 0, false
+		}
+		return total, true
+
+	case http.StatusOK:
+		if strings.TrimSpace(headers.Get("Content-Range")) != "" ||
+			strings.TrimSpace(headers.Get("Transfer-Encoding")) != "" {
+			return 0, false
+		}
+		size, ok := parsePositiveContentLength(headers.Get("Content-Length"))
+		if !ok || size < 12 || size > maxProbeBodyBytes || int64(len(body)) != size {
+			return 0, false
+		}
+		if !hasValidMediaMagic(body) {
+			return 0, false
+		}
+		return size, true
+	}
+	return 0, false
+}
+
+func validCriticalProbeHeaders(headers http.Header) bool {
+	for _, name := range []string{"Content-Length", "Content-Range", "Content-Encoding", "Content-Type", "Transfer-Encoding"} {
+		values := headers.Values(name)
+		if len(values) > 1 {
+			return false
+		}
+		if len(values) == 1 && name != "Content-Type" && strings.Contains(values[0], ",") {
+			return false
+		}
+	}
+	return true
+}
+
+func isAllowedMediaContentType(raw string) bool {
+	ct := strings.ToLower(strings.TrimSpace(strings.Split(raw, ";")[0]))
+	if ct == "" {
+		return false
+	}
+	return strings.HasPrefix(ct, "video/") ||
+		strings.HasPrefix(ct, "audio/") ||
+		ct == "application/mp4" ||
+		ct == "application/octet-stream"
+}
+
+func hasValidMediaMagic(body []byte) bool {
+	if len(body) >= 12 && bytes.Equal(body[4:8], []byte("ftyp")) {
+		return true
+	}
+	if len(body) >= 4 && bytes.Equal(body[:4], []byte{0x1a, 0x45, 0xdf, 0xa3}) {
+		return true
+	}
+	return false
 }
 
 func parsePositiveContentLength(raw string) (int64, bool) {
 	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
+	if !strictPositiveIntPattern.MatchString(trimmed) {
 		return 0, false
 	}
 	n, err := strconv.ParseInt(trimmed, 10, 64)
@@ -282,16 +402,28 @@ func AdaptInfo(info *Info, opts AdaptOptions, now int64) unified.Object {
 		entries = []Info{*info}
 	}
 
-	items := make(unified.Array, 0, len(entries))
+	items := make(unified.Array, 0, len(entries)+1)
 	attachments := make(unified.Array, 0, 1)
-	seenItemIDs := make(map[string]bool, len(entries))
+	seenItemIDs := make(map[string]bool, len(entries)+1)
 	seenAttachmentIDs := make(map[string]bool, 1)
 	selectedItemID := ""
+	hasDeliverableItem := false
 
 	for idx, entry := range entries {
 		position := idx + 1
 		item, att := buildEntryVideoItem(&entry, info, opts, position, len(entries), now)
 		if item == nil {
+			if opts.SelectedIndex > 0 && position == opts.SelectedIndex {
+				unavail := buildUnavailableEntryVideoItem(&entry, info, opts, position, len(entries), now)
+				if unavail != nil {
+					unavailID := unified.Str(unavail["id"])
+					if unavailID != "" && !seenItemIDs[unavailID] {
+						seenItemIDs[unavailID] = true
+						items = append(items, unavail)
+						selectedItemID = unavailID
+					}
+				}
+			}
 			continue
 		}
 		itemID := unified.Str(item["id"])
@@ -299,6 +431,7 @@ func AdaptInfo(info *Info, opts AdaptOptions, now int64) unified.Object {
 			continue
 		}
 		seenItemIDs[itemID] = true
+		hasDeliverableItem = true
 		items = append(items, item)
 		if att != nil {
 			attID := unified.Str(att["id"])
@@ -312,8 +445,28 @@ func AdaptInfo(info *Info, opts AdaptOptions, now int64) unified.Object {
 		}
 	}
 
-	if len(items) == 0 {
+	if !hasDeliverableItem {
 		return unified.ContractError("NO_MEDIA", "该内容未包含可解析的视频媒体", false)
+	}
+
+	if opts.SelectedIndex > len(entries) {
+		unavailID := "video-" + shortDigest(fmt.Sprintf("%s:item:%s:unavailable-%d", opts.PlatformID, opts.ContentID, opts.SelectedIndex))
+		if !seenItemIDs[unavailID] {
+			seenItemIDs[unavailID] = true
+			items = append(items, unified.Object{
+				"id":                         unavailID,
+				"type":                       "video",
+				"index":                      int64(opts.SelectedIndex),
+				"default":                    nil,
+				"state":                      "unavailable",
+				"default_unavailable_reason": "unavailable",
+				"error": unified.Object{
+					"code":    "CONTENT_UNAVAILABLE",
+					"message": fmt.Sprintf("所选第 %d 个视频不存在或不可用", opts.SelectedIndex),
+				},
+			})
+			selectedItemID = unavailID
+		}
 	}
 
 	if selectedItemID == "" {
@@ -354,6 +507,40 @@ func AdaptInfo(info *Info, opts AdaptOptions, now int64) unified.Object {
 	return unified.FinalizeData(data, now)
 }
 
+func buildUnavailableEntryVideoItem(entry, parent *Info, opts AdaptOptions, position, total int, now int64) unified.Object {
+	entryKey := "video-" + strconv.Itoa(position)
+	if entry != nil {
+		entryKey = resolveEntryKey(entry, opts.ContentID, position)
+	}
+	itemID := "video-" + shortDigest(opts.PlatformID+":item:"+opts.ContentID+":"+entryKey)
+	item := unified.Object{
+		"id":                         itemID,
+		"type":                       "video",
+		"index":                      int64(position),
+		"default":                    nil,
+		"state":                      "unavailable",
+		"default_unavailable_reason": "unavailable",
+		"error": unified.Object{
+			"code":    "CONTENT_UNAVAILABLE",
+			"message": fmt.Sprintf("所选第 %d 个视频不存在或不可用", position),
+		},
+	}
+	if entry != nil {
+		if itemTitle := resolveItemTitle(entry, parent, opts.ContentID, position, total); itemTitle != "" {
+			item["title"] = itemTitle
+		}
+		if durationMs := resolveDurationMs(entry.Duration); durationMs > 0 {
+			item["duration_ms"] = durationMs
+		}
+		if cover := pickSingleCover(entry, opts.AllowedMediaURL, now); cover != nil {
+			item["cover"] = cover
+		} else if cover := pickSingleCover(parent, opts.AllowedMediaURL, now); cover != nil {
+			item["cover"] = cover
+		}
+	}
+	return item
+}
+
 func buildEntryVideoItem(entry, parent *Info, opts AdaptOptions, position, total int, now int64) (unified.Object, unified.Object) {
 	if entry == nil {
 		return nil, nil
@@ -391,6 +578,18 @@ func buildEntryVideoItem(entry, parent *Info, opts AdaptOptions, position, total
 		item["cover"] = cover
 	}
 	return item, audioAttachment
+}
+
+func boolPtr(v bool) *bool { return &v }
+
+func resolveFormatHasAudio(acodec string) *bool {
+	if isNoCodec(acodec) {
+		return boolPtr(false)
+	}
+	if cleanCodec(acodec) != "" {
+		return boolPtr(true)
+	}
+	return nil
 }
 
 func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts AdaptOptions, now int64) (unified.Array, unified.Object) {
@@ -487,15 +686,23 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 	}
 
 	hasSplitSilentTracks := len(filteredDASHVideo) > 0
+	hasProgressiveDeliverable := len(dedupedMP4) > 0
 
-	// 1. High-Resolution DASH Video-Only Tracks as Directly Downloadable Files (kind == "file", has_audio == false)
+	// 1. High-Resolution DASH Video-Only Tracks as Directly Downloadable Files (kind == "file", has_audio == false).
+	// When a complete progressive audiovisual MP4 is also available (e.g. YouTube itag=18 360p),
+	// omit width/height from silent-track metadata so unified.SelectDefault selects the complete
+	// audiovisual file as item.default while keeping 4K/2K/1080p silent tracks in item.variants.
 	for i, vf := range filteredDASHVideo {
-		sources := buildFormatSourcesWithTitle(vf, itemTitle, now)
+		videoKey := nonEmptyOr(vf.FormatID, fmt.Sprintf("dashv-%d", i+1))
+		sources := buildFormatSourcesWithContext(vf, opts, entryKey, videoKey, "", now)
 		if len(sources) == 0 {
 			continue
 		}
-		metadata := buildFormatMetadata(vf, false, true)
-		videoKey := nonEmptyOr(vf.FormatID, fmt.Sprintf("dashv-%d", i+1))
+		metadata := buildFormatMetadata(vf, boolPtr(false), true)
+		if hasProgressiveDeliverable {
+			delete(metadata, "width")
+			delete(metadata, "height")
+		}
 		variantID := "v-" + shortDigest(opts.PlatformID+":dashv-file:"+entryKey+":"+videoKey)
 		if seenVariantIDs[variantID] {
 			continue
@@ -516,13 +723,17 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 
 	// 2. Deliverable Progressive MP4s with Embedded Audio (kind == "file")
 	for i, f := range dedupedMP4 {
-		sources := buildFormatSourcesWithTitle(f, itemTitle, now)
+		formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("mp4-%d", i+1))
+		hasAudio := resolveFormatHasAudio(f.ACodec)
+		titleForAttachment := ""
+		if hasAudio != nil && *hasAudio {
+			titleForAttachment = itemTitle
+		}
+		sources := buildFormatSourcesWithContext(f, opts, entryKey, formatKey, titleForAttachment, now)
 		if len(sources) == 0 {
 			continue
 		}
-		hasAudio := !isNoCodec(f.ACodec)
 		metadata := buildFormatMetadata(f, hasAudio, true)
-		formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("mp4-%d", i+1))
 		variantID := "v-" + shortDigest(opts.PlatformID+":file:"+entryKey+":"+formatKey)
 		if seenVariantIDs[variantID] {
 			continue
@@ -530,7 +741,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 		seenVariantIDs[variantID] = true
 
 		suffix := ""
-		if hasSplitSilentTracks && hasAudio {
+		if hasSplitSilentTracks && hasAudio != nil && *hasAudio {
 			suffix = "含音频"
 		}
 		variant := unified.Object{
@@ -550,9 +761,9 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 	// 3. Standalone Audio Track (both as a downloadable file variant in quality options and as a background_audio attachment)
 	if opts.EnableDASHMux && hasSplitSilentTracks && len(dashAudioFormats) > 0 {
 		bestAudio := dashAudioFormats[0]
-		audioSources := buildFormatSourcesWithTitle(bestAudio, itemTitle, now)
+		audioKey := nonEmptyOr(bestAudio.FormatID, "audio")
+		audioSources := buildFormatSourcesWithContext(bestAudio, opts, entryKey, audioKey, "", now)
 		if len(audioSources) > 0 {
-			audioKey := nonEmptyOr(bestAudio.FormatID, "audio")
 			audioVariantID := "v-" + shortDigest(opts.PlatformID+":dasha-file:"+entryKey+":"+audioKey)
 			if !seenVariantIDs[audioVariantID] {
 				seenVariantIDs[audioVariantID] = true
@@ -568,7 +779,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 				variants = append(variants, audioVariant)
 			}
 		}
-		if audioResource := buildMuxTrackResourceWithTitle(bestAudio, "audio", itemTitle, now); audioResource != nil {
+		if audioResource := buildMuxTrackResourceWithContext(bestAudio, "audio", opts, entryKey, audioKey, "", now); audioResource != nil {
 			attID := "att-" + shortDigest(opts.PlatformID+":att-audio:"+opts.ContentID+":"+entryKey)
 			attTitle := formatAudioAttachmentTitle(itemTitle, bestAudio)
 			audioAttachment = unified.Object{
@@ -596,13 +807,13 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 		}
 		dedupedHLS := deduplicateProgressiveFormats(hlsVideoFormats)
 		for i, f := range dedupedHLS {
-			sources := buildFormatSources(f, now)
+			formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("hls-%d", i+1))
+			sources := buildFormatSourcesWithContext(f, opts, entryKey, formatKey, "", now)
 			if len(sources) == 0 {
 				continue
 			}
 			hasEmbeddedAudio := !isNoCodec(f.ACodec) && strings.TrimSpace(f.ACodec) != ""
-			metadata := buildFormatMetadata(f, hasEmbeddedAudio, false)
-			formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("hls-%d", i+1))
+			metadata := buildFormatMetadata(f, boolPtr(hasEmbeddedAudio), false)
 			variantID := "v-" + shortDigest(opts.PlatformID+":hls:"+entryKey+":"+formatKey)
 			if seenVariantIDs[variantID] {
 				continue
@@ -643,7 +854,11 @@ func buildMuxTrackResource(f Format, role string, now int64) unified.Object {
 }
 
 func buildMuxTrackResourceWithTitle(f Format, role, itemTitle string, now int64) unified.Object {
-	sources := buildFormatSourcesWithTitle(f, itemTitle, now)
+	return buildMuxTrackResourceWithContext(f, role, AdaptOptions{}, "", f.FormatID, itemTitle, now)
+}
+
+func buildMuxTrackResourceWithContext(f Format, role string, opts AdaptOptions, entryKey, formatKey, itemTitle string, now int64) unified.Object {
+	sources := buildFormatSourcesWithContext(f, opts, entryKey, formatKey, itemTitle, now)
 	if len(sources) == 0 {
 		return nil
 	}
@@ -771,16 +986,87 @@ func buildFormatSources(f Format, now int64) unified.Array {
 }
 
 func buildFormatSourcesWithTitle(f Format, itemTitle string, now int64) unified.Array {
+	return buildFormatSourcesWithContext(f, AdaptOptions{}, "", f.FormatID, itemTitle, now)
+}
+
+func buildFormatSourcesWithContext(f Format, opts AdaptOptions, entryKey, formatKey, itemTitle string, now int64) unified.Array {
 	rawSource := unified.Object{
 		"url": decorateYouTubeSourceURL(f.URL, itemTitle),
 	}
+	var sizeVal int64
 	if f.Filesize != nil && *f.Filesize > 0 && *f.Filesize <= maxSafeInteger {
 		rawSource["size_bytes"] = *f.Filesize
+		sizeVal = *f.Filesize
+	}
+	if id := buildYTSourceIdentity(f, opts.PlatformID, opts.ContentID, entryKey, formatKey, sizeVal); id != "" {
+		rawSource["private_source_identity"] = id
 	}
 	return unified.Sources(unified.Array{rawSource}, now)
 }
 
+func buildYTSourceIdentity(f Format, platformID, contentID, entryKey, formatKey string, sizeBytes int64) string {
+	if platformID == "" || contentID == "" || entryKey == "" || f.URL == "" {
+		return ""
+	}
+	canonicalURL := canonicalRenewalURLIdentity(f.URL)
+	if canonicalURL == "" {
+		return ""
+	}
+	return unified.PHPIdentityJSON(unified.Array{
+		"ytengine-source",
+		platformID,
+		contentID,
+		entryKey,
+		formatKey,
+		strings.ToLower(strings.TrimSpace(f.Ext)),
+		cleanCodec(f.VCodec),
+		cleanCodec(f.ACodec),
+		derefInt(f.Width),
+		derefInt(f.Height),
+		sizeBytes,
+		canonicalURL,
+	}, true)
+}
+
+func canonicalRenewalURLIdentity(rawURL string) string {
+	stripped := unified.SourceIdentity(rawURL)
+	u, err := url.Parse(stripped)
+	if err != nil {
+		return stripped
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	switch {
+	case googlevideoEdgePattern.MatchString(host):
+		host = "googlevideo.com"
+	case instagramEdgePattern.MatchString(host):
+		if strings.HasSuffix(host, ".cdninstagram.com") {
+			host = "cdninstagram.com"
+		} else if strings.HasSuffix(host, ".fbcdn.net") {
+			host = "fbcdn.net"
+		}
+	}
+	base := strings.ToLower(u.Scheme) + "://" + host + u.EscapedPath()
+	if u.RawQuery == "" {
+		return base
+	}
+	parts := strings.Split(u.RawQuery, "&")
+	filtered := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			filtered = append(filtered, p)
+		}
+	}
+	sort.Strings(filtered)
+	if len(filtered) == 0 {
+		return base
+	}
+	return base + "?" + strings.Join(filtered, "&")
+}
+
 func decorateYouTubeSourceURL(rawURL, itemTitle string) string {
+	if strings.TrimSpace(itemTitle) == "" {
+		return rawURL
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil || u.RawQuery == "" {
 		return rawURL
@@ -840,10 +1126,12 @@ func sanitizeDownloadTitle(raw string) string {
 	return strings.Trim(b.String(), "_.")
 }
 
-func buildFormatMetadata(f Format, hasAudio, isFile bool) unified.Object {
+func buildFormatMetadata(f Format, hasAudio *bool, isFile bool) unified.Object {
 	meta := unified.Object{
-		"has_audio": hasAudio,
-		"evidence":  "upstream",
+		"evidence": "upstream",
+	}
+	if hasAudio != nil {
+		meta["has_audio"] = *hasAudio
 	}
 	if isFile {
 		ext := strings.ToLower(strings.TrimSpace(f.Ext))
@@ -874,7 +1162,7 @@ func buildFormatMetadata(f Format, hasAudio, isFile bool) unified.Object {
 	if vbr := kbpsToBps(pickBitrateKbps(f.VBR, f.TBR)); vbr > 0 {
 		meta["video_bitrate_bps"] = vbr
 	}
-	if hasAudio {
+	if hasAudio != nil && *hasAudio {
 		if acodec := cleanCodec(f.ACodec); acodec != "" {
 			meta["audio_codec"] = acodec
 		}

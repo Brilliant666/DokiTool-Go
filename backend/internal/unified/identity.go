@@ -204,6 +204,19 @@ func rawPercentDecode(value string) string {
 	return out.String()
 }
 
+func queryHasNonEmptyParam(query *string, wanted string) bool {
+	if query == nil || *query == "" {
+		return false
+	}
+	for _, entry := range strings.Split(*query, "&") {
+		key, val, ok := strings.Cut(entry, "=")
+		if ok && rawPercentDecode(key) == wanted && strings.TrimSpace(val) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // SourceIdentity removes only the credential fields with existing provider
 // evidence. The actual source URL remains untouched by this identity operation.
 func SourceIdentity(raw string) string {
@@ -234,6 +247,12 @@ func SourceIdentity(raw string) string {
 		credentials = []string{"Expires", "ssig", "KID"}
 	} else if host == "bilivideo.com" || strings.HasSuffix(host, ".bilivideo.com") {
 		credentials = []string{"deadline", "upsig"}
+	} else if (host == "googlevideo.com" || strings.HasSuffix(host, ".googlevideo.com")) && strings.TrimRight(p.path, "/") == "/videoplayback" && queryHasNonEmptyParam(p.query, "itag") {
+		credentials = []string{"expire", "sig", "lsig", "signature", "s", "ei", "ip", "ipbits", "mt", "n", "pot", "initcwndbps", "cps", "met", "mh", "mm", "mn", "ms", "mv", "mvi", "pl", "rms", "bui", "spc", "vprv", "sparams", "lsparams", "title"}
+	} else if (strings.HasSuffix(host, ".cdninstagram.com") || strings.HasSuffix(host, ".fbcdn.net")) && strings.Trim(p.path, "/") != "" {
+		credentials = []string{"oe", "oh", "_nc_sid", "_nc_ohc", "_nc_gid", "_nc_zt", "_nc_ht", "_nc_cat", "ccb", "efg", "edm"}
+	} else if (host == "video.twimg.com" || host == "pbs.twimg.com") && strings.Trim(p.path, "/") != "" {
+		credentials = []string{"expires", "signature", "token"}
 	}
 	if len(credentials) == 0 || p.query == nil {
 		return raw

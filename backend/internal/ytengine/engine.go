@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/exec"
@@ -17,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 )
 
 // PinnedVersion is the locked yt-dlp release approved for this build.
@@ -45,33 +50,45 @@ var OfficialSHA256Sums20261026 = map[string]string{
 	"0066dbac3c124028e2dcae2a197fccee33cd91f456313d24f7af89fd54590e98": "yt-dlp_arm64.exe",
 }
 
+// Resolver resolves outbound hostnames to IP addresses for SSRF and DNS-rebinding checks.
+type Resolver interface {
+	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
+}
+
 // Config configures a verified yt-dlp metadata extraction engine.
 type Config struct {
-	BinaryPath       string
-	AllowedHashes    map[string]string
-	AllowedURL       func(string) bool
-	MaxConcurrency   int
-	Timeout          time.Duration
-	SocketTimeoutSec int
-	MaxStdoutBytes   int64
-	ProxyURL         string
-	EnvPath          string
+	BinaryPath          string
+	AllowedHashes       map[string]string
+	AllowedURL          func(string) bool
+	AllowedOutboundHost func(string) bool
+	Resolver            Resolver
+	SharedSemaphore     chan struct{}
+	DialAddr            func(netip.Addr, string) string
+	MaxConcurrency      int
+	Timeout             time.Duration
+	SocketTimeoutSec    int
+	MaxStdoutBytes      int64
+	ProxyURL            string
+	EnvPath             string
 }
 
 // Engine executes a SHA-256 verified yt-dlp binary in isolated metadata-only mode.
 type Engine struct {
-	enabled          bool
-	disableReason    string
-	binaryPath       string
-	binarySHA256     string
-	binaryAsset      string
-	allowedURL       func(string) bool
-	sem              chan struct{}
-	timeout          time.Duration
-	socketTimeoutSec int
-	maxStdoutBytes   int64
-	proxyURL         string
-	envPath          string
+	enabled             bool
+	disableReason       string
+	binaryPath          string
+	binarySHA256        string
+	binaryAsset         string
+	allowedURL          func(string) bool
+	allowedOutboundHost func(string) bool
+	resolver            Resolver
+	dialAddr            func(netip.Addr, string) string
+	sem                 chan struct{}
+	timeout             time.Duration
+	socketTimeoutSec    int
+	maxStdoutBytes      int64
+	proxyURL            string
+	envPath             string
 }
 
 // NewDisabled returns an Engine that is explicitly disabled with the given reason.
@@ -129,11 +146,41 @@ func VerifyBinary(binaryPath string, allowedHashes map[string]string) (string, s
 	return absPath, digest, asset, nil
 }
 
+func lookupBinaryInPath(envPath string) (string, error) {
+	for _, dir := range filepath.SplitList(envPath) {
+		trimmedDir := strings.TrimSpace(dir)
+		if trimmedDir == "" {
+			continue
+		}
+		for _, candidateName := range []string{"yt-dlp", "yt-dlp.exe"} {
+			candidate := filepath.Join(trimmedDir, candidateName)
+			stat, err := os.Stat(candidate)
+			if err != nil || !stat.Mode().IsRegular() {
+				continue
+			}
+			return candidate, nil
+		}
+	}
+	return "", errors.New("yt-dlp binary not found in DOKITOOL_YTDLP_BINARY or PATH")
+}
+
 // New verifies the configured yt-dlp binary and returns an Engine.
 // When verification fails, New returns both a disabled *Engine and the verification
 // error so the caller can log a startup warning without crashing the API process.
 func New(cfg Config) (*Engine, error) {
-	absPath, digest, asset, err := VerifyBinary(cfg.BinaryPath, cfg.AllowedHashes)
+	envPath := cfg.EnvPath
+	if envPath == "" {
+		envPath = os.Getenv("PATH")
+	}
+	binaryPath := strings.TrimSpace(cfg.BinaryPath)
+	if binaryPath == "" {
+		discovered, err := lookupBinaryInPath(envPath)
+		if err != nil {
+			return NewDisabled(err.Error()), err
+		}
+		binaryPath = discovered
+	}
+	absPath, digest, asset, err := VerifyBinary(binaryPath, cfg.AllowedHashes)
 	if err != nil {
 		return NewDisabled(err.Error()), err
 	}
@@ -168,23 +215,41 @@ func New(cfg Config) (*Engine, error) {
 			return NewDisabled(err.Error()), err
 		}
 	}
-	envPath := cfg.EnvPath
-	if envPath == "" {
-		envPath = os.Getenv("PATH")
+	sem := cfg.SharedSemaphore
+	if sem == nil {
+		sem = make(chan struct{}, concurrency)
 	}
 	return &Engine{
-		enabled:          true,
-		binaryPath:       absPath,
-		binarySHA256:     digest,
-		binaryAsset:      asset,
-		allowedURL:       cfg.AllowedURL,
-		sem:              make(chan struct{}, concurrency),
-		timeout:          timeout,
-		socketTimeoutSec: socketTimeout,
-		maxStdoutBytes:   maxStdout,
-		proxyURL:         proxyURL,
-		envPath:          envPath,
+		enabled:             true,
+		binaryPath:          absPath,
+		binarySHA256:        digest,
+		binaryAsset:         asset,
+		allowedURL:          cfg.AllowedURL,
+		allowedOutboundHost: cfg.AllowedOutboundHost,
+		resolver:            cfg.Resolver,
+		dialAddr:            cfg.DialAddr,
+		sem:                 sem,
+		timeout:             timeout,
+		socketTimeoutSec:    socketTimeout,
+		maxStdoutBytes:      maxStdout,
+		proxyURL:            proxyURL,
+		envPath:             envPath,
 	}, nil
+}
+
+// WithTargetPolicy returns a shallow copy of the Engine bound to the given input URL
+// and outbound host policies while sharing the underlying concurrency semaphore.
+func (e *Engine) WithTargetPolicy(allowedURL func(string) bool, allowedOutboundHost func(string) bool) *Engine {
+	if e == nil {
+		return NewDisabled("yt-dlp engine is nil")
+	}
+	cp := *e
+	cp.allowedURL = allowedURL
+	cp.allowedOutboundHost = allowedOutboundHost
+	if cp.resolver == nil {
+		cp.resolver = net.DefaultResolver
+	}
+	return &cp
 }
 
 // NewFromEnv constructs an Engine from DOKITOOL_YTDLP_* environment variables.
@@ -220,6 +285,7 @@ func NewFromEnv(getenv func(string) string, allowedURL func(string) bool) (*Engi
 		BinaryPath:     getenv("DOKITOOL_YTDLP_BINARY"),
 		AllowedHashes:  OfficialSHA256Sums20261026,
 		AllowedURL:     allowedURL,
+		Resolver:       net.DefaultResolver,
 		MaxConcurrency: concurrency,
 		Timeout:        timeout,
 		ProxyURL:       getenv("DOKITOOL_YTDLP_PROXY"),
@@ -254,6 +320,14 @@ func (e *Engine) BinaryAsset() string {
 
 // CommandArgs returns the hardened CLI argument slice for a single URL extraction.
 func (e *Engine) CommandArgs(targetURL string) []string {
+	var proxy string
+	if e != nil {
+		proxy = e.proxyURL
+	}
+	return e.commandArgsWithProxy(targetURL, proxy)
+}
+
+func (e *Engine) commandArgsWithProxy(targetURL, effectiveProxy string) []string {
 	socketSec := defaultSocketTimeoutSec
 	if e != nil && e.socketTimeoutSec > 0 {
 		socketSec = e.socketTimeoutSec
@@ -270,8 +344,8 @@ func (e *Engine) CommandArgs(targetURL string) []string {
 		"--js-runtimes", "node",
 		"--socket-timeout", strconv.Itoa(socketSec),
 	}
-	if e != nil && e.proxyURL != "" {
-		args = append(args, "--proxy", e.proxyURL)
+	if effectiveProxy != "" {
+		args = append(args, "--proxy", effectiveProxy)
 	}
 	args = append(args, "-J", "--", targetURL)
 	return args
@@ -303,6 +377,27 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 	callCtx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
+	if e.allowedOutboundHost != nil || (e.proxyURL == "" && e.resolver != nil) {
+		if err := e.verifyPublicTargetHost(callCtx, rawURL); err != nil {
+			return nil, err
+		}
+	}
+
+	effectiveProxy := e.proxyURL
+	if effectiveProxy == "" && (e.allowedOutboundHost != nil || e.resolver != nil) {
+		gateURL, closeGate, err := e.startOutboundGate(callCtx)
+		if err != nil {
+			return nil, &Error{
+				Code:      CodeUpstreamUnavailable,
+				Message:   "解析安全网关初始化失败",
+				Retryable: true,
+				Cause:     err,
+			}
+		}
+		defer closeGate()
+		effectiveProxy = gateURL
+	}
+
 	tempDir, err := os.MkdirTemp("", "dokitool-ytdlp-*")
 	if err != nil {
 		return nil, &Error{
@@ -325,7 +420,7 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 		}
 	}
 
-	args := e.CommandArgs(rawURL)
+	args := e.commandArgsWithProxy(rawURL, effectiveProxy)
 	cmd := exec.CommandContext(callCtx, e.binaryPath, args...)
 	cmd.Dir = tempDir
 	cmd.Stdin = nil
@@ -379,6 +474,254 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 	return &info, nil
 }
 
+func (e *Engine) verifyPublicTargetHost(ctx context.Context, rawURL string) *Error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return &Error{Code: CodeInvalidInput, Message: "请输入对应平台的有效分享链接"}
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if host == "" {
+		return &Error{Code: CodeInvalidInput, Message: "请输入对应平台的有效分享链接"}
+	}
+	if e.allowedOutboundHost != nil && !e.allowedOutboundHost(host) {
+		return &Error{Code: CodeUpstreamBlocked, Message: "目标地址不在受控出站白名单内", Retryable: false}
+	}
+	if e.proxyURL == "" && e.resolver != nil {
+		if _, err := e.resolvePublicHostIP(ctx, host); err != nil {
+			return &Error{Code: CodeUpstreamBlocked, Message: "目标地址解析到受限网络，已拒绝访问", Retryable: false, Cause: err}
+		}
+	}
+	return nil
+}
+
+func (e *Engine) resolvePublicHostIP(ctx context.Context, host string) (netip.Addr, error) {
+	cleanHost := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if cleanHost == "" {
+		return netip.Addr{}, errors.New("empty host")
+	}
+	if e.allowedOutboundHost != nil && !e.allowedOutboundHost(cleanHost) {
+		return netip.Addr{}, fmt.Errorf("outbound host %s is not allowlisted", cleanHost)
+	}
+	if ip, err := netip.ParseAddr(cleanHost); err == nil {
+		if !fetch.PublicIP(ip) {
+			return netip.Addr{}, fmt.Errorf("non-public IP literal %s", ip)
+		}
+		return ip.Unmap(), nil
+	}
+	resolver := e.resolver
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	ips, err := resolver.LookupNetIP(ctx, "ip", cleanHost)
+	if err != nil || len(ips) == 0 {
+		return netip.Addr{}, fmt.Errorf("resolve outbound host %s: %w", cleanHost, err)
+	}
+	for _, ip := range ips {
+		if !fetch.PublicIP(ip) {
+			return netip.Addr{}, fmt.Errorf("host %s resolved to non-public IP %s", cleanHost, ip)
+		}
+	}
+	return ips[0].Unmap(), nil
+}
+
+func (e *Engine) validateOutboundPort(port string) error {
+	if e.dialAddr != nil {
+		return nil
+	}
+	if port != "80" && port != "443" {
+		return fmt.Errorf("disallowed outbound port %s", port)
+	}
+	return nil
+}
+
+func (e *Engine) dialTargetAddr(ip netip.Addr, port string) string {
+	if e.dialAddr != nil {
+		if custom := e.dialAddr(ip, port); custom != "" {
+			return custom
+		}
+	}
+	return net.JoinHostPort(ip.String(), port)
+}
+
+func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	socketTimeout := time.Duration(defaultSocketTimeoutSec) * time.Second
+	if e.socketTimeoutSec > 0 {
+		socketTimeout = time.Duration(e.socketTimeoutSec) * time.Second
+	}
+
+	srv := &http.Server{
+		ReadHeaderTimeout: 5 * time.Second,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodConnect {
+				e.handleGateConnect(ctx, w, r, socketTimeout)
+				return
+			}
+			e.handleGateHTTP(ctx, w, r, socketTimeout)
+		}),
+	}
+	go func() {
+		_ = srv.Serve(ln)
+	}()
+	closeFn := func() {
+		_ = srv.Close()
+		_ = ln.Close()
+	}
+	return "http://" + ln.Addr().String(), closeFn, nil
+}
+
+func (e *Engine) handleGateConnect(ctx context.Context, w http.ResponseWriter, r *http.Request, timeout time.Duration) {
+	host, port, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+		port = "443"
+	}
+	if err := e.validateOutboundPort(port); err != nil {
+		http.Error(w, "upstream blocked by outbound security policy: "+err.Error(), http.StatusForbidden)
+		return
+	}
+	ip, err := e.resolvePublicHostIP(ctx, host)
+	if err != nil {
+		http.Error(w, "upstream blocked by outbound security policy: "+err.Error(), http.StatusForbidden)
+		return
+	}
+	dialer := &net.Dialer{Timeout: timeout}
+	upstreamConn, err := dialer.DialContext(ctx, "tcp", e.dialTargetAddr(ip, port))
+	if err != nil {
+		http.Error(w, "upstream connection failed", http.StatusBadGateway)
+		return
+	}
+	defer upstreamConn.Close()
+
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+	clientConn, _, err := hj.Hijack()
+	if err != nil {
+		return
+	}
+	defer clientConn.Close()
+
+	_, _ = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+	done := make(chan struct{}, 2)
+	go func() {
+		_, _ = io.Copy(upstreamConn, clientConn)
+		done <- struct{}{}
+	}()
+	go func() {
+		_, _ = io.Copy(clientConn, upstreamConn)
+		done <- struct{}{}
+	}()
+	<-done
+}
+
+func (e *Engine) handleGateHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, timeout time.Duration) {
+	if r.URL == nil || !r.URL.IsAbs() {
+		http.Error(w, "upstream blocked by outbound security policy: absolute URL required", http.StatusBadRequest)
+		return
+	}
+	const maxHops = 5
+	curURL := r.URL
+	method := r.Method
+	for hop := 0; hop <= maxHops; hop++ {
+		scheme := strings.ToLower(curURL.Scheme)
+		if scheme != "http" {
+			http.Error(w, "upstream blocked by outbound security policy: invalid scheme", http.StatusForbidden)
+			return
+		}
+		host := curURL.Hostname()
+		port := curURL.Port()
+		if port == "" {
+			port = "80"
+		}
+		if err := e.validateOutboundPort(port); err != nil {
+			http.Error(w, "upstream blocked by outbound security policy: "+err.Error(), http.StatusForbidden)
+			return
+		}
+		ip, err := e.resolvePublicHostIP(ctx, host)
+		if err != nil {
+			http.Error(w, "upstream blocked by outbound security policy: "+err.Error(), http.StatusForbidden)
+			return
+		}
+		targetAddr := e.dialTargetAddr(ip, port)
+		transport := &http.Transport{
+			Proxy:             nil,
+			DisableKeepAlives: true,
+			DialContext: func(dialCtx context.Context, network, _ string) (net.Conn, error) {
+				d := &net.Dialer{Timeout: timeout}
+				return d.DialContext(dialCtx, network, targetAddr)
+			},
+		}
+		client := &http.Client{
+			Transport: transport,
+			Timeout:   timeout,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		outReq, err := http.NewRequestWithContext(ctx, method, curURL.String(), nil)
+		if err != nil {
+			http.Error(w, "upstream blocked by outbound security policy", http.StatusBadRequest)
+			return
+		}
+		for k, vals := range r.Header {
+			if strings.EqualFold(k, "Proxy-Connection") || strings.EqualFold(k, "Proxy-Authorization") {
+				continue
+			}
+			for _, v := range vals {
+				outReq.Header.Add(k, v)
+			}
+		}
+		resp, err := client.Do(outReq)
+		if err != nil {
+			http.Error(w, "upstream request failed", http.StatusBadGateway)
+			return
+		}
+		if isGateRedirect(resp.StatusCode) {
+			loc := strings.TrimSpace(resp.Header.Get("Location"))
+			_ = resp.Body.Close()
+			if loc == "" {
+				http.Error(w, "upstream redirect missing location", http.StatusBadGateway)
+				return
+			}
+			nextURL, err := curURL.Parse(loc)
+			if err != nil {
+				http.Error(w, "upstream blocked by outbound security policy: bad redirect", http.StatusForbidden)
+				return
+			}
+			curURL = nextURL
+			if resp.StatusCode == http.StatusSeeOther {
+				method = http.MethodGet
+			}
+			continue
+		}
+		defer resp.Body.Close()
+		for k, vals := range resp.Header {
+			for _, v := range vals {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, io.LimitReader(resp.Body, e.maxStdoutBytes))
+		return
+	}
+	http.Error(w, "upstream blocked by outbound security policy: too many redirects", http.StatusForbidden)
+}
+
+func isGateRedirect(code int) bool {
+	switch code {
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+		return true
+	default:
+		return false
+	}
+}
+
 func validateInputURL(raw string, allowed func(string) bool) *Error {
 	if raw == "" || len(raw) > 2048 || strings.HasPrefix(raw, "-") {
 		return &Error{Code: CodeInvalidInput, Message: "请输入对应平台的有效分享链接"}
@@ -414,10 +757,15 @@ func validateProxyURL(raw string) error {
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "http", "https", "socks5", "socks5h":
-		return nil
 	default:
 		return errors.New("DOKITOOL_YTDLP_PROXY scheme must be http, https, socks5 or socks5h")
 	}
+	if ip, err := netip.ParseAddr(u.Hostname()); err == nil {
+		if !ip.IsLoopback() && !fetch.PublicIP(ip) {
+			return errors.New("DOKITOOL_YTDLP_PROXY IP literal must be loopback or public")
+		}
+	}
+	return nil
 }
 
 func buildIsolatedEnv(tempDir, envPath string) []string {
@@ -436,6 +784,14 @@ func buildIsolatedEnv(tempDir, envPath string) []string {
 		"PYTHONDONTWRITEBYTECODE=1",
 		"PYTHONNOUSERSITE=1",
 		"NO_COLOR=1",
+		"NO_PROXY=",
+		"no_proxy=",
+		"HTTP_PROXY=",
+		"HTTPS_PROXY=",
+		"ALL_PROXY=",
+		"http_proxy=",
+		"https_proxy=",
+		"all_proxy=",
 	}
 	if envPath != "" {
 		env = append(env, "PATH="+envPath)
@@ -468,6 +824,13 @@ func classifyContextErr(err error) *Error {
 func classifyStderr(stderrText string, runErr error) *Error {
 	lower := strings.ToLower(stderrText)
 	switch {
+	case strings.Contains(lower, "upstream blocked by outbound security policy"):
+		return &Error{
+			Code:      CodeUpstreamBlocked,
+			Message:   "目标地址或重定向跳点超出安全出站边界，已拒绝访问",
+			Retryable: false,
+			Cause:     runErr,
+		}
 	case strings.Contains(lower, "429") ||
 		strings.Contains(lower, "too many requests") ||
 		strings.Contains(lower, "rate limit"):

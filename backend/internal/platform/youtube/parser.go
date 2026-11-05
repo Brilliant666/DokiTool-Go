@@ -97,6 +97,20 @@ func AllowedTargetURL(raw string) bool {
 	return ok && raw == canonical
 }
 
+// AllowedOutboundHost restricts yt-dlp subprocess outbound connections to official YouTube domains.
+func AllowedOutboundHost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if h == "youtubei.googleapis.com" {
+		return true
+	}
+	for _, domain := range []string{"youtube.com", "youtu.be", "googlevideo.com", "ytimg.com", "ggpht.com", "googleusercontent.com"} {
+		if h == domain || strings.HasSuffix(h, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
 // AllowedMediaURL restricts public media and cover URLs to official YouTube CDN hosts.
 func AllowedMediaURL(raw string) bool {
 	u, err := url.Parse(raw)

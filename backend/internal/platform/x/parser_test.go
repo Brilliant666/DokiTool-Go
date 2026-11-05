@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
@@ -443,9 +444,12 @@ func TestSizeProberPopulatesMissingMP4SizesAndFailsSoft(t *testing.T) {
 	const now int64 = 1762300800
 	sourceURL := "https://x.com/historyinmemes/status/1790637656616943991"
 
+	var probeMu sync.Mutex
 	probed := make(map[string]int)
 	prober := func(ctx context.Context, rawURL string) (int64, bool) {
+		probeMu.Lock()
 		probed[rawURL]++
+		probeMu.Unlock()
 		if strings.Contains(rawURL, "kF5AeH6MK-1qDlBg.mp4") {
 			return 1404023, true
 		}
@@ -519,5 +523,148 @@ func TestSizeProberPopulatesMissingMP4SizesAndFailsSoft(t *testing.T) {
 	secondSrc := unified.Map(unified.Slice(unified.Map(unified.Map(variants[1])["delivery"])["sources"])[0])
 	if secondSrc["size_bytes"] != nil {
 		t.Fatalf("expected nil size_bytes on failed-soft 270p variant source, got %v", secondSrc["size_bytes"])
+	}
+}
+
+func TestSelectedVideoPositionPreservedAcrossFilteredEntries(t *testing.T) {
+	const now int64 = 1762300800
+
+	makeValidEntry := func(mediaID string) ytengine.Info {
+		return ytengine.Info{
+			ID:        mediaID,
+			DisplayID: "1577719286659006464",
+			Title:     "Entry " + mediaID,
+			Formats: []ytengine.Format{
+				{
+					FormatID: "http-2176",
+					URL:      "https://video.twimg.com/ext_tw_video/" + mediaID + "/pu/vid/1280x720/v720.mp4?tag=12",
+					Ext:      "mp4",
+					Protocol: "https",
+					Width:    int64Ptr(1280),
+					Height:   int64Ptr(720),
+					TBR:      float64Ptr(2176),
+				},
+			},
+		}
+	}
+
+	// Case 1: Entry #1 has no deliverable formats, Entry #2 ("111") and Entry #3 ("222") are deliverable.
+	// Requesting /video/2 must select Entry #2 ("video-111"), NOT Entry #3 ("video-222").
+	infoFirstFiltered := &ytengine.Info{
+		ID:   "1577719286659006464",
+		Type: "playlist",
+		Entries: []ytengine.Info{
+			{ID: "000", DisplayID: "1577719286659006464", Formats: nil},
+			makeValidEntry("111"),
+			makeValidEntry("222"),
+		},
+	}
+	payload1 := AdaptInfo(infoFirstFiltered, "1577719286659006464", "https://x.com/u/status/1577719286659006464/video/2", 2, now)
+	if err := unified.ValidateEnvelopeAt(payload1, now); err != nil {
+		t.Fatalf("Case 1 ValidateEnvelopeAt failed: %v", err)
+	}
+	data1 := unified.Map(payload1["data"])
+	items1 := unified.Slice(data1["items"])
+	if len(items1) != 2 {
+		t.Fatalf("Case 1: expected 2 deliverable items, got %d", len(items1))
+	}
+	firstItem1 := unified.Map(items1[0])
+	if unified.Str(firstItem1["title"]) != "Entry 111" || firstItem1["index"] != 2 {
+		t.Fatalf("Case 1: expected first surviving item to be original entry #2 ('Entry 111', index=2), got %+v", firstItem1)
+	}
+	if got := unified.Str(data1["default_item_id"]); got != unified.Str(firstItem1["id"]) {
+		t.Fatalf("Case 1: expected /video/2 to select original entry #2 (%q), got %q", unified.Str(firstItem1["id"]), got)
+	}
+
+	// Case 2: Entry #2 ("200") has no deliverable formats while Entry #1 ("100") and Entry #3 ("300") are deliverable.
+	// Requesting /video/2 must emit an unavailable item for entry #2 and set default_item_id to its ID.
+	infoSecondFiltered := &ytengine.Info{
+		ID:   "1577719286659006464",
+		Type: "playlist",
+		Entries: []ytengine.Info{
+			makeValidEntry("100"),
+			{ID: "200", DisplayID: "1577719286659006464", Formats: nil},
+			makeValidEntry("300"),
+		},
+	}
+	payload2 := AdaptInfo(infoSecondFiltered, "1577719286659006464", "https://x.com/u/status/1577719286659006464/video/2", 2, now)
+	if err := unified.ValidateEnvelopeAt(payload2, now); err != nil {
+		t.Fatalf("Case 2 ValidateEnvelopeAt failed: %v", err)
+	}
+	data2 := unified.Map(payload2["data"])
+	items2 := unified.Slice(data2["items"])
+	if len(items2) != 3 {
+		t.Fatalf("Case 2: expected 3 items (2 ready + 1 unavailable), got %d", len(items2))
+	}
+	unavailItem := unified.Map(items2[1])
+	if unified.Str(data2["default_item_id"]) != unified.Str(unavailItem["id"]) {
+		t.Fatalf("Case 2: expected /video/2 to target unavailable item %q, got %q", unified.Str(unavailItem["id"]), unified.Str(data2["default_item_id"]))
+	}
+	if unified.Str(unavailItem["state"]) != "unavailable" || unavailItem["default"] != nil || unified.Str(unavailItem["default_unavailable_reason"]) != "unavailable" {
+		t.Fatalf("Case 2: expected second item to be unavailable with nil default, got %+v", unavailItem)
+	}
+
+	// Case 3: Only 2 entries exist, requesting /video/3 (out of bounds) must emit an unavailable item at position 3.
+	infoTwoEntries := &ytengine.Info{
+		ID:   "1577719286659006464",
+		Type: "playlist",
+		Entries: []ytengine.Info{
+			makeValidEntry("100"),
+			makeValidEntry("200"),
+		},
+	}
+	payload3 := AdaptInfo(infoTwoEntries, "1577719286659006464", "https://x.com/u/status/1577719286659006464/video/3", 3, now)
+	if err := unified.ValidateEnvelopeAt(payload3, now); err != nil {
+		t.Fatalf("Case 3 ValidateEnvelopeAt failed: %v", err)
+	}
+	data3 := unified.Map(payload3["data"])
+	if got := unified.Str(data3["default_item_id"]); got != "video-3" {
+		t.Fatalf("Case 3: expected out-of-bounds /video/3 to target unavailable 'video-3', got %q", got)
+	}
+}
+
+func TestXSourceIdentityPreservedAcrossSignatureRenewal(t *testing.T) {
+	const now int64 = 1762300800
+	sourceURL := "https://x.com/historyinmemes/status/1790637656616943991"
+
+	makeInfo := func(mediaURL string, filesize int64) *ytengine.Info {
+		return &ytengine.Info{
+			ID:        "1790637589910654976",
+			DisplayID: "1790637656616943991",
+			Title:     "Historic Vids",
+			Formats: []ytengine.Format{
+				{
+					FormatID: "http-2176",
+					URL:      mediaURL,
+					Ext:      "mp4",
+					Protocol: "https",
+					Width:    int64Ptr(728),
+					Height:   int64Ptr(720),
+					Filesize: int64Ptr(filesize),
+				},
+			},
+		}
+	}
+
+	url1 := "https://video.twimg.com/amplify_video/1790637589910654976/vid/avc1/728x720/kF5AeH6MK-1qDlBg.mp4?tag=14&expires=1762304400&signature=AAA"
+	url2 := "https://video.twimg.com/amplify_video/1790637589910654976/vid/avc1/728x720/kF5AeH6MK-1qDlBg.mp4?tag=14&expires=1762390800&signature=BBB"
+	urlDifferentTag := "https://video.twimg.com/amplify_video/1790637589910654976/vid/avc1/728x720/kF5AeH6MK-1qDlBg.mp4?tag=16&expires=1762390800&signature=BBB"
+
+	p1 := unified.PublicView(AdaptInfo(makeInfo(url1, 1404023), "1790637656616943991", sourceURL, 0, now), false, now)
+	p2 := unified.PublicView(AdaptInfo(makeInfo(url2, 1404023), "1790637656616943991", sourceURL, 0, now+60), false, now+60)
+	pDiff := unified.PublicView(AdaptInfo(makeInfo(urlDifferentTag, 1404023), "1790637656616943991", sourceURL, 0, now+60), false, now+60)
+
+	def1 := unified.Map(unified.Map(unified.Slice(unified.Map(p1["data"])["items"])[0])["default"])
+	def2 := unified.Map(unified.Map(unified.Slice(unified.Map(p2["data"])["items"])[0])["default"])
+	defDiff := unified.Map(unified.Map(unified.Slice(unified.Map(pDiff["data"])["items"])[0])["default"])
+
+	if unified.Str(def1["source_id"]) != unified.Str(def2["source_id"]) {
+		t.Fatalf("expected X source_id to stay stable across signature renewal: %v vs %v", def1["source_id"], def2["source_id"])
+	}
+	if unified.Str(def2["url"]) != url2 {
+		t.Fatalf("expected renewed source URL bytes to be preserved, got %q", unified.Str(def2["url"]))
+	}
+	if unified.Str(def1["source_id"]) == unified.Str(defDiff["source_id"]) {
+		t.Fatalf("expected X source_id to change when non-credential query param (tag) changes")
 	}
 }

@@ -58,9 +58,9 @@ printf 'artifact_directory=%s\n' "$OUT"
 | `VITE_API_MODE=php` | 兼容统一 `/api/*` 的模式名，Go 同样使用；不是 PHP 进程依赖。`go` 无此模式，`secure` 需要本项目未实现的另一协议。 |
 | `VITE_API_BASE_URL=''` | 构建期留空，使浏览器请求同源；不要填 `/api` 路径。 |
 | `DEV_API_TARGET=http://127.0.0.1:9082` | Vite dev/preview 的 `/api` 代理目标，运行时给预览进程；默认值为旧 PHP 网关 8081，Go 必须显式覆盖。 |
-| `DOKITOOL_YTDLP_X_ENABLED` | 可选启用 X / Twitter 适配器（默认 `false`，生产默认不启用）。开启后向内存目录注册 `x` 并初始化 `internal/ytengine`。 |
-| `DOKITOOL_YTDLP_BINARY` | 指定已固定的 `yt-dlp 2026.10.26` 发行产物绝对路径（未设置时在 `PATH` 查找 `yt-dlp`）。启动时强制核对官方 `SHA2-256SUMS`；若缺失或摘要不匹配，仅对 `x` 降级返回 `503 SERVICE_NOT_CONFIGURED`，不影响原有九个平台。 |
-| `DOKITOOL_YTDLP_CONCURRENCY` / `DOKITOOL_YTDLP_TIMEOUT` / `DOKITOOL_YTDLP_PROXY` | `yt-dlp` 子进程并发上限（默认 `2`，范围 `1–8`）、单次解析超时（默认 `15s`，范围 `3s–30s`）及可选代理（仅 `http://`、`https://`、`socks5://`、`socks5h://`）。 |
+| `DOKITOOL_YTDLP_X_ENABLED` / `DOKITOOL_YTDLP_YOUTUBE_ENABLED` / `DOKITOOL_YTDLP_INSTAGRAM_ENABLED` | 可选启用 X / Twitter、YouTube、Instagram 适配器（均默认 `false`，生产默认不启用；不含 `t.co`、`instagr.am` 短链主机）。仅当共享 `internal/ytengine` 二进制预检（SHA-256 校验）通过后，才向运行时内存目录注册对应已启用平台；预检失败时不写入运行时目录，不影响原有九个平台。 |
+| `DOKITOOL_YTDLP_BINARY` | 指定已固定的 `yt-dlp 2026.10.26` 发行产物路径；未设置时在 `PATH` 中查找 `yt-dlp` / `yt-dlp.exe`。无论显式路径还是 `PATH` 发现，启动时均强制核对官方 `SHA2-256SUMS`。 |
+| `DOKITOOL_YTDLP_CONCURRENCY` / `DOKITOOL_YTDLP_TIMEOUT` / `DOKITOOL_YTDLP_PROXY` | 跨平台共享 `yt-dlp` 子进程总并发上限（默认 `2`，范围 `1–8`，X/YouTube/Instagram 共用同一信号量池）、单次解析超时（默认 `25s`，范围 `2s–40s`）及可选代理（仅 `http://`、`https://`、`socks5://`、`socks5h://`，IP 字面量须为回环或公网地址）。未配置代理时，Go 大小探测复用 `internal/fetch.Executor`，子进程通过进程内回环安全网关强制执行平台域名白名单、`80`/`443` 端口限制及逐跳公网 DNS 校验与 IP 绑定。YouTube 默认选中完整音画直链（`360p (含音频)`，`itag=18` 附件交付），4K/2K/1080p 仅视频无声裸轨（`has_audio: false`）与独立 M4A 音频保留在 `variants` 供显式选择并通过“打开源链接”手动保存；Instagram 无编解码器声明的直链保持 `has_audio` 未知（省略该字段）。 |
 
 公网入口应运行单个 Go 实例，显式设置 `-client-identity caddy` 和独立服务端凭据 `SNAP_INGRESS_KEY`（32–512 字节、不含空格的可打印 ASCII）。Caddy 每次向 Go 转发时覆盖 `X-DokiTool-Client-IP` 为真实连接方 IP、`X-DokiTool-Edge-Key` 为双方约定的秘密。Go 仅接受来自回环、已认证且各只出现一次的头；身份配置错误时拒绝请求。直接回环调试默认根据 TCP 对端计数。签名媒体与入口认证使用不同密钥，密钥只从权限受限的运行配置注入。反代和应用日志均不得记录这些头、完整签名 URL、票据或 Referer。
 

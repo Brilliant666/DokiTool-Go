@@ -92,13 +92,13 @@ func TestYTDLPXConfiguration(t *testing.T) {
 	sum := sha256.Sum256(payload)
 	hexSum := hex.EncodeToString(sum[:])
 
-	origHash, hadOrig := ytengine.OfficialSHA256Sums20261026["yt-dlp-cmd-test"]
-	ytengine.OfficialSHA256Sums20261026["yt-dlp-cmd-test"] = hexSum
+	origAsset, hadOrig := ytengine.OfficialSHA256Sums20261026[hexSum]
+	ytengine.OfficialSHA256Sums20261026[hexSum] = "yt-dlp-cmd-test"
 	defer func() {
 		if hadOrig {
-			ytengine.OfficialSHA256Sums20261026["yt-dlp-cmd-test"] = origHash
+			ytengine.OfficialSHA256Sums20261026[hexSum] = origAsset
 		} else {
-			delete(ytengine.OfficialSHA256Sums20261026, "yt-dlp-cmd-test")
+			delete(ytengine.OfficialSHA256Sums20261026, hexSum)
 		}
 	}()
 
@@ -127,12 +127,12 @@ func TestYTDLPXConfiguration(t *testing.T) {
 			wantErr:        true,
 		},
 		{
-			name: "enabled-missing-binary-degrades-gracefully",
+			name: "enabled-missing-binary-not-registered-in-catalog",
 			env: map[string]string{
 				"DOKITOOL_YTDLP_X_ENABLED": "true",
 				"DOKITOOL_YTDLP_BINARY":    filepath.Join(dir, "missing-yt-dlp"),
 			},
-			wantRegistered: true,
+			wantRegistered: false,
 			wantErr:        false,
 		},
 		{
@@ -140,6 +140,15 @@ func TestYTDLPXConfiguration(t *testing.T) {
 			env: map[string]string{
 				"DOKITOOL_YTDLP_X_ENABLED": "true",
 				"DOKITOOL_YTDLP_BINARY":    fakeBin,
+			},
+			wantRegistered: true,
+			wantErr:        false,
+		},
+		{
+			name: "enabled-verified-binary-via-path",
+			env: map[string]string{
+				"DOKITOOL_YTDLP_X_ENABLED": "true",
+				"PATH":                     dir,
 			},
 			wantRegistered: true,
 			wantErr:        false,
@@ -153,7 +162,7 @@ func TestYTDLPXConfiguration(t *testing.T) {
 				t.Fatal(err)
 			}
 			adapters := map[string]api.Adapter{}
-			err = configureYTDLPX(c, adapters, func(k string) string { return tc.env[k] })
+			err = configureYTDLPX(c, adapters, fetch.New(), func(k string) string { return tc.env[k] })
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("configureYTDLPX err=%v, wantErr=%v", err, tc.wantErr)
 			}

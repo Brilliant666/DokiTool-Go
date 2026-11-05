@@ -69,6 +69,30 @@ function isCorsBlockedDirectCdn(rawUrl: string): boolean {
   }
 }
 
+function isVerifiedDirectAttachment(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== "googlevideo.com" && !host.endsWith(".googlevideo.com")) {
+      return false;
+    }
+    if (parsed.pathname.replace(/\/+$/, "") !== "/videoplayback") {
+      return false;
+    }
+    const itag = parsed.searchParams.get("itag")?.trim() ?? "";
+    const title = parsed.searchParams.get("title")?.trim() ?? "";
+    if (itag !== "18" || !title) {
+      return false;
+    }
+    const sparams = (parsed.searchParams.get("sparams") ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase());
+    return !sparams.includes("title");
+  } catch {
+    return false;
+  }
+}
+
 export function useMediaDownload({
   videoStore,
   showToast,
@@ -318,7 +342,9 @@ export function useMediaDownload({
       );
     const active = (status: string) =>
       ["queued", "preparing", "downloading"].includes(status);
-    let duplicate = matchingTasks().some((task) => active(task.status) && !task.ownerGone);
+    let duplicate = matchingTasks().some(
+      (task) => (active(task.status) && !task.ownerGone) || task.status === "manual",
+    );
     if (
       !duplicate &&
       matchingTasks().some(
@@ -353,11 +379,52 @@ export function useMediaDownload({
       `page-${Date.now()}-${++pageTaskSequence}`;
     deliveryTasks.set(deliveryId, downloadId);
     if (isCorsBlockedDirectCdn(url)) {
+      if (controller.signal.aborted) {
+        videoStore.updateDownload(downloadId, {
+          deliveryId,
+          status: "cancelled",
+          statusText: "已取消",
+          abortController: null,
+          error: "用户取消下载",
+          nativeAvailable: true,
+        });
+        return;
+      }
+      if (isVerifiedDirectAttachment(url)) {
+        videoStore.updateDownload(downloadId, {
+          deliveryId,
+          transport: "browser_native",
+          status: "handed-off",
+          statusText: "已交给浏览器",
+          abortController: null,
+          percent: 0,
+          loaded: 0,
+          total: 0,
+          speed: 0,
+          elapsed: 0,
+          averageSpeed: 0,
+          transferred: 0,
+          error: null,
+          progressKind: "bytes",
+          nativeAvailable: true,
+          observation: undefined,
+          transferElapsed: undefined,
+          timing: undefined,
+          workerBuild: undefined,
+        });
+        triggerBrowserDownload(url, filename, false);
+        showToast(
+          "已交给浏览器直接保存附件，请在浏览器下载列表查看进度",
+          "info",
+          6000,
+        );
+        return;
+      }
       videoStore.updateDownload(downloadId, {
         deliveryId,
-        transport: "browser_native",
-        status: "handed-off",
-        statusText: "已交给浏览器",
+        transport: undefined,
+        status: "manual",
+        statusText: "打开源链接",
         abortController: null,
         percent: 0,
         loaded: 0,
@@ -374,9 +441,8 @@ export function useMediaDownload({
         timing: undefined,
         workerBuild: undefined,
       });
-      triggerBrowserDownload(url, filename, true);
       showToast(
-        "已交给浏览器直接拉取源流（若在标签页打开播放，可右键或点右下角菜单保存）",
+        "该直链未提供附件下载头，请点击下载卡片中的“打开源链接”手动保存",
         "info",
         6000,
       );

@@ -146,8 +146,67 @@ func TestParseInstagramReelCodecLessProgressiveMP4(t *testing.T) {
 	if unified.Str(firstVariant["label"]) != "720p" {
 		t.Fatalf("expected inherited 720p label on progressive Reel MP4, got %v", firstVariant["label"])
 	}
+	firstMeta := unified.Map(firstVariant["metadata"])
+	if _, exists := firstMeta["has_audio"]; exists {
+		t.Fatalf("expected codec-less progressive MP4 with empty ACodec to omit has_audio (unknown), got %v", firstMeta["has_audio"])
+	}
 	src := unified.Map(unified.Slice(unified.Map(firstVariant["delivery"])["sources"])[0])
 	if src["size_bytes"] != int64(3362175) {
 		t.Fatalf("expected probed size_bytes=3362175, got %v", src["size_bytes"])
+	}
+}
+
+func TestInstagramSourceIdentityPreservedAcrossCDNTokenRenewal(t *testing.T) {
+	const now int64 = 1762300800
+	sourceURL := "https://www.instagram.com/reel/C8abc123XYZ/"
+
+	url1 := "https://scontent-lax3-1.cdninstagram.com/o1/v/t16/f2/m69/AQM123/progressive720.mp4?efg=eyJ0ZXN0IjoxfQ&_nc_ht=scontent-lax3-1.cdninstagram.com&_nc_cat=104&oh=00_AYB111&oe=690D9EC0"
+	url2 := "https://scontent-sjc3-1.cdninstagram.com/o1/v/t16/f2/m69/AQM123/progressive720.mp4?efg=eyJ0ZXN0IjoyfQ&_nc_ht=scontent-sjc3-1.cdninstagram.com&_nc_cat=108&oh=00_AYB222&oe=690EEFA0"
+	urlDiffAsset := "https://scontent-sjc3-1.cdninstagram.com/o1/v/t16/f2/m69/AQM999_OTHER/progressive720.mp4?oh=00_AYB222&oe=690EEFA0"
+
+	runParse := func(mediaURL string, ts int64) unified.Object {
+		p := New(&stubExtractor{
+			enabled: true,
+			extract: func(ctx context.Context, rawURL string) (*ytengine.Info, error) {
+				return &ytengine.Info{
+					ID:    "C8abc123XYZ",
+					Title: "Instagram Reel",
+					Formats: []ytengine.Format{
+						{
+							FormatID: "0",
+							URL:      mediaURL,
+							Ext:      "mp4",
+							Protocol: "https",
+							Width:    int64Ptr(720),
+							Height:   int64Ptr(1280),
+							Filesize: int64Ptr(3362175),
+						},
+					},
+				}, nil
+			},
+		})
+		out, err := p.Parse(context.Background(), sourceURL, ts)
+		if err != nil {
+			t.Fatalf("Parse failed: %v", err)
+		}
+		return unified.PublicView(out, false, ts)
+	}
+
+	pub1 := runParse(url1, now)
+	pub2 := runParse(url2, now+60)
+	pubDiff := runParse(urlDiffAsset, now+60)
+
+	def1 := unified.Map(unified.Map(unified.Slice(unified.Map(pub1["data"])["items"])[0])["default"])
+	def2 := unified.Map(unified.Map(unified.Slice(unified.Map(pub2["data"])["items"])[0])["default"])
+	defDiff := unified.Map(unified.Map(unified.Slice(unified.Map(pubDiff["data"])["items"])[0])["default"])
+
+	if unified.Str(def1["variant_id"]) != unified.Str(def2["variant_id"]) || unified.Str(def1["source_id"]) != unified.Str(def2["source_id"]) {
+		t.Fatalf("expected Instagram variant_id and source_id to stay stable across CDN token renewal: %+v vs %+v", def1, def2)
+	}
+	if unified.Str(def2["url"]) != url2 {
+		t.Fatalf("expected renewed Instagram URL bytes to be preserved, got %q", unified.Str(def2["url"]))
+	}
+	if unified.Str(def1["source_id"]) == unified.Str(defDiff["source_id"]) {
+		t.Fatalf("expected Instagram source_id to change when asset path changes")
 	}
 }
