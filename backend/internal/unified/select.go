@@ -260,6 +260,40 @@ func isAudioOnlyFile(v Object) bool {
 	return nonNullField(meta, "audio_codec") && !nonNullField(meta, "video_codec") && !nonNullField(meta, "width") && !nonNullField(meta, "height")
 }
 
+func defaultEligibleFiles(itemType string, usableFiles []Object) []Object {
+	if itemType != "video" {
+		return usableFiles
+	}
+	hasAudibleCompleteFile := false
+	for _, v := range usableFiles {
+		if !isSplitVideoOnlyFile(v) && !isAudioOnlyFile(v) {
+			if hasAudio, ok := Map(v["metadata"])["has_audio"].(bool); ok && hasAudio {
+				hasAudibleCompleteFile = true
+				break
+			}
+		}
+	}
+	if hasAudibleCompleteFile {
+		filtered := make([]Object, 0, len(usableFiles))
+		for _, v := range usableFiles {
+			if !isSplitVideoOnlyFile(v) && !isAudioOnlyFile(v) {
+				filtered = append(filtered, v)
+			}
+		}
+		return filtered
+	}
+	nonAudio := make([]Object, 0, len(usableFiles))
+	for _, v := range usableFiles {
+		if !isAudioOnlyFile(v) {
+			nonAudio = append(nonAudio, v)
+		}
+	}
+	if len(nonAudio) > 0 {
+		return nonAudio
+	}
+	return usableFiles
+}
+
 // SelectDefault never mutates its input or sorts the displayed candidate list.
 func SelectDefault(input Object, now int64) Object {
 	item := objectCopy(input)
@@ -275,33 +309,14 @@ func SelectDefault(input Object, now int64) Object {
 		return item
 	}
 	variants := Slice(item["variants"])
-	eligible := make([]Object, 0)
+	usableFiles := make([]Object, 0)
 	for _, value := range variants {
 		v := Map(value)
 		if readyState(v) && Str(Map(v["delivery"])["kind"]) == "file" && DeliveryUsable(Map(v["delivery"]), now) {
-			eligible = append(eligible, v)
+			usableFiles = append(usableFiles, v)
 		}
 	}
-	if Str(item["type"]) == "video" {
-		hasAudibleCompleteFile := false
-		for _, v := range eligible {
-			if !isSplitVideoOnlyFile(v) && !isAudioOnlyFile(v) {
-				if hasAudio, ok := Map(v["metadata"])["has_audio"].(bool); ok && hasAudio {
-					hasAudibleCompleteFile = true
-					break
-				}
-			}
-		}
-		if hasAudibleCompleteFile {
-			filtered := make([]Object, 0, len(eligible))
-			for _, v := range eligible {
-				if !isSplitVideoOnlyFile(v) && !isAudioOnlyFile(v) {
-					filtered = append(filtered, v)
-				}
-			}
-			eligible = filtered
-		}
-	}
+	eligible := defaultEligibleFiles(Str(item["type"]), usableFiles)
 	highest := make([]Object, 0)
 	for _, v := range eligible {
 		dominated := false

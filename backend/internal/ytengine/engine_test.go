@@ -1078,3 +1078,283 @@ func TestPR36Review5785629879Counterexamples(t *testing.T) {
 		t.Fatalf("R4 206 empty-body counterexample failed: accepted empty body as (%d, %v)", sz, ok)
 	}
 }
+
+func TestPR36Review5788284772C1AndExport(t *testing.T) {
+	const now int64 = 1762300800
+	w360, h360, sz360 := int64(640), int64(360), int64(15048844)
+	w720, h720, sz720 := int64(1280), int64(720), int64(42000000)
+	w1080, h1080, sz1080 := int64(1920), int64(1080), int64(120000000)
+	w4k, h4k, sz4k := int64(3840), int64(2160), int64(712445280)
+	szAudio := int64(9800000)
+
+	ytOpts := AdaptOptions{
+		PlatformID:    "youtube",
+		ContentID:     "aqz-KE-bpKQ",
+		SourceURL:     "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+		MaxEntries:    1,
+		EnableDASHMux: true,
+	}
+
+	// 1. Positive: Audible 360p default + 4K/1080p split silent video-only + M4A audio-only (normal & debug)
+	ytAudibleAnd4K := AdaptInfo(&Info{
+		ID:       "aqz-KE-bpKQ",
+		Title:    "Big Buck Bunny 60fps 4K",
+		Uploader: "Blender Foundation",
+		Formats: []Format{
+			{
+				FormatID: "18",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=18&source=youtube&clen=15048844&dur=634.566&lmt=1700000000000000&sig=SIG_18",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w360,
+				Height:   &h360,
+				VCodec:   "avc1.42001E",
+				ACodec:   "mp4a.40.2",
+				Filesize: &sz360,
+			},
+			{
+				FormatID: "313",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=313&source=youtube&clen=712445280&dur=634.566&lmt=1700000000000000&sig=SIG_313",
+				Ext:      "webm",
+				Protocol: "https",
+				Width:    &w4k,
+				Height:   &h4k,
+				VCodec:   "vp9",
+				ACodec:   "none",
+				Filesize: &sz4k,
+			},
+			{
+				FormatID: "248",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=248&source=youtube&clen=120000000&dur=634.566&lmt=1700000000000000&sig=SIG_248",
+				Ext:      "webm",
+				Protocol: "https",
+				Width:    &w1080,
+				Height:   &h1080,
+				VCodec:   "vp9",
+				ACodec:   "none",
+				Filesize: &sz1080,
+			},
+			{
+				FormatID: "140",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=140&source=youtube&clen=9800000&dur=634.566&lmt=1700000000000000&sig=SIG_140",
+				Ext:      "m4a",
+				Protocol: "https",
+				VCodec:   "none",
+				ACodec:   "mp4a.40.2",
+				Filesize: &szAudio,
+			},
+		},
+	}, ytOpts, now)
+
+	ytNormal := unified.PublicView(ytAudibleAnd4K, false, now)
+	ytDebug := unified.PublicView(ytAudibleAnd4K, true, now)
+	for viewName, env := range map[string]unified.Object{"normal": ytNormal, "debug": ytDebug} {
+		if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+			t.Fatalf("YouTube %s envelope failed ValidateEnvelopeAt: %v", viewName, err)
+		}
+	}
+
+	// Negative 1a: Selecting 4K split silent or M4A audio-only when audible 360p exists must be rejected
+	for _, badIdx := range []int{0, 3} {
+		mutated := unified.Clone(ytNormal)
+		it := unified.Map(unified.Slice(unified.Map(mutated["data"])["items"])[0])
+		badVar := unified.Map(unified.Slice(it["variants"])[badIdx])
+		badSrc := unified.Map(unified.Slice(unified.Map(badVar["delivery"])["sources"])[0])
+		it["default"] = unified.Object{
+			"variant_id": badVar["id"],
+			"source_id":  badSrc["id"],
+			"url":        badSrc["url"],
+		}
+		if err := unified.ValidateEnvelopeAt(mutated, now); err == nil {
+			t.Fatalf("expected ValidateEnvelopeAt to reject non-eligible default variant index %d (%s)", badIdx, unified.Str(badVar["label"]))
+		}
+	}
+
+	// Negative 1b: Two audible complete files (360p + 720p) alongside 4K silent: selecting 360p must be rejected
+	ytTwoAudible := AdaptInfo(&Info{
+		ID:    "aqz-KE-bpKQ",
+		Title: "Two Audible + 4K Silent",
+		Formats: []Format{
+			{
+				FormatID: "18",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=18&source=youtube&clen=15048844&dur=634.566&lmt=1700000000000000&sig=SIG_18",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w360,
+				Height:   &h360,
+				VCodec:   "avc1.42001E",
+				ACodec:   "mp4a.40.2",
+				Filesize: &sz360,
+			},
+			{
+				FormatID: "22",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=22&source=youtube&clen=42000000&dur=634.566&lmt=1700000000000000&sig=SIG_22",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w720,
+				Height:   &h720,
+				VCodec:   "avc1.64001F",
+				ACodec:   "mp4a.40.2",
+				Filesize: &sz720,
+			},
+			{
+				FormatID: "313",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=313&source=youtube&clen=712445280&dur=634.566&lmt=1700000000000000&sig=SIG_313",
+				Ext:      "webm",
+				Protocol: "https",
+				Width:    &w4k,
+				Height:   &h4k,
+				VCodec:   "vp9",
+				ACodec:   "none",
+				Filesize: &sz4k,
+			},
+		},
+	}, ytOpts, now)
+	if err := unified.ValidateEnvelopeAt(ytTwoAudible, now); err != nil {
+		t.Fatalf("expected 720p audible default to pass ValidateEnvelopeAt: %v", err)
+	}
+	lowDefault := unified.Clone(ytTwoAudible)
+	itLow := unified.Map(unified.Slice(unified.Map(lowDefault["data"])["items"])[0])
+	for _, rawV := range unified.Slice(itLow["variants"]) {
+		v := unified.Map(rawV)
+		if strings.Contains(unified.Str(v["label"]), "360p") {
+			src := unified.Map(unified.Slice(unified.Map(v["delivery"])["sources"])[0])
+			itLow["default"] = unified.Object{
+				"variant_id": v["id"],
+				"source_id":  src["id"],
+				"url":        src["url"],
+			}
+		}
+	}
+	if err := unified.ValidateEnvelopeAt(lowDefault, now); err == nil {
+		t.Fatal("expected ValidateEnvelopeAt to reject 360p default when 720p audible complete file is present")
+	}
+
+	// 2. Only silent video files: 4K silent selected as default passes; selecting 1080p silent is rejected
+	ytOnlySilent := AdaptInfo(&Info{
+		ID:    "aqz-KE-bpKQ",
+		Title: "Only Silent Video Files",
+		Formats: []Format{
+			{
+				FormatID: "313",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=313&source=youtube&clen=712445280&dur=634.566&lmt=1700000000000000&sig=SIG_313",
+				Ext:      "webm",
+				Protocol: "https",
+				Width:    &w4k,
+				Height:   &h4k,
+				VCodec:   "vp9",
+				ACodec:   "none",
+				Filesize: &sz4k,
+			},
+			{
+				FormatID: "248",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=248&source=youtube&clen=120000000&dur=634.566&lmt=1700000000000000&sig=SIG_248",
+				Ext:      "webm",
+				Protocol: "https",
+				Width:    &w1080,
+				Height:   &h1080,
+				VCodec:   "vp9",
+				ACodec:   "none",
+				Filesize: &sz1080,
+			},
+			{
+				FormatID: "140",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=140&source=youtube&clen=9800000&dur=634.566&lmt=1700000000000000&sig=SIG_140",
+				Ext:      "m4a",
+				Protocol: "https",
+				VCodec:   "none",
+				ACodec:   "mp4a.40.2",
+				Filesize: &szAudio,
+			},
+		},
+	}, ytOpts, now)
+	ytSilentNormal := unified.PublicView(ytOnlySilent, false, now)
+	ytSilentDebug := unified.PublicView(ytOnlySilent, true, now)
+	for viewName, env := range map[string]unified.Object{"normal": ytSilentNormal, "debug": ytSilentDebug} {
+		if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+			t.Fatalf("only-silent %s envelope failed ValidateEnvelopeAt: %v", viewName, err)
+		}
+	}
+	silentLow := unified.Clone(ytSilentNormal)
+	itSilentLow := unified.Map(unified.Slice(unified.Map(silentLow["data"])["items"])[0])
+	v1080Silent := unified.Map(unified.Slice(itSilentLow["variants"])[1])
+	src1080Silent := unified.Map(unified.Slice(unified.Map(v1080Silent["delivery"])["sources"])[0])
+	itSilentLow["default"] = unified.Object{
+		"variant_id": v1080Silent["id"],
+		"source_id":  src1080Silent["id"],
+		"url":        src1080Silent["url"],
+	}
+	if err := unified.ValidateEnvelopeAt(silentLow, now); err == nil {
+		t.Fatal("expected ValidateEnvelopeAt to reject 1080p silent default when 4K silent file is present")
+	}
+
+	// 3. Unknown audio (omitted has_audio) is not forged as true
+	igOpts := AdaptOptions{
+		PlatformID:                   "instagram",
+		ContentID:                    "DCZ12345678",
+		SourceURL:                    "https://www.instagram.com/reel/DCZ12345678/",
+		MaxEntries:                   1,
+		EnableDASHMux:                true,
+		AllowCodecLessProgressiveMP4: true,
+	}
+	igUnknown := AdaptInfo(&Info{
+		ID:     "DCZ12345678",
+		Title:  "Instagram Reel Unknown Codec",
+		Width:  &w1080,
+		Height: &h1080,
+		Formats: []Format{
+			{
+				FormatID: "1",
+				URL:      "https://scontent-nrt1-1.cdninstagram.com/v/t50.2886-16/10000000_1_n.mp4?efg=eyJ2ZW5jb2RlX3RhZyI6InZ0c192b2RfdXJsZ2VuIn0&_nc_ht=scontent-nrt1-1.cdninstagram.com&oe=690D8A00",
+				Ext:      "mp4",
+				Protocol: "https",
+			},
+		},
+	}, igOpts, now)
+	igNormal := unified.PublicView(igUnknown, false, now)
+	igDebug := unified.PublicView(igUnknown, true, now)
+	for viewName, env := range map[string]unified.Object{"normal": igNormal, "debug": igDebug} {
+		if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+			t.Fatalf("Instagram unknown-audio %s envelope failed ValidateEnvelopeAt: %v", viewName, err)
+		}
+		meta := unified.Map(unified.Map(unified.Slice(unified.Map(unified.Slice(unified.Map(env["data"])["items"])[0])["variants"])[0])["metadata"])
+		if _, exists := meta["has_audio"]; exists {
+			t.Fatalf("expected unknown audio to omit has_audio in %s view, got %v", viewName, meta["has_audio"])
+		}
+	}
+
+	// Unknown audio 360p alongside 4K split silent must NOT be treated as audible complete file
+	unknownPlus4KSilent := unified.Clone(ytNormal)
+	itUnk := unified.Map(unified.Slice(unified.Map(unknownPlus4KSilent["data"])["items"])[0])
+	for _, rawV := range unified.Slice(itUnk["variants"]) {
+		v := unified.Map(rawV)
+		if strings.Contains(unified.Str(v["label"]), "360p") {
+			meta := unified.Map(v["metadata"])
+			delete(meta, "has_audio")
+			delete(meta, "audio_codec")
+		}
+	}
+	if err := unified.ValidateEnvelopeAt(unknownPlus4KSilent, now); err == nil {
+		t.Fatal("expected ValidateEnvelopeAt to reject 360p unknown-audio default when 4K silent file is present")
+	}
+
+	if dest := os.Getenv("DOKITOOL_GO_YTDLP_OUTPUT"); dest != "" {
+		exports := unified.Array{
+			ytNormal,
+			ytDebug,
+			unified.PublicView(ytTwoAudible, false, now),
+			unified.PublicView(ytTwoAudible, true, now),
+			ytSilentNormal,
+			ytSilentDebug,
+			igNormal,
+			igDebug,
+		}
+		raw, err := unified.Encode(exports)
+		if err != nil {
+			t.Fatalf("encode DOKITOOL_GO_YTDLP_OUTPUT: %v", err)
+		}
+		if err := os.WriteFile(dest, append(raw, '\n'), 0600); err != nil {
+			t.Fatalf("write DOKITOOL_GO_YTDLP_OUTPUT: %v", err)
+		}
+	}
+}
