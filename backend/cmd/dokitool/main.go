@@ -275,6 +275,6 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, getenv
 	} else {
 		log.Printf("dokitool: yt-dlp engine enabled for x (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
 	}
-	adapters["x"] = x.New(engine)
+	adapters["x"] = x.NewWithSizeProber(engine, x.NewHTTPSizeProber(getenv("DOKITOOL_YTDLP_PROXY")))
 	return nil
 }

@@ -36,12 +36,19 @@ var (
 
 // Parser adapts yt-dlp -J metadata for X / Twitter status URLs into unified-v1.
 type Parser struct {
-	engine ytengine.Extractor
+	engine     ytengine.Extractor
+	sizeProber SizeProber
 }
 
 // New creates an X platform parser bound to the given ytengine.Extractor.
 func New(engine ytengine.Extractor) *Parser {
 	return &Parser{engine: engine}
+}
+
+// NewWithSizeProber creates an X platform parser that optionally probes exact byte
+// lengths for progressive MP4 formats when yt-dlp leaves Filesize unset.
+func NewWithSizeProber(engine ytengine.Extractor, prober SizeProber) *Parser {
+	return &Parser{engine: engine, sizeProber: prober}
 }
 
 // ExtractTweetTarget validates an X / Twitter status URL and returns:
@@ -176,5 +183,6 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		}
 		return unified.ContractError("UPSTREAM_UNAVAILABLE", "当前平台解析服务暂不可用，请稍后重试", true), nil
 	}
+	populateMissingMP4Sizes(ctx, info, p.sizeProber)
 	return AdaptInfo(info, tweetID, source, selectedIndex, now), nil
 }

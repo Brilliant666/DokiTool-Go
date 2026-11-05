@@ -438,3 +438,86 @@ func TestDegradationAndCancellation(t *testing.T) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
+
+func TestSizeProberPopulatesMissingMP4SizesAndFailsSoft(t *testing.T) {
+	const now int64 = 1762300800
+	sourceURL := "https://x.com/historyinmemes/status/1790637656616943991"
+
+	probed := make(map[string]int)
+	prober := func(ctx context.Context, rawURL string) (int64, bool) {
+		probed[rawURL]++
+		if strings.Contains(rawURL, "kF5AeH6MK-1qDlBg.mp4") {
+			return 1404023, true
+		}
+		// Simulate fail-soft on vid270.mp4
+		return 0, false
+	}
+
+	parser := NewWithSizeProber(&stubExtractor{
+		enabled: true,
+		extract: func(ctx context.Context, rawURL string) (*ytengine.Info, error) {
+			return &ytengine.Info{
+				ID:        "1790637589910654976",
+				DisplayID: "1790637656616943991",
+				Title:     "Historic Vids",
+				Formats: []ytengine.Format{
+					{
+						FormatID: "hls-1015",
+						URL:      "https://video.twimg.com/amplify_video/1790637589910654976/pl/avc1/728x720/hls720.m3u8",
+						Ext:      "mp4",
+						Protocol: "m3u8_native",
+						Width:    int64Ptr(728),
+						Height:   int64Ptr(720),
+						VCodec:   "avc1.640020",
+						ACodec:   "mp4a.40.2",
+					},
+					{
+						FormatID:       "http-288",
+						URL:            "https://video.twimg.com/amplify_video/1790637589910654976/vid/avc1/272x270/vid270.mp4?tag=14",
+						Ext:            "mp4",
+						Protocol:       "https",
+						Width:          int64Ptr(272),
+						Height:         int64Ptr(270),
+						TBR:            float64Ptr(288),
+						FilesizeApprox: int64Ptr(557568),
+					},
+					{
+						FormatID:       "http-2176",
+						URL:            "https://video.twimg.com/amplify_video/1790637589910654976/vid/avc1/728x720/kF5AeH6MK-1qDlBg.mp4?tag=14",
+						Ext:            "mp4",
+						Protocol:       "https",
+						Width:          int64Ptr(728),
+						Height:         int64Ptr(720),
+						TBR:            float64Ptr(2176),
+						FilesizeApprox: int64Ptr(4212736),
+					},
+				},
+			}, nil
+		},
+	}, prober)
+
+	payload, err := parser.Parse(context.Background(), sourceURL, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if err := unified.ValidateEnvelopeAt(payload, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+	}
+	// HLS URL must never be probed
+	for u := range probed {
+		if strings.HasSuffix(u, ".m3u8") {
+			t.Fatalf("HLS URL should never be probed for size: %s", u)
+		}
+	}
+
+	item := unified.Map(unified.Slice(unified.Map(payload["data"])["items"])[0])
+	variants := unified.Slice(item["variants"])
+	firstSrc := unified.Map(unified.Slice(unified.Map(unified.Map(variants[0])["delivery"])["sources"])[0])
+	if firstSrc["size_bytes"] != int64(1404023) {
+		t.Fatalf("expected probed size_bytes=1404023 on 720p variant source, got %v", firstSrc["size_bytes"])
+	}
+	secondSrc := unified.Map(unified.Slice(unified.Map(unified.Map(variants[1])["delivery"])["sources"])[0])
+	if secondSrc["size_bytes"] != nil {
+		t.Fatalf("expected nil size_bytes on failed-soft 270p variant source, got %v", secondSrc["size_bytes"])
+	}
+}
