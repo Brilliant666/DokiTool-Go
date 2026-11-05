@@ -6,7 +6,7 @@ import {reactive, ref} from 'vue';
 
 // Real composables, synthetic network responses; no live platform requests.
 describe('unified frontend request contract', () => {
-let vite, parser, config, contract, selection, antiReplay;
+let vite, parser, config, contract, selection;
 const originalFetch=globalThis.fetch, originalWindow=globalThis.window;
 const media='https://media.example.test/video.mp4';
 const file=(id='one',url=media)=>({id,type:'video',variants:[{id:'main',delivery:{kind:'file',sources:[{url}]}}],default:{variant_id:'main',url}});
@@ -17,11 +17,10 @@ before(async()=>{
   config=await vite.ssrLoadModule('/src/services/apiConfig.ts');
   contract=await vite.ssrLoadModule('/src/utils/mediaContract.ts');
   selection=await vite.ssrLoadModule('/src/composables/useVideoSelection.ts');
-  antiReplay=(await vite.ssrLoadModule('/src/utils/antiReplay.js')).antiReplayInstance;
   (await vite.ssrLoadModule('/src/services/operationLogger.js')).operationLogger.enableConsole=false;
   globalThis.window={setTimeout,clearTimeout};
 });
-after(async()=>{globalThis.fetch=originalFetch;globalThis.window=originalWindow;antiReplay?.destroy();await vite?.close();});
+after(async()=>{globalThis.fetch=originalFetch;globalThis.window=originalWindow;await vite?.close();});
 function harness(source='https://source.example.test/work?signature=a%2Bb%3D') {
   const store=reactive({resultData:null,resultVersion:0,
     clearResult(){this.resultData=null;this.resultVersion++;}, setResult(data){this.resultData=data;this.resultVersion++;},

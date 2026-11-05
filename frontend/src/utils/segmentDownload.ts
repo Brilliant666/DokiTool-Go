@@ -13,7 +13,7 @@
  * - 提供按分片打包为 ZIP 的能力（配合 JSZip）。
  */
 
-import { mediaCredentials } from "../downloads/file";
+import { fetchMediaBlob, probeMediaLength, linkAbortSignals } from "../downloads/buffered";
 import { sourceUrl } from "./mediaContract";
 
 /** 带可选字节区间的分片描述（HLS BYTERANGE / 普通整文件分片通用） */
@@ -52,102 +52,27 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-/** 字节区间 → Range 头值；无区间返回 undefined */
-function rangeHeader(segment: HlsSegment): string | undefined {
-  if (segment.start === undefined || segment.length === undefined)
-    return undefined;
-  return `bytes=${segment.start}-${segment.start + segment.length - 1}`;
-}
-
-/** 分片声明的字节数（BYTERANGE 时可直接算出，用于总进度） */
-function segmentLength(segment: HlsSegment): number {
-  return segment.length ?? 0;
-}
-
-/** 单分片抓取，失败自动重试（默认 2 次，间隔 400ms/800ms）：
- * 快手等 CDN 分片 CORS 头会随节点/请求漂移，瞬时失败重试可显著提高合并成功率 */
-async function fetchArrayBuffer(
+/** Retain the existing bounded retry count; cancellation never retries. */
+async function fetchSegmentBlob(
   url: string,
   signal: AbortSignal | undefined,
   onChunk?: (loaded: number, total: number) => void,
   range?: { start: number; length: number },
   retries = 2,
-): Promise<ArrayBuffer> {
+): Promise<Blob> {
   let lastError: unknown;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    try {
-      const headers: Record<string, string> = {};
-      if (range)
-        headers.Range = `bytes=${range.start}-${range.start + range.length - 1}`;
-      const response = await fetch(url, {
-        method: "GET",
-        mode: "cors",
-        headers,
-        signal,
-      });
-      if (!response.ok)
-        throw new Error(`分片请求失败（HTTP ${response.status}）`);
-      if (
-        /text\/html|application\/json/i.test(
-          response.headers.get("content-type") || "",
-        )
-      ) {
-        void response.body?.cancel();
-        throw new Error("分片地址返回了错误页面");
-      }
-      if (range) {
-        const declared = /^bytes (\d+)-(\d+)\/(?:\d+|\*)$/.exec(
-          response.headers.get("content-range") || "",
-        );
-        if (
-          response.status !== 206 ||
-          !declared ||
-          Number(declared[1]) !== range.start ||
-          Number(declared[2]) !== range.start + range.length - 1
-        ) {
-          void response.body?.cancel();
-          throw new Error("分片服务器没有返回请求的字节范围");
-        }
-      }
-      if (!response.body) throw new Error("该分片不支持流式读取");
-
-      const total = Number(response.headers.get("content-length")) || 0;
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let loaded = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        loaded += value.length;
-        onChunk?.(loaded, total);
-      }
-      if (!loaded || (range && loaded !== range.length))
-        throw new Error("分片字节范围不完整");
-      // 有 content-length 时校验完整性
-      if (total > 0 && loaded !== total) {
-        throw new Error(
-          `分片下载不完整：期望 ${total} 字节，实际 ${loaded} 字节`,
-        );
-      }
-      // 拼接为连续 ArrayBuffer
-      const merged = new Uint8Array(loaded);
-      let offset = 0;
-      for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.length;
-      }
-      return merged.buffer;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError")
-        throw error;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (signal?.aborted) throw signal.reason;
+    try { return await fetchMediaBlob(url, { signal, onChunk, range }); }
+    catch (error) {
+      if (signal?.aborted) throw signal.reason;
       lastError = error;
-      if (attempt < retries) {
-        await new Promise<void>((resolve) =>
-          setTimeout(resolve, 400 * (attempt + 1)),
-        );
-      }
+      if (attempt < retries) await new Promise<void>((resolve, reject) => {
+        const abort = () => { clearTimeout(timer); reject(signal?.reason); };
+        const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, 400 * (attempt + 1));
+        signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
+      });
     }
   }
   throw lastError instanceof Error ? lastError : new Error("分片下载失败");
@@ -180,29 +105,8 @@ export async function resolveHlsSegments(
   signal?: AbortSignal,
 ): Promise<HlsSegment[] | null> {
   try {
-    const response = await fetch(url, {
-      mode: "cors",
-      signal,
-      credentials: mediaCredentials(url),
-      referrerPolicy: "no-referrer",
-    });
-    if (!response.ok || !response.body) return null;
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let text = "",
-      size = 0;
-    try {
-      for (;;) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        size += chunk.value.length;
-        if (size > 2 * 1024 * 1024) return null;
-        text += decoder.decode(chunk.value, { stream: true });
-      }
-      text += decoder.decode();
-    } finally {
-      await reader.cancel().catch(() => {});
-    }
+    const manifest = await fetchMediaBlob(url, { signal, maxBytes: 2 * 1024 * 1024 });
+    const text = await manifest.text();
     if (
       !text.trimStart().startsWith("#EXTM3U") ||
       !text.includes("#EXT-X-ENDLIST") ||
@@ -262,93 +166,61 @@ function normalizeSegments(segments: (HlsSegment | string)[]): HlsSegment[] {
     .filter((s) => Boolean(s.url));
 }
 
-/**
- * 合并分片为单个连续 Uint8Array（不触发下载）。
- * 用于「分片合并为单文件」与「多集打包进 ZIP」两种场景。
- * @returns 合并后的视频字节
+/** Optional sizes share a five-second budget and at most four in-flight HEADs. */
+async function measureSegments(segments: HlsSegment[], signal?: AbortSignal): Promise<number[]> {
+  const lengths = segments.map(s => s.length || 0);
+  if (lengths.every(size => size > 0)) return lengths;
+  const linked = linkAbortSignals([signal]);
+  const timer = setTimeout(() => linked.controller.abort(new Error("分片元数据探测超时")), 5000);
+  let next = 0, unknown = false;
+  try {
+    await Promise.all(Array.from({ length: Math.min(4, segments.length) }, async () => {
+      while (!unknown && !linked.signal.aborted && next < segments.length) {
+        const i = next++;
+        if (lengths[i]) continue;
+        try { lengths[i] = await probeMediaLength(segments[i].url, linked.signal); }
+        catch { lengths[i] = 0; }
+        if (!lengths[i]) unknown = true;
+      }
+    }));
+    if (signal?.aborted) throw signal.reason;
+    return lengths;
+  } finally { clearTimeout(timer); linked.dispose(); linked.controller.abort(); }
+}
+
+/** Join byte-concatenable segments as ordered Blob parts, not a second full array.
+ * ZIP may still materialize an entry for JSZip; this is not zero-memory streaming.
  */
 export async function mergeSegments(
   segments: (HlsSegment | string)[],
-  options?: {
-    signal?: AbortSignal;
-    onProgress?: (progress: SegmentProgress) => void;
-  },
-): Promise<Uint8Array<ArrayBuffer>> {
+  options?: { signal?: AbortSignal; onProgress?: (progress: SegmentProgress) => void },
+): Promise<Blob> {
   const usable = normalizeSegments(segments);
-  if (usable.length === 0) throw new Error("没有可用的分片");
-
+  if (!usable.length || usable.length > 2000) throw new Error("分片数量无效");
   const { signal, onProgress } = options || {};
-  const buffers: ArrayBuffer[] = [];
+  const lengths = await measureSegments(usable, signal);
+  let totalBytes = lengths.every(size => size > 0) ? lengths.reduce((a, b) => a + b, 0) : 0;
+  if (!Number.isSafeInteger(totalBytes)) totalBytes = 0;
+  const parts: Blob[] = [];
   let totalLoaded = 0;
-  // BYTERANGE 分片的总字节数可直接得出；整文件分片用 HEAD 探测
-  let totalBytes = usable.every((s) => s.length !== undefined)
-    ? usable.reduce((sum, s) => sum + segmentLength(s), 0)
-    : 0;
-  if (totalBytes === 0) {
-    try {
-      const heads = await Promise.all(
-        usable.map((u) =>
-          fetch(u.url, { method: "HEAD", mode: "cors", signal }).then((r) => ({
-            len: Number(r.headers.get("content-length")) || 0,
-            ok: r.ok,
-          })),
-        ),
-      );
-      if (heads.every((h) => h.ok)) {
-        totalBytes = heads.reduce((sum, h) => sum + h.len, 0);
-      }
-    } catch {
-      totalBytes = 0;
-    }
-  }
-
   for (let i = 0; i < usable.length; i++) {
     const segment = usable[i];
-    const buf = await fetchArrayBuffer(
-      segment.url,
-      signal,
-      (loaded, total) => {
-        const segTotal = totalBytes > 0 ? totalBytes : total * usable.length;
-        onProgress?.({
-          loaded:
-            totalBytes > 0
-              ? totalLoaded + loaded
-              : ((i + loaded / (total || 1)) / usable.length) *
-                (totalBytes || 1),
-          total: totalBytes || segTotal,
-          percent:
-            totalBytes > 0
-              ? Math.round(((totalLoaded + loaded) / totalBytes) * 100)
-              : Math.round(((i + loaded / (total || 1)) / usable.length) * 100),
-          segment: i + 1,
-          segmentCount: usable.length,
-        });
-      },
-      segment.start !== undefined && segment.length !== undefined
-        ? { start: segment.start, length: segment.length }
-        : undefined,
-    );
-    buffers.push(buf);
-    totalLoaded += buf.byteLength;
-    onProgress?.({
-      loaded: totalLoaded,
-      total: totalBytes || totalLoaded,
-      percent:
-        totalBytes > 0
-          ? Math.round((totalLoaded / totalBytes) * 100)
-          : Math.round(((i + 1) / usable.length) * 100),
-      segment: i + 1,
-      segmentCount: usable.length,
-    });
+    const part = await fetchSegmentBlob(segment.url, signal, loaded => onProgress?.({
+      loaded: totalLoaded + loaded, total: totalBytes,
+      percent: totalBytes ? Math.min(99, Math.floor((totalLoaded + loaded) / totalBytes * 100)) : Math.floor(i / usable.length * 100),
+      segment: i + 1, segmentCount: usable.length,
+    }), segment.start !== undefined && segment.length !== undefined ? { start: segment.start, length: segment.length } : undefined);
+    parts.push(part);
+    totalLoaded += part.size;
+    // HEAD is advisory, not proof of a later GET's byte length.
+    if (totalBytes && part.size !== lengths[i]) totalBytes = 0;
+    onProgress?.({ loaded: totalLoaded, total: totalBytes,
+      percent: Math.min(99, Math.floor((i + 1) / usable.length * 100)), segment: i + 1, segmentCount: usable.length });
   }
-
-  const merged = new Uint8Array(totalLoaded);
-  let offset = 0;
-  for (const buf of buffers) {
-    merged.set(new Uint8Array(buf), offset);
-    offset += buf.byteLength;
-  }
-  return merged;
+  if (signal?.aborted) throw signal.reason;
+  const result = new Blob(parts);
+  onProgress?.({ loaded: totalLoaded, total: totalLoaded, percent: 100, segment: usable.length, segmentCount: usable.length });
+  return result;
 }
 
 /**
@@ -365,7 +237,8 @@ export async function mergeAndDownload(
     signal,
     onProgress: options.onProgress,
   });
-  triggerDownload(new Blob([merged]), filename);
+  if (signal?.aborted) throw signal.reason;
+  triggerDownload(merged, filename);
   return true;
 }
 
@@ -379,7 +252,7 @@ export async function appendSegmentsToZip(
   const usable = normalizeSegments(segments);
   for (let i = 0; i < usable.length; i++) {
     const segment = usable[i];
-    const buf = await fetchArrayBuffer(
+    const buf = await fetchSegmentBlob(
       segment.url,
       signal,
       undefined,
@@ -388,6 +261,6 @@ export async function appendSegmentsToZip(
         : undefined,
     );
     const ext = /\.([a-z0-9]+)(\?|$)/i.exec(segment.url)?.[1] || "mp4";
-    zip.file(`${baseName}_part${String(i + 1).padStart(2, "0")}.${ext}`, buf);
+    zip.file(`${baseName}_part${String(i + 1).padStart(2, "0")}.${ext}`, await buf.arrayBuffer());
   }
 }

@@ -761,3 +761,21 @@ healthy. Later valid version comparisons, the rejected a8 experiment and the own
 successful normal production saves are superseding evidence in the closeout summary;
 do not repeat that comparison. This recovery patch does not
 change timeouts, media routing, quality defaults, proxy settings or the Worker.
+
+## PR31 后稳定性整改（2026-11-05，候选代码未发布）
+
+本节对应维护者提供的《DokiTool-Go 生产端与代码仓库全面审查报告》，不是新的媒体验收或现网发布记录。
+
+| 原报告范围 | 本次处理及边界 |
+| --- | --- |
+| B-01 / B-02 / B-04 | 独立 [PR #32](https://github.com/Brilliant666/DokiTool-Go/pull/32) 处理可配置准入、目录隔离、慢请求体和客户表回收；本前端变更不重复修改后端。 |
+| F-01 分片与 ZIP | 分片元数据 HEAD 最多四路，并共享五秒预探测预算。不可读取的长度保持未知，实际 GET 决定字节完整性。分片按序组成 Blob，不再额外分配整件连续 Uint8Array。ZIP 仍由 JSZip 缓冲生成，不宣称零内存或流式 ZIP；转换成员后及时释放原 Blob 引用。 |
+| F-01 请求与任务生命周期 | 分片、HLS 清单和 ZIP 资源的响应头及每次 body.read 最多等待三十秒；正常持续传输没有总下载时长限制。超时/取消关闭对应请求和 reader。ZIP 与分片成品在页面内共用一个可取消、最多一项执行的缓冲队列；普通 Worker 流式下载的两并发与原生交付不改。已有分片最多两次重试保留，取消不重试。 |
+| F-02 | 删除当前产品没有使用的前端自签自验 AntiReplay 及其导入时周期定时器；不触碰 tbvideo 文件完整性 MD5、服务器认证或签票。 |
+| 下载取消兼容性（报告 5.3.5） | resolve 准备阶段不再依赖 AbortSignal.any；组合信号保留首个取消原因，完成/取消后移除监听。原有三十秒准备期限、选择身份与取消语义不变。 |
+| F-05 可访问性的小修 | 跑马灯第二份链接退出键盘与辅助技术导航；移动端不再重新开启 reduced-motion 下的动画。未执行全仓死代码/依赖清理。 |
+| #31 候选暂存边界 | 新增受控回归证明：tbvideo 整件校验若超过原有两分钟附件准备期限，取消读取、无附件返回并回落手动，释放 Worker 名额。该期限与算法未修改；不借此声称大文件内存问题已全部解决。 |
+
+本批没有更改原画/实况来源选择、HTTP/HTTPS 修正、媒体中继、原生 iframe 生命周期、ObjectURL 回收时长或 IndexedDB 清理规则。报告中 Pull 重派、未启用 secure 协议、旧 direct 服务、网关/CSP/HSTS 和全量 CI/依赖治理建议不在本批内，不能记为已修。缓存/singleflight、连接复用与探测并行属于另一组容量工作，也未由本批实现。
+
+发布时本批只需更新配套正式 Vue；下载 Worker 产品脚本与其 build 未变。上线与否以维护者批准和实际发布回执为准。核验优先复用受控小文件、ZIP 配对与取消/恢复回归，不重新下载抖音原画或重复 CDN 测速。
