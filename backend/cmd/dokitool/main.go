@@ -28,11 +28,13 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipixia"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/toutiao"
 	weiboplatform "github.com/Brilliant666/DokiTool-Go/backend/internal/platform/weibo"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/x"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/xiaohongshu"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/zuiyou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
 // preparePublicMedia keeps platform-specific transformations at the public boundary.
@@ -140,6 +142,9 @@ func run(args []string) error {
 		"zuiyou":      zuiyou.NewWithTBVideo(executor, zuiyouSave),
 		"xiaohongshu": xiaohongshu.New(xhsExecutor),
 	}
+	if err := configureYTDLPX(c, adapters, os.Getenv); err != nil {
+		return err
+	}
 	handler, err := api.New(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
 	if err != nil {
 		return err
@@ -245,4 +250,31 @@ func enableTBVideo(key string) (bool, error) {
 		return false, fmt.Errorf("%s must be a boolean", key)
 	}
 	return enabled, nil
+}
+
+// configureYTDLPX optionally registers the X / Twitter platform when
+// DOKITOOL_YTDLP_X_ENABLED=true. Production defaults to false.
+func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, getenv func(string) string) error {
+	raw := getenv("DOKITOOL_YTDLP_X_ENABLED")
+	if raw == "" {
+		return nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return fmt.Errorf("DOKITOOL_YTDLP_X_ENABLED must be a boolean")
+	}
+	if !enabled {
+		return nil
+	}
+	if err := c.Register(catalog.XPlatform()); err != nil {
+		return err
+	}
+	engine, err := ytengine.NewFromEnv(getenv, x.AllowedTargetURL)
+	if err != nil {
+		log.Printf("dokitool: yt-dlp engine disabled for x: %v", err)
+	} else {
+		log.Printf("dokitool: yt-dlp engine enabled for x (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+	}
+	adapters["x"] = x.New(engine)
+	return nil
 }

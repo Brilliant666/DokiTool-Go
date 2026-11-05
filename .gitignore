@@ -108,6 +108,7 @@
 !/backend/internal/shresolver/
 !/backend/internal/testsupport/
 !/backend/internal/unified/
+!/backend/internal/ytengine/
 /backend/lib/*
 !/backend/lib/douyin-media-probe.php
 !/backend/lib/gateway.php
@@ -333,6 +334,7 @@
 !/backend/internal/api/toutiao_http_test.go
 !/backend/internal/api/weibo_signed_oracle_test.go
 !/backend/internal/api/weibo_test.go
+!/backend/internal/api/x_http_test.go
 !/backend/internal/api/xiaohongshu_test.go
 !/backend/internal/api/zuiyou_http_test.go
 /backend/internal/catalog/*
@@ -362,6 +364,7 @@
 !/backend/internal/platform/pipixia/
 !/backend/internal/platform/toutiao/
 !/backend/internal/platform/weibo/
+!/backend/internal/platform/x/
 !/backend/internal/platform/xiaohongshu/
 !/backend/internal/platform/zuiyou/
 /backend/internal/probe/*
@@ -410,6 +413,12 @@
 !/backend/internal/unified/variants_test.go
 !/backend/internal/unified/work.go
 !/backend/internal/unified/work_test.go
+/backend/internal/ytengine/*
+!/backend/internal/ytengine/engine.go
+!/backend/internal/ytengine/engine_test.go
+!/backend/internal/ytengine/proc_other.go
+!/backend/internal/ytengine/proc_unix.go
+!/backend/internal/ytengine/types.go
 /backend/testdata/php-25beaee/*
 !/backend/testdata/php-25beaee/README.md
 !/backend/testdata/php-25beaee/cases.json
@@ -615,6 +624,10 @@
 !/backend/internal/platform/weibo/target_oracle_test.go
 !/backend/internal/platform/weibo/target_test.go
 !/backend/internal/platform/weibo/testdata/
+/backend/internal/platform/x/*
+!/backend/internal/platform/x/formatter.go
+!/backend/internal/platform/x/parser.go
+!/backend/internal/platform/x/parser_test.go
 /backend/internal/platform/xiaohongshu/*
 !/backend/internal/platform/xiaohongshu/baseline_test.go
 !/backend/internal/platform/xiaohongshu/formatter.go

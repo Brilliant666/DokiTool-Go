@@ -1,10 +1,18 @@
 package main
 
 import (
-	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/api"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
 func TestXHSPageTransportSelection(t *testing.T) {
@@ -69,6 +77,88 @@ func TestShanghaiModeSelection(t *testing.T) {
 			s, h, err := configureShanghai(fetch.New(), func(k string) string { return tc.env[k] })
 			if (err != nil) != tc.invalid || (s != nil) != tc.resolver || (h != nil) != tc.control {
 				t.Fatalf("resolver=%T control=%T error=%v", s, h, err)
+			}
+		})
+	}
+}
+
+func TestYTDLPXConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "yt-dlp")
+	payload := []byte("#!/bin/sh\necho '{}' \n")
+	if err := os.WriteFile(fakeBin, payload, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	hexSum := hex.EncodeToString(sum[:])
+
+	origHash, hadOrig := ytengine.OfficialSHA256Sums20261026["yt-dlp-cmd-test"]
+	ytengine.OfficialSHA256Sums20261026["yt-dlp-cmd-test"] = hexSum
+	defer func() {
+		if hadOrig {
+			ytengine.OfficialSHA256Sums20261026["yt-dlp-cmd-test"] = origHash
+		} else {
+			delete(ytengine.OfficialSHA256Sums20261026, "yt-dlp-cmd-test")
+		}
+	}()
+
+	tests := []struct {
+		name           string
+		env            map[string]string
+		wantRegistered bool
+		wantErr        bool
+	}{
+		{
+			name:           "default-off",
+			env:            nil,
+			wantRegistered: false,
+			wantErr:        false,
+		},
+		{
+			name:           "explicit-false",
+			env:            map[string]string{"DOKITOOL_YTDLP_X_ENABLED": "false"},
+			wantRegistered: false,
+			wantErr:        false,
+		},
+		{
+			name:           "invalid-bool",
+			env:            map[string]string{"DOKITOOL_YTDLP_X_ENABLED": "auto"},
+			wantRegistered: false,
+			wantErr:        true,
+		},
+		{
+			name: "enabled-missing-binary-degrades-gracefully",
+			env: map[string]string{
+				"DOKITOOL_YTDLP_X_ENABLED": "true",
+				"DOKITOOL_YTDLP_BINARY":    filepath.Join(dir, "missing-yt-dlp"),
+			},
+			wantRegistered: true,
+			wantErr:        false,
+		},
+		{
+			name: "enabled-verified-binary",
+			env: map[string]string{
+				"DOKITOOL_YTDLP_X_ENABLED": "true",
+				"DOKITOOL_YTDLP_BINARY":    fakeBin,
+			},
+			wantRegistered: true,
+			wantErr:        false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := catalog.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			adapters := map[string]api.Adapter{}
+			err = configureYTDLPX(c, adapters, func(k string) string { return tc.env[k] })
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("configureYTDLPX err=%v, wantErr=%v", err, tc.wantErr)
+			}
+			if c.Has("x") != tc.wantRegistered || (adapters["x"] != nil) != tc.wantRegistered {
+				t.Fatalf("catalog.Has(x)=%v adapter=%v, wantRegistered=%v", c.Has("x"), adapters["x"] != nil, tc.wantRegistered)
 			}
 		})
 	}
