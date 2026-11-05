@@ -266,6 +266,8 @@ func (e *Engine) CommandArgs(targetURL string) []string {
 		"--no-progress",
 		"--no-cache-dir",
 		"--no-cookies-from-browser",
+		"--js-runtimes", "deno",
+		"--js-runtimes", "node",
 		"--socket-timeout", strconv.Itoa(socketSec),
 	}
 	if e != nil && e.proxyURL != "" {
@@ -437,6 +439,8 @@ func buildIsolatedEnv(tempDir, envPath string) []string {
 	}
 	if envPath != "" {
 		env = append(env, "PATH="+envPath)
+	} else {
+		env = append(env, "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
 	}
 	if sysRoot := os.Getenv("SYSTEMROOT"); sysRoot != "" {
 		env = append(env, "SYSTEMROOT="+sysRoot)

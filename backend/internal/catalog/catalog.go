@@ -34,6 +34,30 @@ func XPlatform() unified.Object {
 	}
 }
 
+// YouTubePlatform returns the optional registry entry for YouTube.
+func YouTubePlatform() unified.Object {
+	return unified.Object{
+		"id":           "youtube",
+		"name":         "YouTube",
+		"site_url":     "https://www.youtube.com/",
+		"icon":         "youtube",
+		"capabilities": unified.Array{"video"},
+		"domains":      unified.Array{"youtube.com", "youtu.be"},
+	}
+}
+
+// InstagramPlatform returns the optional registry entry for Instagram.
+func InstagramPlatform() unified.Object {
+	return unified.Object{
+		"id":           "instagram",
+		"name":         "Instagram",
+		"site_url":     "https://www.instagram.com/",
+		"icon":         "instagram",
+		"capabilities": unified.Array{"video"},
+		"domains":      unified.Array{"instagram.com"},
+	}
+}
+
 func Decode(data []byte) (*Catalog, error) {
 	value, err := unified.DecodeValue(data)
 	if err != nil {

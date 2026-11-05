@@ -101,10 +101,15 @@ type Info struct {
 	DisplayID    string      `json:"display_id"`
 	Type         string      `json:"_type"`
 	Title        string      `json:"title"`
+	Fulltitle    string      `json:"fulltitle"`
 	Description  string      `json:"description"`
 	Uploader     string      `json:"uploader"`
 	UploaderID   string      `json:"uploader_id"`
 	UploaderURL  string      `json:"uploader_url"`
+	Channel      string      `json:"channel"`
+	ChannelID    string      `json:"channel_id"`
+	Width        *int64      `json:"width"`
+	Height       *int64      `json:"height"`
 	Timestamp    *float64    `json:"timestamp"`
 	Duration     *float64    `json:"duration"`
 	ViewCount    *int64      `json:"view_count"`

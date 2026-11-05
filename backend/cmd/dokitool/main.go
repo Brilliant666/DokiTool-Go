@@ -23,6 +23,7 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/media/weibo"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/bilibili"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/instagram"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/kuaishou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipigx"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipixia"
@@ -30,6 +31,7 @@ import (
 	weiboplatform "github.com/Brilliant666/DokiTool-Go/backend/internal/platform/weibo"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/x"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/xiaohongshu"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/youtube"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/zuiyou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
@@ -252,29 +254,71 @@ func enableTBVideo(key string) (bool, error) {
 	return enabled, nil
 }
 
-// configureYTDLPX optionally registers the X / Twitter platform when
-// DOKITOOL_YTDLP_X_ENABLED=true. Production defaults to false.
+// configureYTDLPX optionally registers the X / Twitter, YouTube, and Instagram
+// platforms when their respective DOKITOOL_YTDLP_*_ENABLED switches are true.
+// Production defaults all switches to false.
 func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, getenv func(string) string) error {
-	raw := getenv("DOKITOOL_YTDLP_X_ENABLED")
-	if raw == "" {
-		return nil
+	parseSwitch := func(key string) (bool, error) {
+		raw := getenv(key)
+		if raw == "" {
+			return false, nil
+		}
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return false, fmt.Errorf("%s must be a boolean", key)
+		}
+		return enabled, nil
 	}
-	enabled, err := strconv.ParseBool(raw)
+
+	xEnabled, err := parseSwitch("DOKITOOL_YTDLP_X_ENABLED")
 	if err != nil {
-		return fmt.Errorf("DOKITOOL_YTDLP_X_ENABLED must be a boolean")
-	}
-	if !enabled {
-		return nil
-	}
-	if err := c.Register(catalog.XPlatform()); err != nil {
 		return err
 	}
-	engine, err := ytengine.NewFromEnv(getenv, x.AllowedTargetURL)
+	ytEnabled, err := parseSwitch("DOKITOOL_YTDLP_YOUTUBE_ENABLED")
 	if err != nil {
-		log.Printf("dokitool: yt-dlp engine disabled for x: %v", err)
-	} else {
-		log.Printf("dokitool: yt-dlp engine enabled for x (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+		return err
 	}
-	adapters["x"] = x.NewWithSizeProber(engine, x.NewHTTPSizeProber(getenv("DOKITOOL_YTDLP_PROXY")))
+	igEnabled, err := parseSwitch("DOKITOOL_YTDLP_INSTAGRAM_ENABLED")
+	if err != nil {
+		return err
+	}
+
+	proxyURL := getenv("DOKITOOL_YTDLP_PROXY")
+	if xEnabled {
+		if err := c.Register(catalog.XPlatform()); err != nil {
+			return err
+		}
+		engine, err := ytengine.NewFromEnv(getenv, x.AllowedTargetURL)
+		if err != nil {
+			log.Printf("dokitool: yt-dlp engine disabled for x: %v", err)
+		} else {
+			log.Printf("dokitool: yt-dlp engine enabled for x (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+		}
+		adapters["x"] = x.NewWithSizeProber(engine, x.NewHTTPSizeProber(proxyURL))
+	}
+	if ytEnabled {
+		if err := c.Register(catalog.YouTubePlatform()); err != nil {
+			return err
+		}
+		engine, err := ytengine.NewFromEnv(getenv, youtube.AllowedTargetURL)
+		if err != nil {
+			log.Printf("dokitool: yt-dlp engine disabled for youtube: %v", err)
+		} else {
+			log.Printf("dokitool: yt-dlp engine enabled for youtube (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+		}
+		adapters["youtube"] = youtube.NewWithSizeProber(engine, ytengine.NewHTTPSizeProber(proxyURL, youtube.AllowedMediaURL))
+	}
+	if igEnabled {
+		if err := c.Register(catalog.InstagramPlatform()); err != nil {
+			return err
+		}
+		engine, err := ytengine.NewFromEnv(getenv, instagram.AllowedTargetURL)
+		if err != nil {
+			log.Printf("dokitool: yt-dlp engine disabled for instagram: %v", err)
+		} else {
+			log.Printf("dokitool: yt-dlp engine enabled for instagram (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, engine.BinaryAsset(), engine.BinarySHA256())
+		}
+		adapters["instagram"] = instagram.NewWithSizeProber(engine, ytengine.NewHTTPSizeProber(proxyURL, instagram.AllowedMediaURL))
+	}
 	return nil
 }
