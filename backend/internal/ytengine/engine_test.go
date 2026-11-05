@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -775,5 +777,304 @@ func TestPR36ReviewCounterexamples(t *testing.T) {
 	firstSurviving := unified.Map(multiItems[0])
 	if unified.Str(multiData["default_item_id"]) != unified.Str(firstSurviving["id"]) || !unified.Equal(firstSurviving["index"], 2) {
 		t.Fatalf("R1 counterexample failed: expected default_item_id=%v (index 2), got default_item_id=%v (index=%v)", firstSurviving["id"], multiData["default_item_id"], firstSurviving["index"])
+	}
+}
+
+func TestPR36Review5785629879Counterexamples(t *testing.T) {
+	const now int64 = 1762300800
+
+	// Counterexample 1 (R2-A): External proxy must not bypass controlled outbound boundary
+	binPath, hashes := writeFakeYTDLP(t, `echo '{"id":"1","formats":[{"format_id":"18","url":"https://video.twimg.com/v.mp4","ext":"mp4"}]}'`)
+	privateResolver := stubResolver{
+		ips: map[string][]netip.Addr{
+			"x.com":         {netip.MustParseAddr("10.0.0.1")},
+			"public.x.com":  {netip.MustParseAddr("93.184.216.34")},
+			"private.x.com": {netip.MustParseAddr("10.0.0.1")},
+		},
+	}
+	// New with ProxyURL + Resolver/AllowedOutboundHost must fail closed
+	if engWithProxy, err := New(Config{
+		BinaryPath:          binPath,
+		AllowedHashes:       hashes,
+		AllowedOutboundHost: func(h string) bool { return h == "x.com" || strings.HasSuffix(h, ".x.com") },
+		Resolver:            privateResolver,
+		ProxyURL:            "http://127.0.0.1:18080",
+	}); err == nil || engWithProxy.Enabled() {
+		t.Fatalf("R2-A failed: expected New with ProxyURL and outbound policy to fail closed, got enabled=%v err=%v", engWithProxy.Enabled(), err)
+	}
+	// Direct verifyPublicTargetHost & Extract with ProxyURL set on Engine struct must still enforce Resolver and block private IP
+	directProxyEng := &Engine{
+		enabled:             true,
+		binaryPath:          binPath,
+		allowedOutboundHost: func(h string) bool { return h == "x.com" || strings.HasSuffix(h, ".x.com") },
+		resolver:            privateResolver,
+		proxyURL:            "http://127.0.0.1:18080",
+		sem:                 make(chan struct{}, 1),
+		timeout:             5 * time.Second,
+	}
+	if err := directProxyEng.verifyPublicTargetHost(context.Background(), "https://x.com/i/status/1"); err == nil || err.Code != CodeUpstreamBlocked {
+		t.Fatalf("R2-A failed: verifyPublicTargetHost with ProxyURL bypassed private IP check: %v", err)
+	}
+	if _, err := directProxyEng.Extract(context.Background(), "https://x.com/i/status/1"); err == nil {
+		t.Fatalf("R2-A failed: Extract with ProxyURL and private target IP succeeded unexpectedly")
+	}
+	// NewHTTPSizeProber with external proxy must fail closed without dialing
+	proberWithProxy := NewHTTPSizeProber("http://127.0.0.1:18080", func(string) bool { return true })
+	if sz, ok := proberWithProxy(context.Background(), "https://video.twimg.com/ext_tw_video/1/pu/vid/720x720/v.mp4"); ok || sz != 0 {
+		t.Fatalf("R2-A failed: expected NewHTTPSizeProber with external proxy to fail closed, got (%d, %v)", sz, ok)
+	}
+
+	// Counterexamples 2, 3, 4 (R2-B): Gate POST body preservation, HTTP->HTTPS redirect, and CONNECT cancellation cleanup
+	var gotPostBody string
+	upstreamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/post":
+			b, _ := io.ReadAll(r.Body)
+			gotPostBody = string(b)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok:" + gotPostBody))
+		case "/step1":
+			http.Redirect(w, r, "https://public.x.com/step2", http.StatusFound)
+		case "/step2":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("https-step2-ok"))
+		case "/step1-private":
+			http.Redirect(w, r, "https://private.x.com/step2", http.StatusFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstreamSrv.Close()
+
+	srvURL, _ := url.Parse(upstreamSrv.URL)
+	gateEng, err := New(Config{
+		BinaryPath:          binPath,
+		AllowedHashes:       hashes,
+		AllowedOutboundHost: func(h string) bool { return h == "x.com" || strings.HasSuffix(h, ".x.com") },
+		Resolver:            privateResolver,
+		DialAddr: func(_ netip.Addr, _ string) string {
+			return srvURL.Host
+		},
+	})
+	if err != nil {
+		t.Fatalf("New gateEng failed: %v", err)
+	}
+
+	gateCtx, gateCancel := context.WithCancel(context.Background())
+	defer gateCancel()
+	gateURL, closeGate, err := gateEng.startOutboundGate(gateCtx)
+	if err != nil {
+		t.Fatalf("startOutboundGate failed: %v", err)
+	}
+	defer closeGate()
+
+	parsedGate, _ := url.Parse(gateURL)
+	gateClient := &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(parsedGate),
+		},
+		Timeout: 3 * time.Second,
+	}
+
+	// Counterexample 2: POST body "hello=1" preserved through gate
+	postResp, err := gateClient.Post("http://public.x.com/post", "application/x-www-form-urlencoded", strings.NewReader("hello=1"))
+	if err != nil {
+		t.Fatalf("R2-B POST failed: %v", err)
+	}
+	_ = postResp.Body.Close()
+	if postResp.StatusCode != http.StatusOK || gotPostBody != "hello=1" {
+		t.Fatalf("R2-B POST body counterexample failed: status=%d gotPostBody=%q, want 'hello=1'", postResp.StatusCode, gotPostBody)
+	}
+
+	// Counterexample 3: http://public.x.com/step1 -> 302 https://public.x.com/step2 succeeds, while -> https://private.x.com/step2 is 403
+	redirResp, err := gateClient.Get("http://public.x.com/step1")
+	if err != nil {
+		t.Fatalf("R2-B HTTP->HTTPS redirect request failed: %v", err)
+	}
+	redirBody, _ := io.ReadAll(redirResp.Body)
+	_ = redirResp.Body.Close()
+	if redirResp.StatusCode != http.StatusOK || string(redirBody) != "https-step2-ok" {
+		t.Fatalf("R2-B HTTP->HTTPS public redirect failed: status=%d body=%q", redirResp.StatusCode, string(redirBody))
+	}
+	privRedirResp, err := gateClient.Get("http://public.x.com/step1-private")
+	if err != nil {
+		t.Fatalf("R2-B HTTP->HTTPS private redirect request failed: %v", err)
+	}
+	_ = privRedirResp.Body.Close()
+	if privRedirResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("R2-B HTTP->HTTPS private redirect expected 403 Forbidden, got %d", privRedirResp.StatusCode)
+	}
+
+	// Counterexample 4: CONNECT tunnel closes within <500ms when cancel() + closeGate() is invoked
+	holdLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen holdLn failed: %v", err)
+	}
+	defer holdLn.Close()
+	holdDone := make(chan struct{})
+	defer close(holdDone)
+	go func() {
+		for {
+			c, err := holdLn.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer conn.Close()
+				<-holdDone
+			}(c)
+		}
+	}()
+
+	connEng := *gateEng
+	connEng.dialAddr = func(_ netip.Addr, _ string) string {
+		return holdLn.Addr().String()
+	}
+	tunCtx, tunCancel := context.WithCancel(context.Background())
+	tunGateURL, closeTunGate, err := connEng.startOutboundGate(tunCtx)
+	if err != nil {
+		t.Fatalf("startOutboundGate for CONNECT test failed: %v", err)
+	}
+	tunParsed, _ := url.Parse(tunGateURL)
+	tunConn, err := net.DialTimeout("tcp", tunParsed.Host, 2*time.Second)
+	if err != nil {
+		t.Fatalf("dial tunGate failed: %v", err)
+	}
+	defer tunConn.Close()
+	if _, err := tunConn.Write([]byte("CONNECT public.x.com:443 HTTP/1.1\r\nHost: public.x.com:443\r\n\r\n")); err != nil {
+		t.Fatalf("write CONNECT failed: %v", err)
+	}
+	replyBuf := make([]byte, 128)
+	n, err := tunConn.Read(replyBuf)
+	if err != nil || !strings.Contains(string(replyBuf[:n]), "200 Connection Established") {
+		t.Fatalf("expected 200 Connection Established, got %q (err=%v)", string(replyBuf[:n]), err)
+	}
+	startCancel := time.Now()
+	tunCancel()
+	closeTunGate()
+	_ = tunConn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	eofBuf := make([]byte, 16)
+	_, readErr := tunConn.Read(eofBuf)
+	elapsed := time.Since(startCancel)
+	if readErr == nil {
+		t.Fatalf("R2-B CONNECT cleanup failed: expected tunnel read to return error/EOF after cancel+closeGate")
+	}
+	if netErr, ok := readErr.(net.Error); ok && netErr.Timeout() {
+		t.Fatalf("R2-B CONNECT cleanup failed: tunnel remained open until 500ms deadline (%v)", elapsed)
+	}
+
+	// Counterexample 5 (R3): Optional size probe success/failure does not drift source_id, while conflicting size is rejected
+	w360, h360, sz360 := int64(640), int64(360), int64(28523658)
+	ytOpts := AdaptOptions{
+		PlatformID:    "youtube",
+		ContentID:     "aqz-KE-bpKQ",
+		SourceURL:     "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+		MaxEntries:    1,
+		EnableDASHMux: true,
+	}
+	ytURL := "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=18&source=youtube&clen=28523658&dur=634.566&lmt=1700000000000000&sig=SIG_A"
+	envKnownSize := AdaptInfo(&Info{
+		ID: "aqz-KE-bpKQ",
+		Formats: []Format{{
+			FormatID: "18",
+			URL:      ytURL,
+			Ext:      "mp4",
+			Protocol: "https",
+			Width:    &w360,
+			Height:   &h360,
+			VCodec:   "avc1.42001E",
+			ACodec:   "mp4a.40.2",
+			Filesize: &sz360,
+		}},
+	}, ytOpts, now)
+	envNilSize := AdaptInfo(&Info{
+		ID: "aqz-KE-bpKQ",
+		Formats: []Format{{
+			FormatID: "18",
+			URL:      ytURL,
+			Ext:      "mp4",
+			Protocol: "https",
+			Width:    &w360,
+			Height:   &h360,
+			VCodec:   "avc1.42001E",
+			ACodec:   "mp4a.40.2",
+			Filesize: nil,
+		}},
+	}, ytOpts, now)
+	defKnown := unified.Map(unified.Map(unified.Slice(unified.Map(envKnownSize["data"])["items"])[0])["default"])
+	defNil := unified.Map(unified.Map(unified.Slice(unified.Map(envNilSize["data"])["items"])[0])["default"])
+	if unified.Str(defKnown["source_id"]) != unified.Str(defNil["source_id"]) {
+		t.Fatalf("R3 counterexample failed: source_id drifted when Filesize toggled nil: %v vs %v", defKnown["source_id"], defNil["source_id"])
+	}
+	badSz := int64(99999)
+	envConflictSize := AdaptInfo(&Info{
+		ID: "aqz-KE-bpKQ",
+		Formats: []Format{{
+			FormatID: "18",
+			URL:      ytURL,
+			Ext:      "mp4",
+			Protocol: "https",
+			Width:    &w360,
+			Height:   &h360,
+			VCodec:   "avc1.42001E",
+			ACodec:   "mp4a.40.2",
+			Filesize: &badSz,
+		}},
+	}, ytOpts, now)
+	defConflict := unified.Map(unified.Map(unified.Slice(unified.Map(envConflictSize["data"])["items"])[0])["default"])
+	if _, hasSize := defConflict["size_bytes"]; hasSize {
+		t.Fatalf("R3 counterexample failed: expected conflicting clen vs Filesize to omit size_bytes, got %v", defConflict["size_bytes"])
+	}
+
+	// Counterexample 6 (Default selection + 4K metadata): 360p (has_audio=true) + 2160p (3840x2160, has_audio=false)
+	w4k, h4k, sz4k := int64(3840), int64(2160), int64(712445280)
+	env4K := AdaptInfo(&Info{
+		ID:    "aqz-KE-bpKQ",
+		Title: "4K Test",
+		Formats: []Format{
+			{
+				FormatID: "18",
+				URL:      ytURL,
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w360,
+				Height:   &h360,
+				VCodec:   "avc1.42001E",
+				ACodec:   "mp4a.40.2",
+				Filesize: &sz360,
+			},
+			{
+				FormatID: "401",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=401&source=youtube&clen=712445280&dur=634.566&lmt=1700000000000000&sig=SIG_B",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w4k,
+				Height:   &h4k,
+				VCodec:   "av01.0.13M.08",
+				ACodec:   "none",
+				Filesize: &sz4k,
+			},
+		},
+	}, ytOpts, now)
+	if err := unified.ValidateEnvelopeAt(env4K, now); err != nil {
+		t.Fatalf("4K envelope validation failed: %v", err)
+	}
+	item4K := unified.Map(unified.Slice(unified.Map(env4K["data"])["items"])[0])
+	def4K := unified.Map(item4K["default"])
+	if !strings.Contains(unified.Str(def4K["url"]), "itag=18") {
+		t.Fatalf("expected 360p audible variant (itag=18) as item.default, got %+v", def4K)
+	}
+	variants4K := unified.Slice(item4K["variants"])
+	meta4K := unified.Map(unified.Map(variants4K[0])["metadata"])
+	if !unified.Equal(meta4K["width"], int64(3840)) || !unified.Equal(meta4K["height"], int64(2160)) {
+		t.Fatalf("expected 4K silent variant to preserve metadata.width=3840 and metadata.height=2160, got %+v", meta4K)
+	}
+
+	// Counterexample 7 (R4): 206 Partial Content with empty body must be rejected
+	if sz, ok := ValidateProbedMediaResponse(http.StatusPartialContent, http.Header{
+		"Content-Type":  {"video/mp4"},
+		"Content-Range": {"bytes 0-0/12345"},
+	}, []byte{}); ok || sz != 0 {
+		t.Fatalf("R4 206 empty-body counterexample failed: accepted empty body as (%d, %v)", sz, ok)
 	}
 }

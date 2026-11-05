@@ -201,6 +201,8 @@ func TestParseYouTube4KMuxAndProgressiveFile(t *testing.T) {
 		"360p (含音频)",
 		"仅音频 M4A (129 kbps)",
 	}
+	wantWidths := []int64{3840, 2560, 1920, 640, 0}
+	wantHeights := []int64{2160, 1440, 1080, 360, 0}
 	for i, want := range wantLabels {
 		v := unified.Map(variants[i])
 		if got := unified.Str(v["label"]); got != want {
@@ -208,6 +210,12 @@ func TestParseYouTube4KMuxAndProgressiveFile(t *testing.T) {
 		}
 		if kind := unified.Str(unified.Map(v["delivery"])["kind"]); kind != "file" {
 			t.Fatalf("variant[%d] kind = %q, want file", i, kind)
+		}
+		meta := unified.Map(v["metadata"])
+		if wantWidths[i] > 0 {
+			if !unified.Equal(meta["width"], wantWidths[i]) || !unified.Equal(meta["height"], wantHeights[i]) {
+				t.Fatalf("variant[%d] (%s) metadata dimensions = %vx%v, want %dx%d", i, want, meta["width"], meta["height"], wantWidths[i], wantHeights[i])
+			}
 		}
 	}
 
@@ -263,14 +271,21 @@ func TestYouTubeSourceIdentityPreservedAcrossSignatureRenewal(t *testing.T) {
 
 	pub1 := runParse(makeFormat(url1, "18", 28523658), now)
 	pub2 := runParse(makeFormat(url2, "18", 28523658), now+120)
+	fNoSize := makeFormat(url2, "18", 0)
+	fNoSize.Filesize = nil
+	pubNoSize := runParse(fNoSize, now+180)
 	pubDiff := runParse(makeFormat(urlDiffItag, "22", 28523658), now+120)
 
 	def1 := unified.Map(unified.Map(unified.Slice(unified.Map(pub1["data"])["items"])[0])["default"])
 	def2 := unified.Map(unified.Map(unified.Slice(unified.Map(pub2["data"])["items"])[0])["default"])
+	defNoSize := unified.Map(unified.Map(unified.Slice(unified.Map(pubNoSize["data"])["items"])[0])["default"])
 	defDiff := unified.Map(unified.Map(unified.Slice(unified.Map(pubDiff["data"])["items"])[0])["default"])
 
 	if unified.Str(def1["variant_id"]) != unified.Str(def2["variant_id"]) || unified.Str(def1["source_id"]) != unified.Str(def2["source_id"]) {
 		t.Fatalf("expected YouTube variant_id and source_id to stay stable across signature renewal: %+v vs %+v", def1, def2)
+	}
+	if unified.Str(def1["source_id"]) != unified.Str(defNoSize["source_id"]) {
+		t.Fatalf("expected YouTube source_id to stay stable when optional size probe fails (Filesize=nil): %v vs %v", def1["source_id"], defNoSize["source_id"])
 	}
 	if !strings.HasPrefix(unified.Str(def2["url"]), url2) {
 		t.Fatalf("expected renewed url2 prefix to be preserved in default.url, got %q", unified.Str(def2["url"]))

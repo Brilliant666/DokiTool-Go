@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -95,59 +94,14 @@ func NewSizeProber(executor fetch.Executor, allowedMediaURL func(string) bool) S
 // NewHTTPSizeProber creates a bounded, no-redirect HTTP Range size prober
 // restricted to URLs permitted by allowedMediaURL. When proxyURL is empty, it
 // delegates directly to NewSizeProber(fetch.New(), allowedMediaURL) and never
-// inherits environment proxies.
+// inherits environment proxies. When proxyURL is non-empty, it fails closed
+// (returning a no-op prober) rather than bypassing fetch.Executor's hop-by-hop
+// DNS and public-IP boundary.
 func NewHTTPSizeProber(proxyURL string, allowedMediaURL func(string) bool) SizeProber {
-	trimmed := strings.TrimSpace(proxyURL)
-	if trimmed == "" {
-		return NewSizeProber(fetch.New(), allowedMediaURL)
-	}
-	if err := validateProxyURL(trimmed); err != nil {
+	if strings.TrimSpace(proxyURL) != "" {
 		return func(context.Context, string) (int64, bool) { return 0, false }
 	}
-	parsedProxy, err := url.Parse(trimmed)
-	if err != nil {
-		return func(context.Context, string) (int64, bool) { return 0, false }
-	}
-	transport := &http.Transport{
-		Proxy:               http.ProxyURL(parsedProxy),
-		MaxIdleConns:        16,
-		MaxIdleConnsPerHost: 8,
-		IdleConnTimeout:     30 * time.Second,
-		TLSHandshakeTimeout: 1200 * time.Millisecond,
-	}
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   sizeProbeTotalTimeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	return func(ctx context.Context, rawURL string) (int64, bool) {
-		cleanURL := SanitizeMediaURL(rawURL, allowedMediaURL)
-		if cleanURL == "" {
-			return 0, false
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cleanURL, nil)
-		if err != nil {
-			return 0, false
-		}
-		req.Header.Set("Range", "bytes=0-0")
-		req.Header.Set("Accept", "*/*")
-		req.Header.Set("Accept-Encoding", "identity")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return 0, false
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxProbeBodyBytes+1))
-		if err != nil || len(body) > maxProbeBodyBytes {
-			return 0, false
-		}
-		return ValidateProbedMediaResponse(resp.StatusCode, resp.Header, body)
-	}
+	return NewSizeProber(fetch.New(), allowedMediaURL)
 }
 
 // ValidateProbedMediaResponse validates an HTTP Range probe response and extracts
@@ -183,7 +137,7 @@ func ValidateProbedMediaResponse(status int, headers http.Header, body []byte) (
 				return 0, false
 			}
 		}
-		if int64(len(body)) > expectedWindow {
+		if int64(len(body)) != expectedWindow {
 			return 0, false
 		}
 		return total, true
@@ -686,12 +640,10 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 	}
 
 	hasSplitSilentTracks := len(filteredDASHVideo) > 0
-	hasProgressiveDeliverable := len(dedupedMP4) > 0
 
 	// 1. High-Resolution DASH Video-Only Tracks as Directly Downloadable Files (kind == "file", has_audio == false).
-	// When a complete progressive audiovisual MP4 is also available (e.g. YouTube itag=18 360p),
-	// omit width/height from silent-track metadata so unified.SelectDefault selects the complete
-	// audiovisual file as item.default while keeping 4K/2K/1080p silent tracks in item.variants.
+	// True width and height are preserved in metadata; unified.SelectDefault explicitly
+	// prefers complete audiovisual files over split silent video-only tracks for item.default.
 	for i, vf := range filteredDASHVideo {
 		videoKey := nonEmptyOr(vf.FormatID, fmt.Sprintf("dashv-%d", i+1))
 		sources := buildFormatSourcesWithContext(vf, opts, entryKey, videoKey, "", now)
@@ -699,10 +651,6 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 			continue
 		}
 		metadata := buildFormatMetadata(vf, boolPtr(false), true)
-		if hasProgressiveDeliverable {
-			delete(metadata, "width")
-			delete(metadata, "height")
-		}
 		variantID := "v-" + shortDigest(opts.PlatformID+":dashv-file:"+entryKey+":"+videoKey)
 		if seenVariantIDs[variantID] {
 			continue
@@ -993,18 +941,38 @@ func buildFormatSourcesWithContext(f Format, opts AdaptOptions, entryKey, format
 	rawSource := unified.Object{
 		"url": decorateYouTubeSourceURL(f.URL, itemTitle),
 	}
-	var sizeVal int64
+	urlClen := extractURLClen(f.URL)
+	var sizeConflict int64
 	if f.Filesize != nil && *f.Filesize > 0 && *f.Filesize <= maxSafeInteger {
-		rawSource["size_bytes"] = *f.Filesize
-		sizeVal = *f.Filesize
+		if urlClen > 0 && *f.Filesize != urlClen {
+			sizeConflict = *f.Filesize
+		} else {
+			rawSource["size_bytes"] = *f.Filesize
+		}
 	}
-	if id := buildYTSourceIdentity(f, opts.PlatformID, opts.ContentID, entryKey, formatKey, sizeVal); id != "" {
+	if id := buildYTSourceIdentity(f, opts.PlatformID, opts.ContentID, entryKey, formatKey, sizeConflict); id != "" {
 		rawSource["private_source_identity"] = id
 	}
 	return unified.Sources(unified.Array{rawSource}, now)
 }
 
-func buildYTSourceIdentity(f Format, platformID, contentID, entryKey, formatKey string, sizeBytes int64) string {
+func extractURLClen(rawURL string) int64 {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.RawQuery == "" {
+		return 0
+	}
+	clenStr := strings.TrimSpace(u.Query().Get("clen"))
+	if clenStr == "" {
+		return 0
+	}
+	n, ok := parsePositiveContentLength(clenStr)
+	if !ok {
+		return 0
+	}
+	return n
+}
+
+func buildYTSourceIdentity(f Format, platformID, contentID, entryKey, formatKey string, sizeConflict int64) string {
 	if platformID == "" || contentID == "" || entryKey == "" || f.URL == "" {
 		return ""
 	}
@@ -1012,7 +980,7 @@ func buildYTSourceIdentity(f Format, platformID, contentID, entryKey, formatKey 
 	if canonicalURL == "" {
 		return ""
 	}
-	return unified.PHPIdentityJSON(unified.Array{
+	identity := unified.Array{
 		"ytengine-source",
 		platformID,
 		contentID,
@@ -1023,9 +991,12 @@ func buildYTSourceIdentity(f Format, platformID, contentID, entryKey, formatKey 
 		cleanCodec(f.ACodec),
 		derefInt(f.Width),
 		derefInt(f.Height),
-		sizeBytes,
 		canonicalURL,
-	}, true)
+	}
+	if sizeConflict > 0 {
+		identity = append(identity, sizeConflict)
+	}
+	return unified.PHPIdentityJSON(identity, true)
 }
 
 func canonicalRenewalURLIdentity(rawURL string) string {

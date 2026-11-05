@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
@@ -214,6 +216,10 @@ func New(cfg Config) (*Engine, error) {
 		if err := validateProxyURL(proxyURL); err != nil {
 			return NewDisabled(err.Error()), err
 		}
+		if cfg.AllowedOutboundHost != nil || cfg.Resolver != nil {
+			err := errors.New("DOKITOOL_YTDLP_PROXY is not supported when outbound target policy is enabled")
+			return NewDisabled(err.Error()), err
+		}
 	}
 	sem := cfg.SharedSemaphore
 	if sem == nil {
@@ -248,6 +254,10 @@ func (e *Engine) WithTargetPolicy(allowedURL func(string) bool, allowedOutboundH
 	cp.allowedOutboundHost = allowedOutboundHost
 	if cp.resolver == nil {
 		cp.resolver = net.DefaultResolver
+	}
+	if cp.proxyURL != "" && (cp.allowedOutboundHost != nil || cp.resolver != nil) {
+		cp.enabled = false
+		cp.disableReason = "DOKITOOL_YTDLP_PROXY is not supported when outbound target policy is enabled"
 	}
 	return &cp
 }
@@ -377,14 +387,21 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 	callCtx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
-	if e.allowedOutboundHost != nil || (e.proxyURL == "" && e.resolver != nil) {
+	if e.allowedOutboundHost != nil || e.resolver != nil {
 		if err := e.verifyPublicTargetHost(callCtx, rawURL); err != nil {
 			return nil, err
+		}
+		if e.proxyURL != "" {
+			return nil, &Error{
+				Code:      CodeUpstreamBlocked,
+				Message:   "受控出站安全策略不允许使用未受控外部代理",
+				Retryable: false,
+			}
 		}
 	}
 
 	effectiveProxy := e.proxyURL
-	if effectiveProxy == "" && (e.allowedOutboundHost != nil || e.resolver != nil) {
+	if e.allowedOutboundHost != nil || e.resolver != nil {
 		gateURL, closeGate, err := e.startOutboundGate(callCtx)
 		if err != nil {
 			return nil, &Error{
@@ -486,7 +503,7 @@ func (e *Engine) verifyPublicTargetHost(ctx context.Context, rawURL string) *Err
 	if e.allowedOutboundHost != nil && !e.allowedOutboundHost(host) {
 		return &Error{Code: CodeUpstreamBlocked, Message: "目标地址不在受控出站白名单内", Retryable: false}
 	}
-	if e.proxyURL == "" && e.resolver != nil {
+	if e.resolver != nil || e.allowedOutboundHost != nil {
 		if _, err := e.resolvePublicHostIP(ctx, host); err != nil {
 			return &Error{Code: CodeUpstreamBlocked, Message: "目标地址解析到受限网络，已拒绝访问", Retryable: false, Cause: err}
 		}
@@ -553,11 +570,43 @@ func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) 
 		socketTimeout = time.Duration(e.socketTimeoutSec) * time.Second
 	}
 
+	var (
+		mu          sync.Mutex
+		nextConnID  uint64
+		activeConns = make(map[uint64]func())
+		closeOnce   sync.Once
+		gateClosed  = make(chan struct{})
+	)
+	registerTunnel := func(closeTunnel func()) func() {
+		mu.Lock()
+		select {
+		case <-gateClosed:
+			mu.Unlock()
+			closeTunnel()
+			return func() {}
+		default:
+		}
+		if ctx.Err() != nil {
+			mu.Unlock()
+			closeTunnel()
+			return func() {}
+		}
+		nextConnID++
+		id := nextConnID
+		activeConns[id] = closeTunnel
+		mu.Unlock()
+		return func() {
+			mu.Lock()
+			delete(activeConns, id)
+			mu.Unlock()
+		}
+	}
+
 	srv := &http.Server{
 		ReadHeaderTimeout: 5 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodConnect {
-				e.handleGateConnect(ctx, w, r, socketTimeout)
+				e.handleGateConnect(ctx, w, r, socketTimeout, registerTunnel)
 				return
 			}
 			e.handleGateHTTP(ctx, w, r, socketTimeout)
@@ -566,14 +615,35 @@ func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) 
 	go func() {
 		_ = srv.Serve(ln)
 	}()
+
 	closeFn := func() {
-		_ = srv.Close()
-		_ = ln.Close()
+		closeOnce.Do(func() {
+			close(gateClosed)
+			_ = ln.Close()
+			_ = srv.Close()
+			mu.Lock()
+			conns := make([]func(), 0, len(activeConns))
+			for _, fn := range activeConns {
+				conns = append(conns, fn)
+			}
+			activeConns = make(map[uint64]func())
+			mu.Unlock()
+			for _, fn := range conns {
+				fn()
+			}
+		})
 	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			closeFn()
+		case <-gateClosed:
+		}
+	}()
 	return "http://" + ln.Addr().String(), closeFn, nil
 }
 
-func (e *Engine) handleGateConnect(ctx context.Context, w http.ResponseWriter, r *http.Request, timeout time.Duration) {
+func (e *Engine) handleGateConnect(ctx context.Context, w http.ResponseWriter, r *http.Request, timeout time.Duration, registerTunnel func(func()) func()) {
 	host, port, err := net.SplitHostPort(r.Host)
 	if err != nil {
 		host = r.Host
@@ -594,30 +664,46 @@ func (e *Engine) handleGateConnect(ctx context.Context, w http.ResponseWriter, r
 		http.Error(w, "upstream connection failed", http.StatusBadGateway)
 		return
 	}
-	defer upstreamConn.Close()
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
+		_ = upstreamConn.Close()
 		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
 		return
 	}
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
+		_ = upstreamConn.Close()
 		return
 	}
-	defer clientConn.Close()
+
+	var closeBothOnce sync.Once
+	closeBoth := func() {
+		closeBothOnce.Do(func() {
+			_ = clientConn.Close()
+			_ = upstreamConn.Close()
+		})
+	}
+	if registerTunnel != nil {
+		unregister := registerTunnel(closeBoth)
+		defer unregister()
+	}
+	defer closeBoth()
 
 	_, _ = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
-	done := make(chan struct{}, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() {
+		defer wg.Done()
 		_, _ = io.Copy(upstreamConn, clientConn)
-		done <- struct{}{}
+		closeBoth()
 	}()
 	go func() {
+		defer wg.Done()
 		_, _ = io.Copy(clientConn, upstreamConn)
-		done <- struct{}{}
+		closeBoth()
 	}()
-	<-done
+	wg.Wait()
 }
 
 func (e *Engine) handleGateHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, timeout time.Duration) {
@@ -625,19 +711,48 @@ func (e *Engine) handleGateHTTP(ctx context.Context, w http.ResponseWriter, r *h
 		http.Error(w, "upstream blocked by outbound security policy: absolute URL required", http.StatusBadRequest)
 		return
 	}
-	const maxHops = 5
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodOptions:
+	default:
+		http.Error(w, "upstream blocked by outbound security policy: method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	const (
+		maxHops                 = 5
+		maxGateRequestBodyBytes = 1 << 20
+	)
+	var bodyBytes []byte
+	if r.Body != nil {
+		defer r.Body.Close()
+		b, err := io.ReadAll(io.LimitReader(r.Body, maxGateRequestBodyBytes+1))
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		if len(b) > maxGateRequestBodyBytes {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		bodyBytes = b
+	}
+
 	curURL := r.URL
 	method := r.Method
 	for hop := 0; hop <= maxHops; hop++ {
 		scheme := strings.ToLower(curURL.Scheme)
-		if scheme != "http" {
+		if scheme != "http" && scheme != "https" {
 			http.Error(w, "upstream blocked by outbound security policy: invalid scheme", http.StatusForbidden)
 			return
 		}
 		host := curURL.Hostname()
 		port := curURL.Port()
 		if port == "" {
-			port = "80"
+			if scheme == "https" {
+				port = "443"
+			} else {
+				port = "80"
+			}
 		}
 		if err := e.validateOutboundPort(port); err != nil {
 			http.Error(w, "upstream blocked by outbound security policy: "+err.Error(), http.StatusForbidden)
@@ -656,6 +771,11 @@ func (e *Engine) handleGateHTTP(ctx context.Context, w http.ResponseWriter, r *h
 				d := &net.Dialer{Timeout: timeout}
 				return d.DialContext(dialCtx, network, targetAddr)
 			},
+			TLSClientConfig: &tls.Config{
+				ServerName:         host,
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: e.dialAddr != nil,
+			},
 		}
 		client := &http.Client{
 			Transport: transport,
@@ -664,20 +784,45 @@ func (e *Engine) handleGateHTTP(ctx context.Context, w http.ResponseWriter, r *h
 				return http.ErrUseLastResponse
 			},
 		}
-		outReq, err := http.NewRequestWithContext(ctx, method, curURL.String(), nil)
+		buildOutReq := func(reqURL *url.URL) (*http.Request, error) {
+			var bodyReader io.Reader
+			if len(bodyBytes) > 0 && method != http.MethodGet && method != http.MethodHead {
+				bodyReader = bytes.NewReader(bodyBytes)
+			}
+			req, err := http.NewRequestWithContext(ctx, method, reqURL.String(), bodyReader)
+			if err != nil {
+				return nil, err
+			}
+			if bodyReader != nil {
+				req.ContentLength = int64(len(bodyBytes))
+			}
+			req.Host = curURL.Host
+			for k, vals := range r.Header {
+				if strings.EqualFold(k, "Proxy-Connection") || strings.EqualFold(k, "Proxy-Authorization") {
+					continue
+				}
+				if bodyReader == nil && (strings.EqualFold(k, "Content-Length") || strings.EqualFold(k, "Content-Type") || strings.EqualFold(k, "Transfer-Encoding")) {
+					continue
+				}
+				for _, v := range vals {
+					req.Header.Add(k, v)
+				}
+			}
+			return req, nil
+		}
+		outReq, err := buildOutReq(curURL)
 		if err != nil {
 			http.Error(w, "upstream blocked by outbound security policy", http.StatusBadRequest)
 			return
 		}
-		for k, vals := range r.Header {
-			if strings.EqualFold(k, "Proxy-Connection") || strings.EqualFold(k, "Proxy-Authorization") {
-				continue
-			}
-			for _, v := range vals {
-				outReq.Header.Add(k, v)
+		resp, err := client.Do(outReq)
+		if err != nil && scheme == "https" && e.dialAddr != nil {
+			plainURL := *curURL
+			plainURL.Scheme = "http"
+			if fallbackReq, reqErr := buildOutReq(&plainURL); reqErr == nil {
+				resp, err = client.Do(fallbackReq)
 			}
 		}
-		resp, err := client.Do(outReq)
 		if err != nil {
 			http.Error(w, "upstream request failed", http.StatusBadGateway)
 			return
@@ -695,8 +840,10 @@ func (e *Engine) handleGateHTTP(ctx context.Context, w http.ResponseWriter, r *h
 				return
 			}
 			curURL = nextURL
-			if resp.StatusCode == http.StatusSeeOther {
+			if resp.StatusCode == http.StatusSeeOther ||
+				((resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound) && method == http.MethodPost) {
 				method = http.MethodGet
+				bodyBytes = nil
 			}
 			continue
 		}

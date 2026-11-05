@@ -244,6 +244,22 @@ func comparePHPID(a, b string) int {
 	return 0
 }
 
+func isSplitVideoOnlyFile(v Object) bool {
+	meta := Map(v["metadata"])
+	if hasAudio, ok := meta["has_audio"].(bool); !ok || hasAudio {
+		return false
+	}
+	return nonNullField(meta, "video_codec") || nonNullField(meta, "container") || nonNullField(meta, "mime_type") || strings.Contains(Str(v["label"]), "仅视频无声")
+}
+
+func isAudioOnlyFile(v Object) bool {
+	meta := Map(v["metadata"])
+	if strings.HasPrefix(Str(meta["mime_type"]), "audio/") {
+		return true
+	}
+	return nonNullField(meta, "audio_codec") && !nonNullField(meta, "video_codec") && !nonNullField(meta, "width") && !nonNullField(meta, "height")
+}
+
 // SelectDefault never mutates its input or sorts the displayed candidate list.
 func SelectDefault(input Object, now int64) Object {
 	item := objectCopy(input)
@@ -264,6 +280,26 @@ func SelectDefault(input Object, now int64) Object {
 		v := Map(value)
 		if readyState(v) && Str(Map(v["delivery"])["kind"]) == "file" && DeliveryUsable(Map(v["delivery"]), now) {
 			eligible = append(eligible, v)
+		}
+	}
+	if Str(item["type"]) == "video" {
+		hasAudibleCompleteFile := false
+		for _, v := range eligible {
+			if !isSplitVideoOnlyFile(v) && !isAudioOnlyFile(v) {
+				if hasAudio, ok := Map(v["metadata"])["has_audio"].(bool); ok && hasAudio {
+					hasAudibleCompleteFile = true
+					break
+				}
+			}
+		}
+		if hasAudibleCompleteFile {
+			filtered := make([]Object, 0, len(eligible))
+			for _, v := range eligible {
+				if !isSplitVideoOnlyFile(v) && !isAudioOnlyFile(v) {
+					filtered = append(filtered, v)
+				}
+			}
+			eligible = filtered
 		}
 	}
 	highest := make([]Object, 0)

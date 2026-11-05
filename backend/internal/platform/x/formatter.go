@@ -309,19 +309,17 @@ func buildFormatSources(f ytengine.Format, contentID, entryKey, formatKey string
 	rawSource := unified.Object{
 		"url": f.URL,
 	}
-	var sizeVal int64
 	// Strictly require exact Filesize; never populate size_bytes from FilesizeApprox.
 	if f.Filesize != nil && *f.Filesize > 0 {
 		rawSource["size_bytes"] = *f.Filesize
-		sizeVal = *f.Filesize
 	}
-	if id := buildXSourceIdentity(f, contentID, entryKey, formatKey, sizeVal); id != "" {
+	if id := buildXSourceIdentity(f, contentID, entryKey, formatKey); id != "" {
 		rawSource["private_source_identity"] = id
 	}
 	return unified.Sources(unified.Array{rawSource}, now)
 }
 
-func buildXSourceIdentity(f ytengine.Format, contentID, entryKey, formatKey string, sizeBytes int64) string {
+func buildXSourceIdentity(f ytengine.Format, contentID, entryKey, formatKey string) string {
 	if contentID == "" || entryKey == "" || f.URL == "" {
 		return ""
 	}
@@ -342,7 +340,6 @@ func buildXSourceIdentity(f ytengine.Format, contentID, entryKey, formatKey stri
 		strings.TrimSpace(f.ACodec),
 		w,
 		h,
-		sizeBytes,
 		unified.SourceIdentity(f.URL),
 	}, true)
 }

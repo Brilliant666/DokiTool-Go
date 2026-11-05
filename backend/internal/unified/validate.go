@@ -366,12 +366,16 @@ func ValidateEnvelopeAt(payload Object, fallbackNow int64) error {
 				return fmt.Errorf("default source projection mismatch")
 			}
 			higher := Array{}
+			selectedAudible, _ := Map(selected["metadata"])["has_audio"].(bool)
 			for _, value := range variants {
 				variant := Map(value)
 				if cmp, comparable := QualityCompare(variant, selected); !comparable || cmp != 1 || !DeliveryUsable(Map(variant["delivery"]), now) {
 					continue
 				}
 				if Str(Map(variant["delivery"])["kind"]) == "file" {
+					if selectedAudible && isSplitVideoOnlyFile(variant) {
+						continue
+					}
 					return fmt.Errorf("higher complete file omitted from default")
 				}
 				higher = append(higher, Object{"variant_id": variant["id"], "requires": Slice(DeliveryRequires(Map(variant["delivery"])))})

@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -295,45 +294,26 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 	}
 	log.Printf("dokitool: yt-dlp shared engine verified (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, baseEngine.BinaryAsset(), baseEngine.BinarySHA256())
 
-	proxyURL := strings.TrimSpace(getenv("DOKITOOL_YTDLP_PROXY"))
 	if xEnabled {
 		if err := c.Register(catalog.XPlatform()); err != nil {
 			return err
 		}
 		xEngine := baseEngine.WithTargetPolicy(x.AllowedTargetURL, x.AllowedOutboundHost)
-		var prober x.SizeProber
-		if proxyURL == "" && executor != nil {
-			prober = x.NewSizeProber(executor)
-		} else {
-			prober = x.NewHTTPSizeProber(proxyURL)
-		}
-		adapters["x"] = x.NewWithSizeProber(xEngine, prober)
+		adapters["x"] = x.NewWithSizeProber(xEngine, x.NewSizeProber(executor))
 	}
 	if ytEnabled {
 		if err := c.Register(catalog.YouTubePlatform()); err != nil {
 			return err
 		}
 		ytEngine := baseEngine.WithTargetPolicy(youtube.AllowedTargetURL, youtube.AllowedOutboundHost)
-		var prober ytengine.SizeProber
-		if proxyURL == "" && executor != nil {
-			prober = ytengine.NewSizeProber(executor, youtube.AllowedMediaURL)
-		} else {
-			prober = ytengine.NewHTTPSizeProber(proxyURL, youtube.AllowedMediaURL)
-		}
-		adapters["youtube"] = youtube.NewWithSizeProber(ytEngine, prober)
+		adapters["youtube"] = youtube.NewWithSizeProber(ytEngine, ytengine.NewSizeProber(executor, youtube.AllowedMediaURL))
 	}
 	if igEnabled {
 		if err := c.Register(catalog.InstagramPlatform()); err != nil {
 			return err
 		}
 		igEngine := baseEngine.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)
-		var prober ytengine.SizeProber
-		if proxyURL == "" && executor != nil {
-			prober = ytengine.NewSizeProber(executor, instagram.AllowedMediaURL)
-		} else {
-			prober = ytengine.NewHTTPSizeProber(proxyURL, instagram.AllowedMediaURL)
-		}
-		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, prober)
+		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, ytengine.NewSizeProber(executor, instagram.AllowedMediaURL))
 	}
 	return nil
 }

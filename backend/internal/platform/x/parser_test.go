@@ -652,14 +652,21 @@ func TestXSourceIdentityPreservedAcrossSignatureRenewal(t *testing.T) {
 
 	p1 := unified.PublicView(AdaptInfo(makeInfo(url1, 1404023), "1790637656616943991", sourceURL, 0, now), false, now)
 	p2 := unified.PublicView(AdaptInfo(makeInfo(url2, 1404023), "1790637656616943991", sourceURL, 0, now+60), false, now+60)
+	infoNoSize := makeInfo(url2, 0)
+	infoNoSize.Formats[0].Filesize = nil
+	pNoSize := unified.PublicView(AdaptInfo(infoNoSize, "1790637656616943991", sourceURL, 0, now+120), false, now+120)
 	pDiff := unified.PublicView(AdaptInfo(makeInfo(urlDifferentTag, 1404023), "1790637656616943991", sourceURL, 0, now+60), false, now+60)
 
 	def1 := unified.Map(unified.Map(unified.Slice(unified.Map(p1["data"])["items"])[0])["default"])
 	def2 := unified.Map(unified.Map(unified.Slice(unified.Map(p2["data"])["items"])[0])["default"])
+	defNoSize := unified.Map(unified.Map(unified.Slice(unified.Map(pNoSize["data"])["items"])[0])["default"])
 	defDiff := unified.Map(unified.Map(unified.Slice(unified.Map(pDiff["data"])["items"])[0])["default"])
 
 	if unified.Str(def1["source_id"]) != unified.Str(def2["source_id"]) {
 		t.Fatalf("expected X source_id to stay stable across signature renewal: %v vs %v", def1["source_id"], def2["source_id"])
+	}
+	if unified.Str(def1["source_id"]) != unified.Str(defNoSize["source_id"]) {
+		t.Fatalf("expected X source_id to stay stable when optional size probe fails (Filesize=nil): %v vs %v", def1["source_id"], defNoSize["source_id"])
 	}
 	if unified.Str(def2["url"]) != url2 {
 		t.Fatalf("expected renewed source URL bytes to be preserved, got %q", unified.Str(def2["url"]))
