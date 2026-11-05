@@ -35,6 +35,7 @@ export interface BufferedReadOptions {
   onChunk?: (loaded: number, total: number) => void;
   timeoutMs?: number;
   maxBytes?: number;
+  referrerPolicy?: ReferrerPolicy;
 }
 
 /** Page-side ZIP/segment reads. Each header/read wait is bounded, not total download time. */
@@ -50,7 +51,7 @@ export async function fetchMediaBlob(url: string, options: BufferedReadOptions =
     if (range) headers.Range = `bytes=${range.start}-${range.start + range.length - 1}`;
     response = await scope.wait(() => fetch(url, {
       method: "GET", mode: "cors", headers, signal: scope.signal,
-      credentials: mediaCredentials(url), referrerPolicy: "no-referrer",
+      credentials: mediaCredentials(url), referrerPolicy: options.referrerPolicy,
     }));
     if (range) {
       const declared = /^bytes (\d+)-(\d+)\/(?:\d+|\*)$/.exec(response.headers.get("Content-Range") || "");
@@ -98,7 +99,7 @@ export async function probeMediaLength(url: string, signal?: AbortSignal, timeou
   try {
     response = await scope.wait(() => fetch(url, {
       method: "HEAD", mode: "cors", signal: scope.signal,
-      credentials: mediaCredentials(url), referrerPolicy: "no-referrer",
+      credentials: mediaCredentials(url),
     }));
     return response.status === 200 ? decodedLength(response) || 0 : 0;
   } catch (error) {

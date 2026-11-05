@@ -105,7 +105,7 @@ export async function resolveHlsSegments(
   signal?: AbortSignal,
 ): Promise<HlsSegment[] | null> {
   try {
-    const manifest = await fetchMediaBlob(url, { signal, maxBytes: 2 * 1024 * 1024 });
+    const manifest = await fetchMediaBlob(url, { signal, maxBytes: 2 * 1024 * 1024, referrerPolicy: "no-referrer" });
     const text = await manifest.text();
     if (
       !text.trimStart().startsWith("#EXTM3U") ||

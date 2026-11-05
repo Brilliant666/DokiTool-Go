@@ -203,3 +203,22 @@ test('platform duplicates are hidden from keyboard/assistive navigation and redu
   assert.match(reduced, /animation: none/);
   assert.doesNotMatch(reduced, /animation:\s*marquee/);
 });
+
+
+test('buffered helper preserves existing request policies; only HLS manifest explicitly omits referrer', async () => {
+  const { fetchMediaBlob, probeMediaLength } = await buffered();
+  const policies = [];
+  globalThis.fetch = async (_url, options) => {
+    policies.push(options.referrerPolicy);
+    if (options.method === 'HEAD') return new Response(null, { headers: { 'Content-Length': '2' } });
+    return new Response(new Uint8Array([1, 2]));
+  };
+  await fetchMediaBlob('https://cdn.test/file');
+  await probeMediaLength('https://cdn.test/file');
+  assert.deepEqual(policies, [undefined, undefined]);
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(options.referrerPolicy, 'no-referrer');
+    return new Response('#EXTM3U\n#EXTINF:1,\nclip.ts\n#EXT-X-ENDLIST');
+  };
+  assert.deepEqual(await segments.resolveHlsSegments('https://cdn.test/list'), [{ url: 'https://cdn.test/clip.ts' }]);
+});
