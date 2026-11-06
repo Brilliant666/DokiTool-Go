@@ -4,6 +4,7 @@ package ytengine
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -1079,7 +1080,7 @@ func TestPR36Review5785629879Counterexamples(t *testing.T) {
 		t.Fatalf("dial tunGate failed: %v", err)
 	}
 	defer tunConn.Close()
-	if _, err := tunConn.Write([]byte("CONNECT public.x.com:443 HTTP/1.1\r\nHost: public.x.com:443\r\n\r\n")); err != nil {
+	if _, err := tunConn.Write([]byte("CONNECT public.x.com:443 HTTP/1.1\r\nHost: public.x.com:443\r\nProxy-Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte(tunParsed.User.String())) + "\r\n\r\n")); err != nil {
 		t.Fatalf("write CONNECT failed: %v", err)
 	}
 	replyBuf := make([]byte, 128)
