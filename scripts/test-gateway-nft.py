@@ -11,6 +11,7 @@ import http.server
 import json
 import os
 from pathlib import Path
+import select
 import signal
 import socket
 import subprocess
@@ -147,7 +148,15 @@ def check_fixture(output):
             process = subprocess.Popen(unprivileged(name, sys.executable, script, "--server", kind),
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             processes.append(process)
-            ready = json.loads(process.stdout.readline())
+            readable, _, _ = select.select([process.stdout], [], [], 5)
+            line = process.stdout.readline() if readable else ""
+            if not line:
+                process.terminate()
+                _, error = process.communicate(timeout=5)
+                evidence.append({"case": kind + "-listener-startup", "passed": False,
+                                 "exit": process.returncode, "stderr": error})
+                raise RuntimeError(f"{kind} listener did not report ready: exit={process.returncode}; stderr={error}")
+            ready = json.loads(line)
             assert ready["ready"] and ready["uid"] == UID
             evidence.append({"case": kind + "-listeners", **ready})
         baseline = f'''table inet fixture {{

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ import (
 
 // This opt-in check uses the official hash-locked release, never a shell shim.
 // All extractor requests terminate at tiny local fixtures. The custom CA is a
-// test trust anchor, not --no-check-certificates or a production TLS override.
+// test trust anchor via no-certifi/SSL_CERT_FILE, not disabled certificate checks.
 func TestPinnedYTDLPGateHandshake(t *testing.T) {
 	bin := os.Getenv("YTDLP_TEST_BINARY")
 	if bin == "" {
@@ -68,24 +69,31 @@ func TestPinnedYTDLPGateHandshake(t *testing.T) {
 			// Insert controlled extractor/trust options before the terminal -- URL.
 			tail := append([]string(nil), args[len(args)-2:]...)
 			args = append(args[:len(args)-2], "--force-generic-extractor", "--skip-download")
+			var ca string
 			if scheme == "https" {
-				ca := filepath.Join(t.TempDir(), "fixture-ca.pem")
+				ca = filepath.Join(t.TempDir(), "fixture-ca.pem")
 				if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: up.Certificate().Raw}), 0600); err != nil {
 					t.Fatal(err)
 				}
-				args = append(args, "--cacert", ca)
+				// Pinned options.py supports no-certifi; networking/_helper.py then
+				// loads default SSL trust, including OpenSSL SSL_CERT_FILE. There is
+				// no --cacert option in this release.
+				args = append(args, "--compat-options", "no-certifi")
 			}
 			args = append(args, tail...)
 			cmd := exec.CommandContext(ctx, e.binaryPath, args...)
 			tmp := t.TempDir()
 			cmd.Dir = tmp
 			cmd.Env = buildIsolatedEnv(tmp, e.envPath)
+			if ca != "" {
+				cmd.Env = append(cmd.Env, "SSL_CERT_FILE="+ca)
+			}
 			stdout := &limitedBuffer{max: defaultMaxStdoutBytes}
 			stderr := &limitedBuffer{max: defaultMaxStderrBytes}
 			cmd.Stdout = stdout
 			cmd.Stderr = stderr
 			if err := cmd.Run(); err != nil {
-				t.Fatalf("pinned yt-dlp %s handshake failed: exit=%v upstream_requests=%d (proxy credentials and stderr intentionally omitted)", scheme, err, hits.Load())
+				t.Fatalf("pinned yt-dlp %s handshake failed: exit=%v upstream_requests=%d stderr=%s", scheme, err, hits.Load(), redactGateDiagnostic(stderr.String(), gate))
 			}
 			var info Info
 			if err := json.Unmarshal(stdout.Bytes(), &info); err != nil {
@@ -96,5 +104,35 @@ func TestPinnedYTDLPGateHandshake(t *testing.T) {
 			}
 			t.Logf("pinned %s %s authenticated handshake: upstream_requests=%d", PinnedVersion, scheme, hits.Load())
 		})
+	}
+}
+
+// Only used for the controlled fixture diagnostic. Never print raw command args
+// or stderr: yt-dlp may include the authenticated proxy URL in an error.
+func redactGateDiagnostic(message, gate string) string {
+	parsed, err := url.Parse(gate)
+	if err != nil || parsed.User == nil {
+		return "[diagnostic omitted: invalid proxy credential context]"
+	}
+	password, _ := parsed.User.Password()
+	if password == "" {
+		return "[diagnostic omitted: missing proxy credential context]"
+	}
+	message = strings.NewReplacer(gate, "[task proxy]", gateAuth(parsed), "[proxy authorization]", parsed.User.String(), "[proxy userinfo]", password, "[proxy password]").Replace(message)
+	if len(message) > 2048 {
+		message = message[:2048]
+	}
+	return message
+}
+
+func TestGateDiagnosticRedactsCredential(t *testing.T) {
+	gate := "http://task:controlled-secret@127.0.0.1:19001"
+	parsed, _ := url.Parse(gate)
+	message := gate + " " + parsed.User.String() + " " + gateAuth(parsed) + " controlled-secret"
+	redacted := redactGateDiagnostic(message, gate)
+	for _, secret := range []string{gate, parsed.User.String(), gateAuth(parsed), "controlled-secret"} {
+		if strings.Contains(redacted, secret) {
+			t.Fatal("proxy credential survived diagnostic redaction")
+		}
 	}
 }

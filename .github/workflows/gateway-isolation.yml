@@ -50,11 +50,23 @@ jobs:
         env:
           YTDLP_TEST_BINARY: ${{ runner.temp }}/gateway-bin/yt-dlp_linux
         run: |
+          set -euo pipefail
           test "$(id -u)" -ne 0
           go test -race -count=1 -v ./internal/ytengine | tee "$RUNNER_TEMP/gateway-engine.txt"
       - name: Verify exact network-rule delta in disconnected namespaces
+        if: ${{ !cancelled() }}
         run: |
-          sudo python3 -B scripts/test-gateway-nft.py --output "$RUNNER_TEMP/gateway-nft.json"
+          set -euo pipefail
+          if sudo setpriv --reuid 23147 --regid 23147 --clear-groups test -r "$GITHUB_WORKSPACE/scripts/test-gateway-nft.py"; then
+            echo 'fixture UID can read the checkout path'
+          else
+            echo 'fixture UID cannot read the checkout path; no checkout permissions will be changed'
+          fi
+          fixture_dir=$(mktemp -d /tmp/dokitool-gateway-fixture.XXXXXXXX)
+          chmod 0755 "$fixture_dir"
+          install -m 0644 scripts/test-gateway-nft.py "$fixture_dir/test-gateway-nft.py"
+          trap 'rm -f "$fixture_dir/test-gateway-nft.py"; rmdir "$fixture_dir"' EXIT
+          sudo python3 -B "$fixture_dir/test-gateway-nft.py" --output "$RUNNER_TEMP/gateway-nft.json"
       - name: Retain controlled evidence, without proxy credentials
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
