@@ -68,11 +68,13 @@
 !/scripts/requirements-validation.txt
 !/scripts/test-download-browser.mjs
 !/scripts/test-download-claim.mjs
+!/scripts/test-gateway-nft.py
 !/scripts/test-unified-schema.py
 !/scripts/tests/
 !/scripts/third-party-notices.py
 !/scripts/validate-unified-schema.py
 /.github/workflows/*
+!/.github/workflows/gateway-isolation.yml
 !/.github/workflows/go-migration.yml
 !/.github/workflows/upstream-watch.yml
 /backend/api/*
@@ -178,6 +180,7 @@
 !/docs/go-migration/weibo.md
 !/docs/go-migration/xhs-page-online-checks.json
 !/docs/go-migration/xhs-page-transport.md
+!/docs/go-migration/ytdlp-gateway.md
 /docs/incidents/*
 !/docs/incidents/INC-20261031-001-download-delivery.md
 /docs/research/*
@@ -420,6 +423,10 @@
 !/backend/internal/ytengine/adapter.go
 !/backend/internal/ytengine/engine.go
 !/backend/internal/ytengine/engine_test.go
+!/backend/internal/ytengine/gate_handshake_test.go
+!/backend/internal/ytengine/gate_lifecycle_test.go
+!/backend/internal/ytengine/gate_ports.go
+!/backend/internal/ytengine/gate_ports_test.go
 !/backend/internal/ytengine/proc_other.go
 !/backend/internal/ytengine/proc_unix.go
 !/backend/internal/ytengine/types.go

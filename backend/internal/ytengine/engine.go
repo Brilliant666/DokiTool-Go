@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -72,6 +73,7 @@ type Config struct {
 	MaxStdoutBytes      int64
 	ProxyURL            string
 	EnvPath             string
+	GatePorts           []int
 }
 
 // Engine executes a SHA-256 verified yt-dlp binary in isolated metadata-only mode.
@@ -91,6 +93,7 @@ type Engine struct {
 	maxStdoutBytes      int64
 	proxyURL            string
 	envPath             string
+	gatePorts           *gatePortPool
 }
 
 // NewDisabled returns an Engine that is explicitly disabled with the given reason.
@@ -225,7 +228,12 @@ func New(cfg Config) (*Engine, error) {
 	if sem == nil {
 		sem = make(chan struct{}, concurrency)
 	}
+	gatePorts, err := newGatePortPool(cfg.GatePorts, cap(sem))
+	if err != nil {
+		return NewDisabled(err.Error()), err
+	}
 	return &Engine{
+		gatePorts:           gatePorts,
 		enabled:             true,
 		binaryPath:          absPath,
 		binarySHA256:        digest,
@@ -244,7 +252,7 @@ func New(cfg Config) (*Engine, error) {
 }
 
 // WithTargetPolicy returns a shallow copy of the Engine bound to the given input URL
-// and outbound host policies while sharing the underlying concurrency semaphore.
+// and outbound host policies while sharing the concurrency semaphore and port pool.
 func (e *Engine) WithTargetPolicy(allowedURL func(string) bool, allowedOutboundHost func(string) bool) *Engine {
 	if e == nil {
 		return NewDisabled("yt-dlp engine is nil")
@@ -291,7 +299,12 @@ func NewFromEnv(getenv func(string) string, allowedURL func(string) bool) (*Engi
 		}
 		timeout = parsed
 	}
+	gatePorts, err := parseGatePorts(getenv("DOKITOOL_YTDLP_GATE_PORTS"))
+	if err != nil {
+		return NewDisabled(err.Error()), err
+	}
 	return New(Config{
+		GatePorts:      gatePorts,
 		BinaryPath:     getenv("DOKITOOL_YTDLP_BINARY"),
 		AllowedHashes:  OfficialSHA256Sums20261026,
 		AllowedURL:     allowedURL,
@@ -576,10 +589,17 @@ func (e *Engine) dialTargetAddr(ip netip.Addr, port string) string {
 }
 
 func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, releasePort, err := e.gatePorts.listen()
 	if err != nil {
 		return "", nil, err
 	}
+	credential, err := newGateCredential()
+	if err != nil {
+		_ = ln.Close()
+		releasePort()
+		return "", nil, err
+	}
+	ctx, cancelGate := context.WithCancel(ctx)
 	socketTimeout := time.Duration(defaultSocketTimeoutSec) * time.Second
 	if e.socketTimeoutSec > 0 {
 		socketTimeout = time.Duration(e.socketTimeoutSec) * time.Second
@@ -591,6 +611,8 @@ func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) 
 		activeConns = make(map[uint64]func())
 		closeOnce   sync.Once
 		gateClosed  = make(chan struct{})
+		closing     bool
+		handlers    sync.WaitGroup
 	)
 	registerTunnel := func(closeTunnel func()) func() {
 		mu.Lock()
@@ -620,6 +642,21 @@ func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) 
 	srv := &http.Server{
 		ReadHeaderTimeout: 5 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			if closing {
+				mu.Unlock()
+				http.Error(w, "proxy task closed", http.StatusServiceUnavailable)
+				return
+			}
+			handlers.Add(1)
+			mu.Unlock()
+			defer handlers.Done()
+			if len(r.Header.Values("Proxy-Authorization")) != 1 || subtle.ConstantTimeCompare([]byte(r.Header.Get("Proxy-Authorization")), []byte(credential.authorization)) != 1 {
+				w.Header().Set("Proxy-Authenticate", `Basic realm="task"`)
+				http.Error(w, "proxy authentication required", http.StatusProxyAuthRequired)
+				return
+			}
+			r.Header.Del("Proxy-Authorization")
 			if r.Method == http.MethodConnect {
 				e.handleGateConnect(ctx, w, r, socketTimeout, registerTunnel)
 				return
@@ -633,6 +670,10 @@ func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) 
 
 	closeFn := func() {
 		closeOnce.Do(func() {
+			mu.Lock()
+			closing = true
+			mu.Unlock()
+			cancelGate()
 			close(gateClosed)
 			_ = ln.Close()
 			_ = srv.Close()
@@ -646,6 +687,8 @@ func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) 
 			for _, fn := range conns {
 				fn()
 			}
+			handlers.Wait()
+			releasePort()
 		})
 	}
 	go func() {
@@ -655,7 +698,8 @@ func (e *Engine) startOutboundGate(ctx context.Context) (string, func(), error) 
 		case <-gateClosed:
 		}
 	}()
-	return "http://" + ln.Addr().String(), closeFn, nil
+	proxyURL := &url.URL{Scheme: "http", Host: ln.Addr().String(), User: url.UserPassword("task", credential.password)}
+	return proxyURL.String(), closeFn, nil
 }
 
 func (e *Engine) handleGateConnect(ctx context.Context, w http.ResponseWriter, r *http.Request, timeout time.Duration, registerTunnel func(func()) func()) {
