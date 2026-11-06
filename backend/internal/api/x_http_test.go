@@ -2,16 +2,24 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/instagram"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/x"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/youtube"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
@@ -200,5 +208,162 @@ func TestXHTTPParseResolveAndDegradation(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/parse?schema_version=1.0&url=https://www.douyin.com/video/123", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("existing douyin platform broke when X was degraded: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+type staticPublicResolver struct{}
+
+func (staticPublicResolver) LookupNetIP(_ context.Context, _, _ string) ([]netip.Addr, error) {
+	return []netip.Addr{netip.MustParseAddr("104.244.42.1")}, nil
+}
+
+func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) {
+	const now int64 = 1793448000
+	douyinBytes, err := os.ReadFile("../../../docs/schema/unified-v1/examples/01-douyin-quality-and-cdn.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	douyinFixture, err := unified.Decode(douyinBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	coordDir := t.TempDir()
+	countFile := filepath.Join(coordDir, "invocations.log")
+	releaseFile := filepath.Join(coordDir, "release.flag")
+	scriptPath := filepath.Join(coordDir, "yt-dlp")
+	scriptBody := fmt.Sprintf("#!/bin/sh\necho 1 >> %q\nidx=$(wc -l < %q | tr -d ' ')\ntouch \"%s/started_${idx}\"\nwhile [ ! -f %q ]; do\n  sleep 0.02\ndone\necho '{\"id\":\"1577719286659006464\",\"title\":\"Busy isolation test\",\"formats\":[{\"format_id\":\"http-2176\",\"url\":\"https://video.twimg.com/ext_tw_video/1577719236209922048/pu/vid/1280x720/vid.mp4\",\"ext\":\"mp4\",\"protocol\":\"https\",\"width\":1280,\"height\":720,\"vcodec\":\"avc1.64001f\",\"acodec\":\"mp4a.40.2\"}]}'\n",
+		countFile, countFile, coordDir, releaseFile)
+	if err := os.WriteFile(scriptPath, []byte(scriptBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(scriptBody))
+	digest := hex.EncodeToString(sum[:])
+
+	baseEng, err := ytengine.New(ytengine.Config{
+		BinaryPath:     scriptPath,
+		AllowedHashes:  map[string]string{digest: "yt-dlp"},
+		MaxConcurrency: 2,
+		Timeout:        5 * time.Second,
+		Resolver:       staticPublicResolver{},
+	})
+	if err != nil || !baseEng.Enabled() {
+		t.Fatalf("ytengine.New failed: %v", err)
+	}
+
+	c, err := catalog.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []unified.Object{catalog.XPlatform(), catalog.YouTubePlatform(), catalog.InstagramPlatform()} {
+		if err := c.Register(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	adapters := map[string]Adapter{
+		"douyin": AdapterFunc(func(context.Context, string, int64) (unified.Object, error) {
+			return unified.Clone(douyinFixture), nil
+		}),
+		"x":         x.New(baseEng.WithTargetPolicy(x.AllowedTargetURL, x.AllowedOutboundHost)),
+		"youtube":   youtube.New(baseEng.WithTargetPolicy(youtube.AllowedTargetURL, youtube.AllowedOutboundHost)),
+		"instagram": instagram.New(baseEng.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)),
+	}
+	h, err := New(c, adapters, func() time.Time { return time.Unix(now, 0) }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admCfg := DefaultAdmissionConfig()
+	entry, err := WithAdmissionConfig(h, nil, "caddy", testEdgeKey, admCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Occupy the 2 shared yt-dlp execution slots from 2 distinct client IPs.
+	var inFlightWG sync.WaitGroup
+	inFlightCodes := make([]int, 2)
+	inFlightWG.Add(2)
+	go func() {
+		defer inFlightWG.Done()
+		req := edgeRequest("/api/parse?schema_version=1.0&url="+url.QueryEscape("https://x.com/UltimaShadowX/status/1577719286659006464"), "198.51.100.1")
+		inFlightCodes[0] = call(entry, req).Code
+	}()
+	go func() {
+		defer inFlightWG.Done()
+		req := edgeRequest("/api/parse?schema_version=1.0&url="+url.QueryEscape("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "198.51.100.2")
+		inFlightCodes[1] = call(entry, req).Code
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, err1 := os.Stat(filepath.Join(coordDir, "started_1"))
+		_, err2 := os.Stat(filepath.Join(coordDir, "started_2"))
+		if err1 == nil && err2 == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// 2. Send 8 additional yt-dlp requests across distinct client IPs while the 2 slots are full.
+	// They must return 429 RATE_LIMITED ("本地解析引擎繁忙，请稍后重试") immediately without occupying the 8-slot parse pool.
+	for i := 0; i < 8; i++ {
+		clientIP := fmt.Sprintf("198.51.100.%d", 10+i)
+		req := edgeRequest("/api/parse?schema_version=1.0&url="+url.QueryEscape("https://www.instagram.com/reel/C123456/"), clientIP)
+		w := call(entry, req)
+		if w.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected 429 when yt-dlp slots full, got %d: %s", w.Code, w.Body.String())
+		}
+		if w.Header().Get("Retry-After") != "1" {
+			t.Fatalf("expected Retry-After: 1 header on local busy response, got %q", w.Header().Get("Retry-After"))
+		}
+		env, err := unified.Decode(w.Body.Bytes())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+			t.Fatalf("busy response failed unified schema validation: %v", err)
+		}
+		errObj := unified.Map(env["error"])
+		if unified.Str(env["code"]) != "RATE_LIMITED" ||
+			unified.Str(errObj["message"]) != "本地解析引擎繁忙，请稍后重试" ||
+			errObj["retryable"] != true {
+			t.Fatalf("unexpected busy error payload: %v", env)
+		}
+	}
+
+	// 3. While the 2 yt-dlp slots are STILL occupied, legacy platform (douyin) requests from multiple client IPs
+	// must enter the global /api/parse pool and succeed with 200 OK.
+	for i := 0; i < 6; i++ {
+		clientIP := fmt.Sprintf("198.51.100.%d", 30+i)
+		req := edgeRequest("/api/parse?schema_version=1.0&url=https://www.douyin.com/video/123", clientIP)
+		w := call(entry, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("legacy douyin request blocked while yt-dlp was full (client %s): status=%d body=%s", clientIP, w.Code, w.Body.String())
+		}
+	}
+
+	// Verify only 2 yt-dlp subprocesses were spawned during the entire busy window.
+	countBytes, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Split(strings.TrimSpace(string(countBytes)), "\n"); len(lines) != 2 {
+		t.Fatalf("expected only 2 spawned subprocesses, got %d", len(lines))
+	}
+
+	// 4. Release the 2 in-flight yt-dlp subprocesses and verify they complete cleanly.
+	if err := os.WriteFile(releaseFile, []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inFlightWG.Wait()
+	if inFlightCodes[0] != http.StatusOK {
+		t.Fatalf("expected first in-flight X request to return 200 OK after release, got %d", inFlightCodes[0])
+	}
+
+	// 5. Subsequent X request after slots are freed succeeds with 200 OK.
+	reqAfter := edgeRequest("/api/parse?schema_version=1.0&url="+url.QueryEscape("https://x.com/UltimaShadowX/status/1577719286659006464"), "198.51.100.50")
+	wAfter := call(entry, reqAfter)
+	if wAfter.Code != http.StatusOK {
+		t.Fatalf("expected X request after slot release to return 200 OK, got %d: %s", wAfter.Code, wAfter.Body.String())
 	}
 }

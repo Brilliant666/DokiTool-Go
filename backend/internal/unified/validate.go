@@ -326,7 +326,8 @@ func ValidateEnvelopeAt(payload Object, fallbackNow int64) error {
 				return fmt.Errorf("adaptive manifest has no fixed resolution")
 			}
 		}
-		expected := SelectDefault(item, now)
+		platform := Str(data["platform"])
+		expected := SelectDefaultForPlatform(platform, item, now)
 		if item["default"] != nil {
 			if expected["default"] == nil {
 				return fmt.Errorf("no eligible complete file")
@@ -339,7 +340,7 @@ func ValidateEnvelopeAt(payload Object, fallbackNow int64) error {
 					usableFiles = append(usableFiles, v)
 				}
 			}
-			eligibleFiles := defaultEligibleFiles(Str(item["type"]), usableFiles)
+			eligibleFiles := defaultEligibleFiles(platform, Str(item["type"]), usableFiles)
 			var selected Object
 			for _, variant := range eligibleFiles {
 				if Equal(variant["id"], projection["variant_id"]) {

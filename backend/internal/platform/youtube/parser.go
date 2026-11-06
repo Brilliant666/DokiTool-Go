@@ -173,7 +173,11 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		}
 		var engineErr *ytengine.Error
 		if errors.As(err, &engineErr) {
-			return unified.ContractError(string(engineErr.Code), engineErr.Message, engineErr.Retryable), nil
+			resp := unified.ContractError(string(engineErr.Code), engineErr.Message, engineErr.Retryable)
+			if engineErr.Retryable && engineErr.RetryAfter > 0 {
+				unified.Map(resp["error"])["retry_after_seconds"] = engineErr.RetryAfter
+			}
+			return resp, nil
 		}
 		return unified.ContractError("UPSTREAM_UNAVAILABLE", "当前平台解析服务暂不可用，请稍后重试", true), nil
 	}

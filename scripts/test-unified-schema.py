@@ -401,6 +401,56 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
             contract.validate(unknown_plus_4k_silent)
 
+        # 5. Silent video without label "仅视频无声" or optional codec/container/mime_type fields is still recognized via has_audio=False on yt-dlp platforms.
+        v4k_minimal_silent = {
+            'id': 'v-4k-min-silent',
+            'label': '4K',
+            'metadata': {'width': 3840, 'height': 2160, 'has_audio': False, 'evidence': 'upstream'},
+            'delivery': {'kind': 'file', 'sources': [{'id': 's-4k-min', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=313'}]},
+        }
+        minimal_silent_env = deepcopy(yt)
+        item(minimal_silent_env)['variants'] = [v4k_minimal_silent, v360, v_m4a]
+        item(minimal_silent_env)['default'] = {'variant_id': 'v-360-audible', 'source_id': 's-360', 'url': v360['delivery']['sources'][0]['url']}
+        contract.validate(minimal_silent_env)
+
+        # 6. Legacy platforms (e.g. douyin) keep main spatial selection when high-res silent + lower-res audible coexist.
+        legacy_env = deepcopy(yt)
+        legacy_env['data']['platform'] = 'douyin'
+        legacy_env['data']['source_url'] = 'https://www.douyin.com/video/7000000000000000001'
+        item(legacy_env)['variants'] = [v4k_minimal_silent, v360]
+        item(legacy_env)['default'] = {'variant_id': 'v-4k-min-silent', 'source_id': 's-4k-min', 'url': v4k_minimal_silent['delivery']['sources'][0]['url']}
+        contract.validate(legacy_env)
+        legacy_wrong = deepcopy(legacy_env)
+        item(legacy_wrong)['default'] = {'variant_id': 'v-360-audible', 'source_id': 's-360', 'url': v360['delivery']['sources'][0]['url']}
+        with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
+            contract.validate(legacy_wrong)
+
+        # 7. Candidate with only audio_codec, missing video_codec/dimensions, non-audio/* MIME is never misclassified as audio-only on legacy or new platforms.
+        v_acodec_only_video = {
+            'id': 'v-acodec-video',
+            'label': '标清',
+            'metadata': {
+                'has_audio': True, 'audio_codec': 'mp4a.40.2',
+                'container': 'mp4', 'extension': 'mp4', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-acodec-video', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=18'}],
+            },
+        }
+        self.assertFalse(contract.audio_only_file(v_acodec_only_video))
+        for platform in ('douyin', 'youtube'):
+            env = deepcopy(yt)
+            env['data']['platform'] = platform
+            item(env)['variants'] = [v_acodec_only_video, v_m4a]
+            item(env)['default'] = {
+                'variant_id': 'v-acodec-video',
+                'source_id': 's-acodec-video',
+                'url': v_acodec_only_video['delivery']['sources'][0]['url'],
+            }
+            contract.validate(env)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

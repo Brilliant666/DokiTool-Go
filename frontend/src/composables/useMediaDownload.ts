@@ -342,8 +342,15 @@ export function useMediaDownload({
       );
     const active = (status: string) =>
       ["queued", "preparing", "downloading"].includes(status);
+    const isCorsBlockedManualTask = (task: DownloadTask) =>
+      task.status === "manual" &&
+      typeof task.url === "string" &&
+      task.url.length > 0 &&
+      isCorsBlockedDirectCdn(task.url) &&
+      !isVerifiedDirectAttachment(task.url);
     let duplicate = matchingTasks().some(
-      (task) => (active(task.status) && !task.ownerGone) || task.status === "manual",
+      (task) =>
+        (active(task.status) && !task.ownerGone) || isCorsBlockedManualTask(task),
     );
     if (
       !duplicate &&
@@ -356,6 +363,7 @@ export function useMediaDownload({
         duplicate = matchingTasks().some(
           (task) =>
             (active(task.status) && !task.ownerGone) ||
+            isCorsBlockedManualTask(task) ||
             (task.status === "interrupted" &&
               task.deliveryId &&
               hasStreamingTask(task.deliveryId)),

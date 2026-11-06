@@ -2277,3 +2277,52 @@ test('googlevideo delivery distinguishes verified itag=18 attachment from manual
   assert.equal(h3.store.downloads[0].status, 'cancelled');
   assert.equal(clicked.length, 0);
 });
+
+test('tbvideo manual fallback on pipigx and zuiyou allows a fresh main-button attempt while preserving card actions and googlevideo manual deduplication', async () => {
+  for (const platform of ['pipigx', 'zuiyou']) {
+    clicked = []; fetched = [];
+    const tbUrl = `https://tbvideo.ixiaochuan.cn/${platform}-video.mp4`;
+    const tbItem = {
+      id: `${platform}-1`,
+      type: 'video',
+      state: 'ready',
+      default: { variant_id: 'v0', source_id: 's0', url: tbUrl },
+      variants: [
+        {
+          id: 'v0',
+          metadata: { width: 720, height: 1280, container: 'mp4', extension: 'mp4', mime_type: 'video/mp4', evidence: 'upstream' },
+          delivery: { kind: 'file', sources: [{ id: 's0', url: tbUrl }] },
+        },
+      ],
+      tbvideo: { platform, pid: '1001', vid: '2002', sources: {} },
+    };
+
+    const hTb = harness({ platform, items: [tbItem], default_item_id: tbItem.id });
+
+    // 1. First main-button click falls back to manual (no verified tbvideo candidate).
+    await hTb.instance.downloadMainVideo();
+    await settled(hTb.store.downloads[0]);
+    assert.equal(hTb.store.downloads.length, 1);
+    assert.equal(hTb.store.downloads[0].status, 'manual');
+    assert.equal(hTb.store.downloads[0].url, tbUrl);
+
+    // 2. Clicking the main download button again starts a new attempt instead of being blocked by manual deduplication.
+    await hTb.instance.downloadMainVideo();
+    await settled(hTb.store.downloads[1]);
+    assert.equal(hTb.store.downloads.length, 2, `${platform}: second main-button click must create a new attempt`);
+    assert.equal(hTb.store.downloads[1].status, 'manual');
+    assert.ok(!hTb.toasts.some(([msg]) => msg.includes('该资源已有下载任务')), `${platform}: must not toast duplicate task on legacy manual fallback`);
+
+    // 3. Existing card action (handleBrowserDownload) opens the source link and transitions that card to handed-off.
+    hTb.instance.handleBrowserDownload(hTb.store.downloads[0].id);
+    assert.equal(hTb.store.downloads[0].status, 'handed-off');
+    assert.equal(clicked.length, 1);
+    assert.equal(clicked[0].href, tbUrl);
+
+    // 4. Existing card retry (handleRetryDownload) re-runs in place on the second card without adding a third card.
+    await hTb.instance.handleRetryDownload(hTb.store.downloads[1].id);
+    await settled(hTb.store.downloads[1]);
+    assert.equal(hTb.store.downloads.length, 2);
+    assert.equal(hTb.store.downloads[1].status, 'manual');
+  }
+});

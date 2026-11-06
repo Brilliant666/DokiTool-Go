@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -266,10 +266,20 @@ func TestPathDiscoveryAndSHA256Verification(t *testing.T) {
 }
 
 func TestCrossPlatformSharedConcurrencyLimitAndRelease(t *testing.T) {
-	script := `
-sleep 0.25
+	coordDir := t.TempDir()
+	countFile := filepath.Join(coordDir, "invocations.log")
+	releaseFile := filepath.Join(coordDir, "release.flag")
+
+	script := fmt.Sprintf(`
+echo "1" >> %q
+idx=$(wc -l < %q | tr -d ' ')
+touch "%s/started_${idx}"
+while [ ! -f %q ]; do
+  sleep 0.02
+done
 echo '{"id":"ok","formats":[{"format_id":"18","url":"https://video.twimg.com/ext_tw_video/1/pu/vid/640x360/a.mp4","ext":"mp4","protocol":"https","width":640,"height":360}]}'
-`
+`, countFile, countFile, coordDir, releaseFile)
+
 	binPath, hashes := writeFakeYTDLP(t, script)
 	baseEng, err := New(Config{
 		BinaryPath:     binPath,
@@ -308,56 +318,184 @@ echo '{"id":"ok","formats":[{"format_id":"18","url":"https://video.twimg.com/ext
 		t.Fatalf("expected all 3 platform engines to share a single capacity-2 semaphore")
 	}
 
-	var peakInUse int32
-	stopMonitor := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	wg.Add(2)
 	go func() {
-		for {
-			select {
-			case <-stopMonitor:
-				return
-			default:
-				cur := int32(len(baseEng.sem))
-				for {
-					prev := atomic.LoadInt32(&peakInUse)
-					if cur <= prev || atomic.CompareAndSwapInt32(&peakInUse, prev, cur) {
-						break
-					}
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-		}
+		defer wg.Done()
+		_, errs[0] = xEng.Extract(context.Background(), "https://x.com/i/status/1")
+	}()
+	go func() {
+		defer wg.Done()
+		_, errs[1] = ytEng.Extract(context.Background(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
 	}()
 
-	var wg sync.WaitGroup
-	errs := make([]error, 3)
-	calls := []struct {
-		eng *Engine
-		url string
-	}{
-		{xEng, "https://x.com/i/status/1"},
-		{ytEng, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
-		{igEng, "https://www.instagram.com/reel/C123456/"},
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, err1 := os.Stat(filepath.Join(coordDir, "started_1"))
+		_, err2 := os.Stat(filepath.Join(coordDir, "started_2"))
+		if err1 == nil && err2 == nil && len(baseEng.sem) == 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	for i, c := range calls {
-		wg.Add(1)
-		go func(idx int, eng *Engine, target string) {
-			defer wg.Done()
-			_, errs[idx] = eng.Extract(context.Background(), target)
-		}(i, c.eng, c.url)
+	if len(baseEng.sem) != 2 {
+		t.Fatalf("expected both semaphore slots to be occupied, got %d", len(baseEng.sem))
+	}
+
+	// 3rd concurrent request while 2 slots are occupied must return immediately with LocalBusy
+	// without spawning a 3rd yt-dlp subprocess.
+	startBusy := time.Now()
+	_, busyErr := igEng.Extract(context.Background(), "https://www.instagram.com/reel/C123456/")
+	busyElapsed := time.Since(startBusy)
+	if busyElapsed > 200*time.Millisecond {
+		t.Fatalf("expected immediate non-blocking busy return, took %s", busyElapsed)
+	}
+	var engineErr *Error
+	if !errors.As(busyErr, &engineErr) || engineErr.Code != CodeRateLimited || !engineErr.Retryable || !engineErr.LocalBusy || engineErr.RetryAfter != 1 || engineErr.Message != "本地解析引擎繁忙，请稍后重试" {
+		t.Fatalf("expected LocalBusy RATE_LIMITED error, got %#v (%v)", engineErr, busyErr)
+	}
+
+	countBytes, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatalf("read invocation log: %v", err)
+	}
+	if lines := strings.Split(strings.TrimSpace(string(countBytes)), "\n"); len(lines) != 2 {
+		t.Fatalf("expected exactly 2 spawned subprocesses while full, got %d (%q)", len(lines), string(countBytes))
+	}
+
+	// Release the 2 running subprocesses.
+	if err := os.WriteFile(releaseFile, []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	wg.Wait()
-	close(stopMonitor)
-
 	for i, e := range errs {
 		if e != nil {
-			t.Fatalf("concurrent call %d failed: %v", i, e)
+			t.Fatalf("in-flight call %d failed: %v", i, e)
 		}
-	}
-	if peak := atomic.LoadInt32(&peakInUse); peak > 2 {
-		t.Fatalf("expected shared concurrency peak <= 2 across X/YouTube/Instagram, got %d", peak)
 	}
 	if len(baseEng.sem) != 0 {
 		t.Fatalf("expected semaphore to be empty after completion, got %d", len(baseEng.sem))
+	}
+
+	// Subsequent request after slots release must succeed cleanly.
+	if _, err := igEng.Extract(context.Background(), "https://www.instagram.com/reel/C123456/"); err != nil {
+		t.Fatalf("expected subsequent request after slot release to succeed, got %v", err)
+	}
+	if len(baseEng.sem) != 0 {
+		t.Fatalf("expected semaphore to be empty after subsequent call, got %d", len(baseEng.sem))
+	}
+}
+
+func TestExtractSlotLifecycleAcrossSuccessFailureTimeoutAndCancel(t *testing.T) {
+	coordDir := t.TempDir()
+	countFile := filepath.Join(coordDir, "invocations.log")
+	startedCancelFile := filepath.Join(coordDir, "started_cancel")
+
+	script := fmt.Sprintf(`
+echo "1" >> %q
+target=""
+for arg in "$@"; do
+  target="$arg"
+done
+case "$target" in
+  *fail*)
+    echo "ERROR: Video unavailable" >&2
+    exit 1
+    ;;
+  *timeout*)
+    sleep 5
+    ;;
+  *cancel*)
+    touch %q
+    sleep 5
+    ;;
+  *)
+    echo '{"id":"ok","formats":[{"format_id":"18","url":"https://video.twimg.com/ext_tw_video/1/pu/vid/640x360/a.mp4","ext":"mp4","protocol":"https","width":640,"height":360}]}'
+    ;;
+esac
+`, countFile, startedCancelFile)
+
+	binPath, hashes := writeFakeYTDLP(t, script)
+	eng, err := New(Config{
+		BinaryPath:     binPath,
+		AllowedHashes:  hashes,
+		MaxConcurrency: 1,
+		Timeout:        minExtractTimeout,
+		AllowedURL:     func(u string) bool { return strings.HasPrefix(u, "https://x.com/") },
+		AllowedOutboundHost: func(h string) bool {
+			return h == "x.com"
+		},
+		Resolver: stubResolver{ips: map[string][]netip.Addr{
+			"x.com": {netip.MustParseAddr("104.244.42.1")},
+		}},
+	})
+	if err != nil || !eng.Enabled() {
+		t.Fatalf("New eng failed: %v", err)
+	}
+
+	// 1. Pre-canceled context does not start execution or acquire/leak slot.
+	preCanceledCtx, preCancel := context.WithCancel(context.Background())
+	preCancel()
+	if _, err := eng.Extract(preCanceledCtx, "https://x.com/i/status/1"); err == nil {
+		t.Fatal("expected pre-canceled Extract to fail")
+	}
+	if _, statErr := os.Stat(countFile); !os.IsNotExist(statErr) {
+		t.Fatalf("expected pre-canceled Extract not to spawn subprocess, statErr=%v", statErr)
+	}
+	if len(eng.sem) != 0 {
+		t.Fatalf("expected 0 occupied slots after pre-canceled call, got %d", len(eng.sem))
+	}
+
+	// 2. Success releases slot once.
+	if _, err := eng.Extract(context.Background(), "https://x.com/i/status/1"); err != nil {
+		t.Fatalf("expected success path to pass, got %v", err)
+	}
+	if len(eng.sem) != 0 {
+		t.Fatalf("expected 0 occupied slots after success, got %d", len(eng.sem))
+	}
+
+	// 3. Subprocess failure releases slot once.
+	if _, err := eng.Extract(context.Background(), "https://x.com/i/status/fail"); err == nil {
+		t.Fatal("expected failure path to return error")
+	}
+	if len(eng.sem) != 0 {
+		t.Fatalf("expected 0 occupied slots after failure, got %d", len(eng.sem))
+	}
+
+	// 4. In-flight context cancellation releases slot once.
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for i := 0; i < 100; i++ {
+			if _, err := os.Stat(startedCancelFile); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		cancel()
+	}()
+	if _, err := eng.Extract(cancelCtx, "https://x.com/i/status/cancel"); err == nil {
+		t.Fatal("expected canceled in-flight path to return error")
+	}
+	if len(eng.sem) != 0 {
+		t.Fatalf("expected 0 occupied slots after in-flight cancel, got %d", len(eng.sem))
+	}
+
+	// 5. Timeout releases slot once.
+	if _, err := eng.Extract(context.Background(), "https://x.com/i/status/timeout"); err == nil {
+		t.Fatal("expected timeout path to return error")
+	}
+	if len(eng.sem) != 0 {
+		t.Fatalf("expected 0 occupied slots after timeout, got %d", len(eng.sem))
+	}
+
+	// 6. Subsequent normal request still acquires the single slot and succeeds.
+	if _, err := eng.Extract(context.Background(), "https://x.com/i/status/2"); err != nil {
+		t.Fatalf("expected subsequent request after all 4 paths to succeed, got %v", err)
+	}
+	if len(eng.sem) != 0 {
+		t.Fatalf("expected 0 occupied slots at end, got %d", len(eng.sem))
 	}
 }
 

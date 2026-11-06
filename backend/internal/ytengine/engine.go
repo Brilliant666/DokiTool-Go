@@ -377,11 +377,26 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 		return nil, err
 	}
 
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			<-e.sem
+		})
+	}
 	select {
 	case e.sem <- struct{}{}:
-		defer func() { <-e.sem }()
-	case <-ctx.Done():
-		return nil, classifyContextErr(ctx.Err())
+		defer release()
+	default:
+		return nil, &Error{
+			Code:       CodeRateLimited,
+			Message:    "本地解析引擎繁忙，请稍后重试",
+			Retryable:  true,
+			RetryAfter: 1,
+			LocalBusy:  true,
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, classifyContextErr(err)
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, e.timeout)

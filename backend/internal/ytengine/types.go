@@ -25,10 +25,12 @@ const (
 
 // Error represents a classified engine failure safe for adapter handling.
 type Error struct {
-	Code      ErrorCode
-	Message   string
-	Retryable bool
-	Cause     error
+	Code       ErrorCode
+	Message    string
+	Retryable  bool
+	RetryAfter int
+	LocalBusy  bool
+	Cause      error
 }
 
 func (e *Error) Error() string {
