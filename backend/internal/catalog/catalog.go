@@ -22,6 +22,42 @@ var hostName = regexp.MustCompile(`(?i)^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
 
 func Load() (*Catalog, error) { return Decode(config.Platforms()) }
 
+// XPlatform returns the optional registry entry for X / Twitter.
+func XPlatform() unified.Object {
+	return unified.Object{
+		"id":           "x",
+		"name":         "X",
+		"site_url":     "https://x.com/",
+		"icon":         "x",
+		"capabilities": unified.Array{"video"},
+		"domains":      unified.Array{"x.com", "twitter.com"},
+	}
+}
+
+// YouTubePlatform returns the optional registry entry for YouTube.
+func YouTubePlatform() unified.Object {
+	return unified.Object{
+		"id":           "youtube",
+		"name":         "YouTube",
+		"site_url":     "https://www.youtube.com/",
+		"icon":         "youtube",
+		"capabilities": unified.Array{"video"},
+		"domains":      unified.Array{"youtube.com", "youtu.be"},
+	}
+}
+
+// InstagramPlatform returns the optional registry entry for Instagram.
+func InstagramPlatform() unified.Object {
+	return unified.Object{
+		"id":           "instagram",
+		"name":         "Instagram",
+		"site_url":     "https://www.instagram.com/",
+		"icon":         "instagram",
+		"capabilities": unified.Array{"video"},
+		"domains":      unified.Array{"instagram.com"},
+	}
+}
+
 func Decode(data []byte) (*Catalog, error) {
 	value, err := unified.DecodeValue(data)
 	if err != nil {
@@ -33,29 +69,43 @@ func Decode(data []byte) (*Catalog, error) {
 	}
 	c := &Catalog{byID: make(map[string]unified.Object)}
 	for _, value := range rows {
-		row := unified.Map(value)
-		id := unified.Str(row["id"])
-		if !identifier.MatchString(id) || c.byID[id] != nil {
-			return nil, fmt.Errorf("invalid or duplicate platform id %q", id)
+		if err := c.Register(unified.Map(value)); err != nil {
+			return nil, err
 		}
-		for _, key := range []string{"name", "site_url", "icon"} {
-			if unified.Str(row[key]) == "" {
-				return nil, fmt.Errorf("platform %s lacks %s", id, key)
-			}
-		}
-		if len(unified.Slice(row["domains"])) == 0 || len(unified.Slice(row["capabilities"])) == 0 {
-			return nil, fmt.Errorf("platform %s lacks domains or capabilities", id)
-		}
-		for _, domain := range unified.Slice(row["domains"]) {
-			name := unified.Str(domain)
-			if !hostName.MatchString(name) || name != strings.ToLower(name) {
-				return nil, fmt.Errorf("invalid platform domain")
-			}
-		}
-		c.rows = append(c.rows, row)
-		c.byID[id] = row
 	}
 	return c, nil
+}
+
+// Register validates and appends an optional platform entry to the runtime catalog.
+func (c *Catalog) Register(row unified.Object) error {
+	if c == nil {
+		return fmt.Errorf("missing catalog")
+	}
+	if c.byID == nil {
+		c.byID = make(map[string]unified.Object)
+	}
+	cloned := unified.Clone(row)
+	id := unified.Str(cloned["id"])
+	if !identifier.MatchString(id) || c.byID[id] != nil {
+		return fmt.Errorf("invalid or duplicate platform id %q", id)
+	}
+	for _, key := range []string{"name", "site_url", "icon"} {
+		if unified.Str(cloned[key]) == "" {
+			return fmt.Errorf("platform %s lacks %s", id, key)
+		}
+	}
+	if len(unified.Slice(cloned["domains"])) == 0 || len(unified.Slice(cloned["capabilities"])) == 0 {
+		return fmt.Errorf("platform %s lacks domains or capabilities", id)
+	}
+	for _, domain := range unified.Slice(cloned["domains"]) {
+		name := unified.Str(domain)
+		if !hostName.MatchString(name) || name != strings.ToLower(name) {
+			return fmt.Errorf("invalid platform domain")
+		}
+	}
+	c.rows = append(c.rows, cloned)
+	c.byID[id] = cloned
+	return nil
 }
 
 func (c *Catalog) Has(id string) bool { return c.byID[id] != nil }

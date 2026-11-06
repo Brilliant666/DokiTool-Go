@@ -58,6 +58,9 @@ const tabIcons: Record<string, string> = {
   pipixia: "fa-face-laugh",
   pipigx: "fa-face-smile",
   zuiyou: "fa-comments",
+  x: "fa-x-twitter",
+  youtube: "fa-youtube",
+  instagram: "fa-instagram",
 };
 export function platformTabs(locale: string) {
   return [

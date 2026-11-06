@@ -278,6 +278,179 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             contract.validate(changed)
 
+    def test_audible_complete_file_default_eligibility_rules(self):
+        # 1. Audible 360p default + 4K split silent video-only + M4A audio-only coexist and pass.
+        yt = example(2)
+        yt['data']['platform'] = 'youtube'
+        yt['data']['source_url'] = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+        it = item(yt)
+        it.pop('higher_quality_variants', None)
+        v360 = {
+            'id': 'v-360-audible',
+            'label': '360p (含音频)',
+            'metadata': {
+                'width': 640, 'height': 360, 'has_audio': True,
+                'video_codec': 'avc1.42001E', 'audio_codec': 'mp4a.40.2',
+                'container': 'mp4', 'extension': 'mp4', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-360', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=18'}],
+            },
+        }
+        v4k_silent = {
+            'id': 'v-4k-silent',
+            'label': '4K (仅视频无声)',
+            'metadata': {
+                'width': 3840, 'height': 2160, 'has_audio': False,
+                'video_codec': 'vp9', 'container': 'webm', 'extension': 'webm', 'mime_type': 'video/webm',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-4k', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=313'}],
+            },
+        }
+        v_m4a = {
+            'id': 'v-m4a-audio',
+            'label': '音频 (M4A)',
+            'metadata': {
+                'has_audio': True, 'audio_codec': 'mp4a.40.2',
+                'container': 'm4a', 'extension': 'm4a', 'mime_type': 'audio/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-m4a', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=140'}],
+            },
+        }
+        it['variants'] = [v4k_silent, v360, v_m4a]
+        it['default'] = {'variant_id': 'v-360-audible', 'source_id': 's-360', 'url': v360['delivery']['sources'][0]['url']}
+        contract.validate(yt)
+
+        # Selecting the 4K split silent file or M4A audio-only file when an audible complete file exists is rejected.
+        for bad_id, bad_src, bad_url in [
+            ('v-4k-silent', 's-4k', v4k_silent['delivery']['sources'][0]['url']),
+            ('v-m4a-audio', 's-m4a', v_m4a['delivery']['sources'][0]['url']),
+        ]:
+            wrong_default = deepcopy(yt)
+            item(wrong_default)['default'] = {'variant_id': bad_id, 'source_id': bad_src, 'url': bad_url}
+            with self.assertRaisesRegex(ValueError, 'default does not identify an eligible complete file'):
+                contract.validate(wrong_default)
+
+        # 2. Two audible complete files: selecting lower 360p instead of 720p is rejected.
+        v720 = {
+            'id': 'v-720-audible',
+            'label': '720p (含音频)',
+            'metadata': {
+                'width': 1280, 'height': 720, 'has_audio': True,
+                'video_codec': 'avc1.64001F', 'audio_codec': 'mp4a.40.2',
+                'container': 'mp4', 'extension': 'mp4', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-720', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=22'}],
+            },
+        }
+        two_audible = deepcopy(yt)
+        item(two_audible)['variants'].append(v720)
+        with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
+            contract.validate(two_audible)
+        item(two_audible)['default'] = {'variant_id': 'v-720-audible', 'source_id': 's-720', 'url': v720['delivery']['sources'][0]['url']}
+        contract.validate(two_audible)
+
+        # 3. Only silent video files: highest silent file passes; lower silent file is rejected.
+        v1080_silent = {
+            'id': 'v-1080-silent',
+            'label': '1080p (仅视频无声)',
+            'metadata': {
+                'width': 1920, 'height': 1080, 'has_audio': False,
+                'video_codec': 'vp9', 'container': 'webm', 'extension': 'webm', 'mime_type': 'video/webm',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-1080', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=248'}],
+            },
+        }
+        only_silent = deepcopy(yt)
+        item(only_silent)['variants'] = [v4k_silent, v1080_silent, v_m4a]
+        item(only_silent)['default'] = {'variant_id': 'v-4k-silent', 'source_id': 's-4k', 'url': v4k_silent['delivery']['sources'][0]['url']}
+        contract.validate(only_silent)
+        only_silent_low = deepcopy(only_silent)
+        item(only_silent_low)['default'] = {'variant_id': 'v-1080-silent', 'source_id': 's-1080', 'url': v1080_silent['delivery']['sources'][0]['url']}
+        with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
+            contract.validate(only_silent_low)
+
+        # 4. Unknown audio (omitted has_audio) is never forged as has_audio=True.
+        v_unknown_360 = deepcopy(v360)
+        v_unknown_360['id'] = 'v-360-unknown'
+        v_unknown_360['label'] = '360p'
+        v_unknown_360['metadata'].pop('has_audio', None)
+        v_unknown_360['metadata'].pop('audio_codec', None)
+        unknown_only = deepcopy(yt)
+        item(unknown_only)['variants'] = [v_unknown_360]
+        item(unknown_only)['default'] = {'variant_id': 'v-360-unknown', 'source_id': 's-360', 'url': v_unknown_360['delivery']['sources'][0]['url']}
+        contract.validate(unknown_only)
+
+        unknown_plus_4k_silent = deepcopy(yt)
+        item(unknown_plus_4k_silent)['variants'] = [v4k_silent, v_unknown_360]
+        item(unknown_plus_4k_silent)['default'] = {'variant_id': 'v-360-unknown', 'source_id': 's-360', 'url': v_unknown_360['delivery']['sources'][0]['url']}
+        with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
+            contract.validate(unknown_plus_4k_silent)
+
+        # 5. Silent video without label "仅视频无声" or optional codec/container/mime_type fields is still recognized via has_audio=False on yt-dlp platforms.
+        v4k_minimal_silent = {
+            'id': 'v-4k-min-silent',
+            'label': '4K',
+            'metadata': {'width': 3840, 'height': 2160, 'has_audio': False, 'evidence': 'upstream'},
+            'delivery': {'kind': 'file', 'sources': [{'id': 's-4k-min', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=313'}]},
+        }
+        minimal_silent_env = deepcopy(yt)
+        item(minimal_silent_env)['variants'] = [v4k_minimal_silent, v360, v_m4a]
+        item(minimal_silent_env)['default'] = {'variant_id': 'v-360-audible', 'source_id': 's-360', 'url': v360['delivery']['sources'][0]['url']}
+        contract.validate(minimal_silent_env)
+
+        # 6. Legacy platforms (e.g. douyin) keep main spatial selection when high-res silent + lower-res audible coexist.
+        legacy_env = deepcopy(yt)
+        legacy_env['data']['platform'] = 'douyin'
+        legacy_env['data']['source_url'] = 'https://www.douyin.com/video/7000000000000000001'
+        item(legacy_env)['variants'] = [v4k_minimal_silent, v360]
+        item(legacy_env)['default'] = {'variant_id': 'v-4k-min-silent', 'source_id': 's-4k-min', 'url': v4k_minimal_silent['delivery']['sources'][0]['url']}
+        contract.validate(legacy_env)
+        legacy_wrong = deepcopy(legacy_env)
+        item(legacy_wrong)['default'] = {'variant_id': 'v-360-audible', 'source_id': 's-360', 'url': v360['delivery']['sources'][0]['url']}
+        with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
+            contract.validate(legacy_wrong)
+
+        # 7. Candidate with only audio_codec, missing video_codec/dimensions, non-audio/* MIME is never misclassified as audio-only on legacy or new platforms.
+        v_acodec_only_video = {
+            'id': 'v-acodec-video',
+            'label': '标清',
+            'metadata': {
+                'has_audio': True, 'audio_codec': 'mp4a.40.2',
+                'container': 'mp4', 'extension': 'mp4', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-acodec-video', 'url': 'https://rr1---sn-a.googlevideo.com/videoplayback?itag=18'}],
+            },
+        }
+        self.assertFalse(contract.audio_only_file(v_acodec_only_video))
+        for platform in ('douyin', 'youtube'):
+            env = deepcopy(yt)
+            env['data']['platform'] = platform
+            item(env)['variants'] = [v_acodec_only_video, v_m4a]
+            item(env)['default'] = {
+                'variant_id': 'v-acodec-video',
+                'source_id': 's-acodec-video',
+                'url': v_acodec_only_video['delivery']['sources'][0]['url'],
+            }
+            contract.validate(env)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

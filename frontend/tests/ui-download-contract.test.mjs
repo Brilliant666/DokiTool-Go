@@ -2188,3 +2188,141 @@ test('two page ZIP jobs serialize; cancelling the queued job fetches nothing and
   assert.deepEqual(fetched, ['https://media.test/queued-first.jpg', 'https://media.test/queued-third.jpg']);
   assert.equal(clicked.length, 2);
 });
+
+test('googlevideo delivery distinguishes verified itag=18 attachment from manual stream open and preserves selection', async () => {
+  const verifiedUrl = 'https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&itag=18&source=youtube&sparams=expire%2Citag%2Csource&sig=AAA&title=Sample_Video';
+  const unverifiedSilentUrl = 'https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&itag=401&source=youtube&sparams=expire%2Citag%2Csource&sig=BBB';
+  const item = {
+    id: 'video-yt-1',
+    type: 'video',
+    state: 'ready',
+    default: { variant_id: 'v-360p', source_id: 's-360p', url: verifiedUrl },
+    variants: [
+      {
+        id: 'v-4k-silent',
+        label: '2160p60 (4K · 仅视频无声)',
+        metadata: { has_audio: false, container: 'mp4', extension: 'mp4', mime_type: 'video/mp4' },
+        delivery: { kind: 'file', sources: [{ id: 's-4k', url: unverifiedSilentUrl, size_bytes: 712445280 }] },
+      },
+      {
+        id: 'v-360p',
+        label: '360p (含音频)',
+        metadata: { width: 640, height: 360, has_audio: true, container: 'mp4', extension: 'mp4', mime_type: 'video/mp4' },
+        delivery: { kind: 'file', sources: [{ id: 's-360p', url: verifiedUrl, size_bytes: 28523658 }] },
+      },
+    ],
+  };
+
+  // 1. Default verified itag=18 attachment -> browser_native / handed-off
+  clicked = []; fetched = [];
+  const h1 = harness({ items: [item] });
+  const initialSelection = JSON.stringify(h1.selection.currentSelection.value);
+  await h1.instance.downloadMainVideo();
+  assert.equal(h1.store.downloads.length, 1);
+  assert.equal(h1.store.downloads[0].transport, 'browser_native');
+  assert.equal(h1.store.downloads[0].status, 'handed-off');
+  assert.equal(h1.store.downloads[0].statusText, '已交给浏览器');
+  assert.equal(clicked.length, 1);
+  assert.equal(clicked[0].href, verifiedUrl);
+  assert.equal(fetched.length, 0);
+  assert.equal(JSON.stringify(h1.selection.currentSelection.value), initialSelection);
+
+  // 2. Explicit selection of unverified 4K silent stream -> transport=undefined, status='manual', no auto-click
+  clicked = []; fetched = [];
+  const h2 = harness({ items: [item] });
+  h2.selection.choose({ variant_id: 'v-4k-silent', source_id: 's-4k' });
+  const chosen4K = JSON.stringify(h2.selection.currentSelection.value);
+  await h2.instance.downloadMainVideo();
+  assert.equal(h2.store.downloads.length, 1);
+  assert.equal(h2.store.downloads[0].transport, undefined);
+  assert.equal(h2.store.downloads[0].status, 'manual');
+  assert.equal(h2.store.downloads[0].statusText, '打开源链接');
+  assert.equal(h2.store.downloads[0].nativeAvailable, true);
+  assert.equal(clicked.length, 0, 'unverified stream must not auto-open or claim handed-off');
+  assert.equal(JSON.stringify(h2.selection.currentSelection.value), chosen4K);
+
+  const cardHtml = await renderToString(createSSRApp({ render: () => h(DownloadCard, { downloads: h2.store.downloads }) }));
+  assert.ok(cardHtml.includes('打开源链接'), 'manual task must render explicit 打开源链接 action');
+
+  // 3. Duplicate click while manual card is present is deduplicated without creating a second card
+  await h2.instance.downloadMainVideo();
+  assert.equal(h2.store.downloads.length, 1);
+  assert.ok(h2.toasts.some(([msg]) => msg.includes('该资源已有下载任务')));
+
+  // 4. Explicit user click on 打开源链接 (handleBrowserDownload) transitions manual -> handed-off
+  h2.instance.handleBrowserDownload(h2.store.downloads[0].id);
+  assert.equal(h2.store.downloads[0].status, 'handed-off');
+  assert.equal(clicked.length, 1);
+  assert.equal(clicked[0].href, unverifiedSilentUrl);
+  assert.equal(JSON.stringify(h2.selection.currentSelection.value), chosen4K);
+
+  // 5. Deferred item cancelled during resolve before googlevideo handoff never opens or hands off
+  clicked = []; fetched = [];
+  let finishDeferred;
+  const deferredItem = {
+    id: 'video-yt-deferred',
+    type: 'video',
+    state: 'deferred',
+    resolve_url: '/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Daqz-KE-bpKQ&item_id=video-yt-deferred',
+    default: null,
+    default_unavailable_reason: 'needs_resolve',
+    variants: [],
+  };
+  const h3 = harness({ items: [deferredItem] }, () => new Promise(resolve => { finishDeferred = resolve; }));
+  const pDownload = h3.instance.downloadMainVideo();
+  await waitUntil(() => typeof finishDeferred === 'function');
+  h3.instance.handleCancelDownload(h3.store.downloads[0].id);
+  finishDeferred({ ...item, id: 'video-yt-deferred' });
+  await pDownload;
+  assert.equal(h3.store.downloads[0].status, 'cancelled');
+  assert.equal(clicked.length, 0);
+});
+
+test('tbvideo manual fallback on pipigx and zuiyou allows a fresh main-button attempt while preserving card actions and googlevideo manual deduplication', async () => {
+  for (const platform of ['pipigx', 'zuiyou']) {
+    clicked = []; fetched = [];
+    const tbUrl = `https://tbvideo.ixiaochuan.cn/${platform}-video.mp4`;
+    const tbItem = {
+      id: `${platform}-1`,
+      type: 'video',
+      state: 'ready',
+      default: { variant_id: 'v0', source_id: 's0', url: tbUrl },
+      variants: [
+        {
+          id: 'v0',
+          metadata: { width: 720, height: 1280, container: 'mp4', extension: 'mp4', mime_type: 'video/mp4', evidence: 'upstream' },
+          delivery: { kind: 'file', sources: [{ id: 's0', url: tbUrl }] },
+        },
+      ],
+      tbvideo: { platform, pid: '1001', vid: '2002', sources: {} },
+    };
+
+    const hTb = harness({ platform, items: [tbItem], default_item_id: tbItem.id });
+
+    // 1. First main-button click falls back to manual (no verified tbvideo candidate).
+    await hTb.instance.downloadMainVideo();
+    await settled(hTb.store.downloads[0]);
+    assert.equal(hTb.store.downloads.length, 1);
+    assert.equal(hTb.store.downloads[0].status, 'manual');
+    assert.equal(hTb.store.downloads[0].url, tbUrl);
+
+    // 2. Clicking the main download button again starts a new attempt instead of being blocked by manual deduplication.
+    await hTb.instance.downloadMainVideo();
+    await settled(hTb.store.downloads[1]);
+    assert.equal(hTb.store.downloads.length, 2, `${platform}: second main-button click must create a new attempt`);
+    assert.equal(hTb.store.downloads[1].status, 'manual');
+    assert.ok(!hTb.toasts.some(([msg]) => msg.includes('该资源已有下载任务')), `${platform}: must not toast duplicate task on legacy manual fallback`);
+
+    // 3. Existing card action (handleBrowserDownload) opens the source link and transitions that card to handed-off.
+    hTb.instance.handleBrowserDownload(hTb.store.downloads[0].id);
+    assert.equal(hTb.store.downloads[0].status, 'handed-off');
+    assert.equal(clicked.length, 1);
+    assert.equal(clicked[0].href, tbUrl);
+
+    // 4. Existing card retry (handleRetryDownload) re-runs in place on the second card without adding a third card.
+    await hTb.instance.handleRetryDownload(hTb.store.downloads[1].id);
+    await settled(hTb.store.downloads[1]);
+    assert.equal(hTb.store.downloads.length, 2);
+    assert.equal(hTb.store.downloads[1].status, 'manual');
+  }
+});

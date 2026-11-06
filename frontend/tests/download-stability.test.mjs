@@ -199,6 +199,9 @@ test('platform duplicates are hidden from keyboard/assistive navigation and redu
   const source = await readFile(new URL('../src/components/PlatformGrid.vue', import.meta.url), 'utf8');
   assert.match(source, /:aria-hidden="idx >= allPlatforms.length \? true : undefined"/);
   assert.match(source, /:tabindex="idx >= allPlatforms.length \? -1 : undefined"/);
+  assert.match(source, /x:\s*\{\s*img:\s*xArtwork/);
+  assert.match(source, /youtube:\s*\{\s*img:\s*youtubeArtwork/);
+  assert.match(source, /instagram:\s*\{[\s\S]*?img:\s*instagramArtwork/);
   const reduced = source.slice(source.indexOf('@media (prefers-reduced-motion: reduce)'));
   assert.match(reduced, /animation: none/);
   assert.doesNotMatch(reduced, /animation:\s*marquee/);

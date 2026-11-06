@@ -140,6 +140,29 @@ def higher(left, right):
     return abs(ratio_a / ratio_b - 1) <= .01 and all(x >= y for x, y in zip(a, b)) and a != b
 
 
+YTDLP_PLATFORMS = {'x', 'youtube', 'instagram'}
+
+
+def audio_only_file(variant):
+    meta = variant.get('metadata', {})
+    mime = meta.get('mime_type') or ''
+    return isinstance(mime, str) and mime.strip().lower().startswith('audio/')
+
+
+def audible_video_file(variant):
+    return not audio_only_file(variant) and variant.get('metadata', {}).get('has_audio') is True
+
+
+def default_eligible_files(platform, item_type, files):
+    if platform not in YTDLP_PLATFORMS or item_type != 'video':
+        return files
+    audible = [v for v in files if audible_video_file(v)]
+    if audible:
+        return audible
+    non_audio = [v for v in files if not audio_only_file(v)]
+    return non_audio if non_audio else files
+
+
 def metadata_valid(metadata, role=None):
     conflicts = metadata.get('field_conflicts', {})
     definitions = SCHEMA['$defs']['MediaMetadata']['properties']
@@ -263,7 +286,8 @@ def validate_semantics(response):
             metadata_valid(variant.get('metadata', {}), role)
             delivery_valid(variant['delivery'], variant.get('metadata'))
             require((variant['delivery']['kind'] == 'pair') == (item['type'] == 'live_photo'), 'pair and live-photo type must agree')
-        files = [v for v in variants if v['delivery']['kind'] == 'file' and usable(v['delivery'], now)]
+        usable_files = [v for v in variants if v['delivery']['kind'] == 'file' and usable(v['delivery'], now)]
+        files = default_eligible_files(data.get('platform'), item['type'], usable_files)
         selected = item['default']
         if selected is None:
             require(not files, 'null default hides an eligible complete file')

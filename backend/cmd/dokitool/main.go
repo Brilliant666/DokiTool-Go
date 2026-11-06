@@ -23,16 +23,20 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/media/weibo"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/bilibili"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/instagram"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/kuaishou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipigx"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/pipixia"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/toutiao"
 	weiboplatform "github.com/Brilliant666/DokiTool-Go/backend/internal/platform/weibo"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/x"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/xiaohongshu"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/youtube"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/zuiyou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
 // preparePublicMedia keeps platform-specific transformations at the public boundary.
@@ -140,6 +144,9 @@ func run(args []string) error {
 		"zuiyou":      zuiyou.NewWithTBVideo(executor, zuiyouSave),
 		"xiaohongshu": xiaohongshu.New(xhsExecutor),
 	}
+	if err := configureYTDLPX(c, adapters, executor, os.Getenv); err != nil {
+		return err
+	}
 	handler, err := api.New(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
 	if err != nil {
 		return err
@@ -245,4 +252,68 @@ func enableTBVideo(key string) (bool, error) {
 		return false, fmt.Errorf("%s must be a boolean", key)
 	}
 	return enabled, nil
+}
+
+// configureYTDLPX optionally registers the X / Twitter, YouTube, and Instagram
+// platforms when their respective DOKITOOL_YTDLP_*_ENABLED switches are true
+// and the shared yt-dlp binary preflight succeeds.
+// Production defaults all switches to false.
+func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, executor fetch.Executor, getenv func(string) string) error {
+	parseSwitch := func(key string) (bool, error) {
+		raw := getenv(key)
+		if raw == "" {
+			return false, nil
+		}
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return false, fmt.Errorf("%s must be a boolean", key)
+		}
+		return enabled, nil
+	}
+
+	xEnabled, err := parseSwitch("DOKITOOL_YTDLP_X_ENABLED")
+	if err != nil {
+		return err
+	}
+	ytEnabled, err := parseSwitch("DOKITOOL_YTDLP_YOUTUBE_ENABLED")
+	if err != nil {
+		return err
+	}
+	igEnabled, err := parseSwitch("DOKITOOL_YTDLP_INSTAGRAM_ENABLED")
+	if err != nil {
+		return err
+	}
+	if !xEnabled && !ytEnabled && !igEnabled {
+		return nil
+	}
+
+	baseEngine, err := ytengine.NewFromEnv(getenv, nil)
+	if err != nil || !baseEngine.Enabled() {
+		log.Printf("dokitool: yt-dlp engine preflight failed (platforms not registered in catalog): %v", err)
+		return nil
+	}
+	log.Printf("dokitool: yt-dlp shared engine verified (version=%s, asset=%s, sha256=%s)", ytengine.PinnedVersion, baseEngine.BinaryAsset(), baseEngine.BinarySHA256())
+
+	if xEnabled {
+		if err := c.Register(catalog.XPlatform()); err != nil {
+			return err
+		}
+		xEngine := baseEngine.WithTargetPolicy(x.AllowedTargetURL, x.AllowedOutboundHost)
+		adapters["x"] = x.NewWithSizeProber(xEngine, x.NewSizeProber(executor))
+	}
+	if ytEnabled {
+		if err := c.Register(catalog.YouTubePlatform()); err != nil {
+			return err
+		}
+		ytEngine := baseEngine.WithTargetPolicy(youtube.AllowedTargetURL, youtube.AllowedOutboundHost)
+		adapters["youtube"] = youtube.NewWithSizeProber(ytEngine, ytengine.NewSizeProber(executor, youtube.AllowedMediaURL))
+	}
+	if igEnabled {
+		if err := c.Register(catalog.InstagramPlatform()); err != nil {
+			return err
+		}
+		igEngine := baseEngine.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)
+		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, ytengine.NewSizeProber(executor, instagram.AllowedMediaURL))
+	}
+	return nil
 }

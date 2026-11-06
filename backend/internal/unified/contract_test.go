@@ -305,3 +305,100 @@ func TestSelectionNumericIDTieMatchesPHP(t *testing.T) {
 		t.Fatal("numeric ID tie selected lexically instead of PHP's numeric order")
 	}
 }
+
+func TestPlatformScopedDefaultEligibilityAndUnknownVideoFields(t *testing.T) {
+	const now int64 = 1793448000
+
+	makeVariant := func(id, label string, meta Object, url string) Object {
+		return Object{
+			"id":       id,
+			"label":    label,
+			"metadata": meta,
+			"delivery": Object{
+				"kind": "file",
+				"sources": Array{
+					Object{"id": "src-" + id, "url": url},
+				},
+			},
+		}
+	}
+
+	// 1. Legacy platform (douyin): high-res silent file + lower-res audible file still selects high-res silent file (main behavior).
+	legacyPayload := contractExample(t, "02")
+	legacyData := Map(legacyPayload["data"])
+	legacyData["platform"] = "douyin"
+	legacyItem := contractFirstItem(legacyPayload)
+	delete(legacyItem, "higher_quality_variants")
+	v1080SilentMinimal := makeVariant("v-1080-silent", "1080p", Object{
+		"width": 1920, "height": 1080, "has_audio": false, "evidence": "upstream",
+	}, "https://example.test/1080-silent.mp4")
+	v720Audible := makeVariant("v-720-audible", "720p", Object{
+		"width": 1280, "height": 720, "has_audio": true, "video_codec": "avc1.64001f", "audio_codec": "mp4a.40.2",
+		"container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://example.test/720-audible.mp4")
+	legacyItem["variants"] = Array{v1080SilentMinimal, v720Audible}
+	finalLegacy := FinalizeData(legacyData, now)
+	if got := Str(Map(contractFirstItem(finalLegacy)["default"])["variant_id"]); got != "v-1080-silent" {
+		t.Fatalf("legacy platform should keep main spatial selection (v-1080-silent), got %q", got)
+	}
+	if err := ValidateEnvelopeAt(finalLegacy, now); err != nil {
+		t.Fatalf("legacy envelope failed validation: %v", err)
+	}
+	wrongLegacy := Clone(finalLegacy)
+	Map(contractFirstItem(wrongLegacy)["default"])["variant_id"] = "v-720-audible"
+	Map(contractFirstItem(wrongLegacy)["default"])["source_id"] = "src-v-720-audible"
+	Map(contractFirstItem(wrongLegacy)["default"])["url"] = "https://example.test/720-audible.mp4"
+	if err := ValidateEnvelopeAt(wrongLegacy, now); err == nil {
+		t.Fatal("expected legacy platform to reject lower-res default when higher-res silent file exists")
+	}
+
+	// 2. New yt-dlp platform (youtube): 4K silent (even without label/codec/container/mime_type) + 360p audible + M4A audio-only
+	// selects 360p audible across FinalizeData and PublicView (normal & debug).
+	ytData := Clone(legacyData)
+	ytData["platform"] = "youtube"
+	ytData["source_url"] = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+	ytItem := contractFirstItem(Object{"data": ytData})
+	v4kSilentNoLabel := makeVariant("v-4k-silent", "4K", Object{
+		"width": 3840, "height": 2160, "has_audio": false, "evidence": "upstream",
+	}, "https://rr1---sn-a.googlevideo.com/videoplayback?itag=313")
+	v360Audible := makeVariant("v-360-audible", "360p", Object{
+		"width": 640, "height": 360, "has_audio": true, "video_codec": "avc1.42001E", "audio_codec": "mp4a.40.2",
+		"container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://rr1---sn-a.googlevideo.com/videoplayback?itag=18")
+	vM4AAudio := makeVariant("v-m4a", "M4A", Object{
+		"has_audio": true, "audio_codec": "mp4a.40.2", "container": "m4a", "extension": "m4a", "mime_type": "audio/mp4", "evidence": "upstream",
+	}, "https://rr1---sn-a.googlevideo.com/videoplayback?itag=140")
+	ytItem["variants"] = Array{v4kSilentNoLabel, v360Audible, vM4AAudio}
+	finalYT := FinalizeData(ytData, now)
+	for _, debug := range []bool{false, true} {
+		view := PublicView(finalYT, debug, now)
+		if got := Str(Map(contractFirstItem(view)["default"])["variant_id"]); got != "v-360-audible" {
+			t.Fatalf("youtube (debug=%v) expected v-360-audible default, got %q", debug, got)
+		}
+		if err := ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("youtube (debug=%v) failed validation: %v", debug, err)
+		}
+	}
+
+	// 3. Candidate with only audio_codec, missing video_codec/dimensions, non-audio/* MIME is never misclassified as audio-only
+	// on either legacy or new platforms.
+	vAudioCodecOnlyVideo := makeVariant("v-acodec-video", "标清", Object{
+		"has_audio": true, "audio_codec": "mp4a.40.2", "container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://rr1---sn-a.googlevideo.com/videoplayback?itag=18")
+	if isAudioOnlyFile(vAudioCodecOnlyVideo) {
+		t.Fatal("candidate with video/mp4 MIME and missing video_codec/dimensions was misclassified as audio-only")
+	}
+	for _, platform := range []string{"douyin", "youtube"} {
+		d := Clone(legacyData)
+		d["platform"] = platform
+		it := contractFirstItem(Object{"data": d})
+		it["variants"] = Array{vAudioCodecOnlyVideo, vM4AAudio}
+		out := FinalizeData(d, now)
+		if got := Str(Map(contractFirstItem(out)["default"])["variant_id"]); got != "v-acodec-video" {
+			t.Fatalf("platform %s failed to select v-acodec-video, got %q", platform, got)
+		}
+		if err := ValidateEnvelopeAt(out, now); err != nil {
+			t.Fatalf("platform %s envelope failed validation: %v", platform, err)
+		}
+	}
+}
