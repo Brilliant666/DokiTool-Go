@@ -54,7 +54,7 @@ before(async () => {
   globalThis.window = { setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} };
   globalThis.location = { href: 'https://snap.dokitool.com/', origin: 'https://snap.dokitool.com' };
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto });
-  globalThis.document = { body: { appendChild(element) { if (element.tag === 'iframe') nativeFrames.push(element); }, style: {} }, createElement(tag) { return { tag, setAttribute(name, value) { this[name] = value; }, click() { clicked.push({ href: this.href, filename: this.download, target: this.target }); }, remove() {} }; } };
+  globalThis.document = { body: { appendChild(element) { if (element.tag === 'iframe') nativeFrames.push(element); }, style: {} }, createElement(tag) { return { tag, setAttribute(name, value) { this[name] = value; }, click() { clicked.push({ href: this.href, filename: this.download, target: this.target, rel: this.rel, referrerPolicy: this.referrerPolicy }); }, remove() {} }; } };
   URL.createObjectURL = (blob) => { blobs.push(blob); return `blob:test-${blobs.length}`; };
   URL.revokeObjectURL = () => {};
 });
@@ -2189,7 +2189,7 @@ test('two page ZIP jobs serialize; cancelling the queued job fetches nothing and
   assert.equal(clicked.length, 2);
 });
 
-test('googlevideo delivery distinguishes verified itag=18 attachment from manual stream open and preserves selection', async () => {
+test('googlevideo delivery uses isolated browsing context for attachment attempts, falls back to manual when popups are restricted, and preserves selection', async () => {
   const verifiedUrl = 'https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&itag=18&source=youtube&sparams=expire%2Citag%2Csource&sig=AAA&title=Sample_Video';
   const unverifiedSilentUrl = 'https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&itag=401&source=youtube&sparams=expire%2Citag%2Csource&sig=BBB';
   const item = {
@@ -2213,7 +2213,7 @@ test('googlevideo delivery distinguishes verified itag=18 attachment from manual
     ],
   };
 
-  // 1. Default verified itag=18 attachment -> browser_native / handed-off
+  // 1. Default eligible itag=18 attachment attempt -> isolated _blank context, opener & referrer protected
   clicked = []; fetched = [];
   const h1 = harness({ items: [item] });
   const initialSelection = JSON.stringify(h1.selection.currentSelection.value);
@@ -2224,8 +2224,49 @@ test('googlevideo delivery distinguishes verified itag=18 attachment from manual
   assert.equal(h1.store.downloads[0].statusText, '已交给浏览器');
   assert.equal(clicked.length, 1);
   assert.equal(clicked[0].href, verifiedUrl);
+  assert.equal(clicked[0].target, '_blank', 'cross-origin native handoff must never navigate current tab');
+  assert.equal(clicked[0].rel, 'noopener noreferrer');
+  assert.equal(clicked[0].referrerPolicy, 'no-referrer');
   assert.equal(fetched.length, 0);
+  assert.equal(globalThis.location.href, 'https://snap.dokitool.com/');
   assert.equal(JSON.stringify(h1.selection.currentSelection.value), initialSelection);
+
+  // 1b. Popup-restricted environment on eligible itag=18 -> stays on page, lands in manual with explicit 打开源链接 action
+  clicked = []; fetched = [];
+  const origActivation = Object.getOwnPropertyDescriptor(globalThis.navigator || {}, 'userActivation');
+  Object.defineProperty(globalThis.navigator, 'userActivation', { configurable: true, value: { isActive: false } });
+  try {
+    const hRestricted = harness({ items: [item] });
+    await hRestricted.instance.downloadMainVideo();
+    assert.equal(hRestricted.store.downloads.length, 1);
+    assert.equal(hRestricted.store.downloads[0].status, 'manual');
+    assert.equal(hRestricted.store.downloads[0].statusText, '打开源链接');
+    assert.equal(hRestricted.store.downloads[0].nativeAvailable, true);
+    assert.equal(clicked.length, 0, 'popup-restricted attempt must not fall back to current-tab navigation');
+    assert.equal(globalThis.location.href, 'https://snap.dokitool.com/');
+    assert.equal(JSON.stringify(hRestricted.selection.currentSelection.value), initialSelection);
+
+    const restrictedCardHtml = await renderToString(createSSRApp({ render: () => h(DownloadCard, { downloads: hRestricted.store.downloads }) }));
+    assert.ok(restrictedCardHtml.includes('打开源链接'), 'popup-restricted task must render explicit 打开源链接 action');
+
+    // Clicking 打开源链接 while still restricted keeps manual state without navigating current tab
+    hRestricted.instance.handleBrowserDownload(hRestricted.store.downloads[0].id);
+    assert.equal(hRestricted.store.downloads[0].status, 'manual');
+    assert.equal(clicked.length, 0);
+
+    // Once user gesture / popup permission is active, clicking 打开源链接 opens isolated _blank context and hands off
+    Object.defineProperty(globalThis.navigator, 'userActivation', { configurable: true, value: { isActive: true } });
+    hRestricted.instance.handleBrowserDownload(hRestricted.store.downloads[0].id);
+    assert.equal(hRestricted.store.downloads[0].status, 'handed-off');
+    assert.equal(clicked.length, 1);
+    assert.equal(clicked[0].href, verifiedUrl);
+    assert.equal(clicked[0].target, '_blank');
+    assert.equal(clicked[0].rel, 'noopener noreferrer');
+    assert.equal(clicked[0].referrerPolicy, 'no-referrer');
+  } finally {
+    if (origActivation) Object.defineProperty(globalThis.navigator, 'userActivation', origActivation);
+    else delete globalThis.navigator.userActivation;
+  }
 
   // 2. Explicit selection of unverified 4K silent stream -> transport=undefined, status='manual', no auto-click
   clicked = []; fetched = [];
@@ -2254,6 +2295,9 @@ test('googlevideo delivery distinguishes verified itag=18 attachment from manual
   assert.equal(h2.store.downloads[0].status, 'handed-off');
   assert.equal(clicked.length, 1);
   assert.equal(clicked[0].href, unverifiedSilentUrl);
+  assert.equal(clicked[0].target, '_blank');
+  assert.equal(clicked[0].rel, 'noopener noreferrer');
+  assert.equal(clicked[0].referrerPolicy, 'no-referrer');
   assert.equal(JSON.stringify(h2.selection.currentSelection.value), chosen4K);
 
   // 5. Deferred item cancelled during resolve before googlevideo handoff never opens or hands off
@@ -2276,6 +2320,88 @@ test('googlevideo delivery distinguishes verified itag=18 attachment from manual
   await pDownload;
   assert.equal(h3.store.downloads[0].status, 'cancelled');
   assert.equal(clicked.length, 0);
+});
+
+test('instagram Reel CTApqC8BGWd default selects unknown-audio MP4 while explicit silent variant selection survives renewal', async () => {
+  const defaultProgUrl1 = 'https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/progressive.mp4?oh=111&oe=6AF3C02E';
+  const defaultProgUrl2 = 'https://scontent-sjc3-1.cdninstagram.com/o1/v/t16/f2/m69/progressive.mp4?oh=222&oe=6AF4D000';
+  const silent720Url1 = 'https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4?oh=111&oe=6AEFD2C1';
+  const silent720Url2 = 'https://scontent-sjc3-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4?oh=222&oe=6AF4D000';
+
+  const makeIgItem = (progUrl, silentUrl) => ({
+    id: 'video-effc0b9bf766e920467c46ad',
+    type: 'video',
+    index: 1,
+    title: 'Video by mrcigar',
+    resolve_url: '/api/resolve?schema_version=1.0&url=https%3A%2F%2Fwww.instagram.com%2Freel%2FCTApqC8BGWd%2F&item_id=video-effc0b9bf766e920467c46ad',
+    default: {
+      variant_id: 'v-a698ab6367a002b2ccbf3d6c',
+      source_id: 's-c91288981d13aec803576095',
+      url: progUrl,
+    },
+    variants: [
+      {
+        id: 'v-091f1be2ab5ae766f8148364',
+        label: '720p (仅视频无声)',
+        metadata: { width: 720, height: 1280, fps: 30, has_audio: false, hdr_type: 'sdr', container: 'mp4', extension: 'mp4', mime_type: 'video/mp4' },
+        delivery: { kind: 'file', sources: [{ id: 's-2857907234c796d9a6ef9c64', url: silentUrl }] },
+      },
+      {
+        id: 'v-a698ab6367a002b2ccbf3d6c',
+        label: '默认画质',
+        metadata: { container: 'mp4', extension: 'mp4', hdr_type: 'sdr', mime_type: 'video/mp4' },
+        delivery: { kind: 'file', sources: [{ id: 's-c91288981d13aec803576095', size_bytes: 4, url: progUrl }] },
+      },
+      {
+        id: 'v-32efb98f2fc1b1d67263d113',
+        label: '仅音频 M4A (39 kbps)',
+        metadata: { has_audio: true, container: 'mp4', extension: 'm4a', mime_type: 'audio/mp4' },
+        delivery: { kind: 'file', sources: [{ id: 's-39962a259f58567d6c39058d', url: 'https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/audio.mp4' }] },
+      },
+    ],
+  });
+
+  // 1. Default selection uses the unknown-audio progressive MP4, not 720p silent DASH.
+  const hDefault = harness({ platform: 'instagram', items: [makeIgItem(defaultProgUrl1, silent720Url1)], default_item_id: 'video-effc0b9bf766e920467c46ad' });
+  assert.equal(hDefault.currentVideoUrl.value, defaultProgUrl1);
+
+  // 2. Explicit selection of 720p silent DASH variant survives source renewal without being overwritten by default.
+  let failFirst = true;
+  globalThis.__uiDownloadManager = {
+    async run(req, _sig, observe) {
+      if (failFirst) {
+        failFirst = false;
+        const snap = { id: req.id, transport: 'browser_streaming', status: 'failed', filename: req.filename, url: req.url, loaded: 0, total: 0, speed: 0, elapsed: 0.1, averageSpeed: 0, error: '连接中断' };
+        observe(snap);
+        throw new Error('连接中断');
+      }
+      const snap = { id: req.id, transport: 'browser_streaming', status: 'completed', filename: req.filename, url: req.url, loaded: 4, total: 4, speed: 4, elapsed: 0.1, averageSpeed: 4 };
+      observe(snap);
+      return snap;
+    },
+  };
+  try {
+    const hExplicit = harness(
+      { platform: 'instagram', items: [makeIgItem(defaultProgUrl1, silent720Url1)], default_item_id: 'video-effc0b9bf766e920467c46ad' },
+      async () => makeIgItem(defaultProgUrl2, silent720Url2),
+    );
+    hExplicit.selection.choose({ variant_id: 'v-091f1be2ab5ae766f8148364', source_id: 's-2857907234c796d9a6ef9c64' });
+    assert.equal(hExplicit.currentVideoUrl.value, silent720Url1);
+
+    await hExplicit.instance.downloadMainVideo();
+    await settled(hExplicit.store.downloads[0]);
+    assert.equal(hExplicit.store.downloads[0].status, 'failed');
+    assert.equal(hExplicit.store.downloads[0].url, silent720Url1);
+    assert.equal(hExplicit.store.downloads[0].refreshAvailable, true);
+
+    await hExplicit.instance.handleRefreshDownload(hExplicit.store.downloads[0].id);
+    await settled(hExplicit.store.downloads[0]);
+    assert.equal(hExplicit.store.downloads[0].status, 'completed');
+    assert.equal(hExplicit.store.downloads[0].url, silent720Url2, 'renewal must keep explicitly selected silent 720p source, not revert to unknown-audio default');
+    assert.deepEqual(hExplicit.selection.currentSelection.value, { variant_id: 'v-091f1be2ab5ae766f8148364', source_id: 's-2857907234c796d9a6ef9c64' });
+  } finally {
+    delete globalThis.__uiDownloadManager;
+  }
 });
 
 test('tbvideo manual fallback on pipigx and zuiyou allows a fresh main-button attempt while preserving card actions and googlevideo manual deduplication', async () => {
