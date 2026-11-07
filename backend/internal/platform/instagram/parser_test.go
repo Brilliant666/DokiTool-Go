@@ -2,9 +2,12 @@ package instagram
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
@@ -208,5 +211,235 @@ func TestInstagramSourceIdentityPreservedAcrossCDNTokenRenewal(t *testing.T) {
 	}
 	if unified.Str(def1["source_id"]) == unified.Str(defDiff["source_id"]) {
 		t.Fatalf("expected Instagram source_id to change when asset path changes")
+	}
+}
+
+type fakeFetcher struct {
+	fn func(context.Context, fetch.Request) (fetch.Response, error)
+}
+
+func (f fakeFetcher) Do(ctx context.Context, req fetch.Request) (fetch.Response, error) {
+	return f.fn(ctx, req)
+}
+
+func TestParseInstagramNativeEmbedAndGraphQLThreeTierPipeline(t *testing.T) {
+	const now int64 = 1762300800
+
+	// 1. Photo + Video Carousel (/p/aye83DjauH/) where yt-dlp fails with CONTENT_UNAVAILABLE ("no video")
+	// and Tier 1 Embed Captioned returns a GraphSidecar with 2 photos + 1 video.
+	sidecarContextObj := map[string]any{
+		"gql_data": map[string]any{
+			"shortcode_media": map[string]any{
+				"__typename":         "GraphSidecar",
+				"id":                 "3000000000000000001",
+				"shortcode":          "aye83DjauH",
+				"display_url":        "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/slide1.jpg",
+				"taken_at_timestamp": 1762000000,
+				"owner": map[string]any{
+					"id":              "12345",
+					"username":        "doki_creator",
+					"full_name":       "Doki Creator",
+					"profile_pic_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-19/avatar.jpg",
+				},
+				"edge_media_to_caption": map[string]any{
+					"edges": []any{
+						map[string]any{
+							"node": map[string]any{"text": "Carousel Post Title\nSecond line"},
+						},
+					},
+				},
+				"edge_media_preview_like": map[string]any{"count": 1024},
+				"edge_media_to_comment":   map[string]any{"count": 42},
+				"edge_sidecar_to_children": map[string]any{
+					"edges": []any{
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "child-img-1",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/slide1.jpg",
+								"dimensions":  map[string]any{"width": 1080, "height": 1350},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "child-img-2",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/slide2.webp",
+								"dimensions":  map[string]any{"width": 1080, "height": 1350},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":     "GraphVideo",
+								"id":             "child-vid-3",
+								"is_video":       true,
+								"display_url":    "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/slide3_cover.jpg",
+								"video_url":      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/slide3_video.mp4",
+								"video_duration": 14.2,
+								"dimensions":     map[string]any{"width": 1080, "height": 1920},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	rawCtxBytes, _ := json.Marshal(sidecarContextObj)
+	escapedCtxBytes, _ := json.Marshal(string(rawCtxBytes))
+	embedSidecarHTML := `<script>window.__data = {"contextJSON":` + string(escapedCtxBytes) + `};</script>`
+
+	carouselParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "There is no video in this post"}
+			},
+		},
+		func(_ context.Context, rawURL string) (int64, bool) {
+			if strings.Contains(rawURL, "slide3_video.mp4") {
+				return 5120000, true
+			}
+			return 0, false
+		},
+		fakeFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				if strings.HasSuffix(req.URL, "/embed/captioned/") {
+					return fetch.Response{
+						StatusCode: http.StatusOK,
+						Body:       []byte(embedSidecarHTML),
+						URL:        req.URL,
+					}, nil
+				}
+				t.Fatalf("unexpected request URL in Tier 1 success case: %s", req.URL)
+				return fetch.Response{}, nil
+			},
+		},
+	)
+
+	carouselEnv, err := carouselParser.Parse(context.Background(), "https://www.instagram.com/p/aye83DjauH/", now)
+	if err != nil {
+		t.Fatalf("carousel Parse failed: %v", err)
+	}
+	for _, debug := range []bool{false, true} {
+		view := unified.PublicView(carouselEnv, debug, now)
+		if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("carousel ValidateEnvelopeAt(debug=%v) failed: %v", debug, err)
+		}
+		data := unified.Map(view["data"])
+		items := unified.Slice(data["items"])
+		if len(items) != 3 {
+			t.Fatalf("expected 3 items in carousel, got %d", len(items))
+		}
+		if unified.Str(unified.Map(items[0])["type"]) != "image" ||
+			unified.Str(unified.Map(items[1])["type"]) != "image" ||
+			unified.Str(unified.Map(items[2])["type"]) != "video" {
+			t.Fatalf("unexpected item types in carousel: %+v", items)
+		}
+		groups := unified.Slice(data["groups"])
+		if len(groups) != 1 || len(unified.Slice(unified.Map(groups[0])["item_ids"])) != 2 {
+			t.Fatalf("expected album group with 2 image item_ids, got %+v", groups)
+		}
+	}
+
+	// 2. Reel URL (/reel/CTApqC8BGWd/) where yt-dlp is login-blocked, Tier 1 Embed only has a poster image
+	// (no video_url), and Tier 2 Anonymous GraphQL recovers the video with audio.
+	embedPosterOnlyHTML := `<img class="EmbeddedMediaImage" src="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/poster_only.jpg" />`
+	graphqlVideoResp, _ := json.Marshal(map[string]any{
+		"data": map[string]any{
+			"xdt_shortcode_media": map[string]any{
+				"__typename":      "XDTGraphVideo",
+				"id":              "2662500000000000000",
+				"shortcode":       "CTApqC8BGWd",
+				"is_video":        true,
+				"display_url":     "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/poster_only.jpg",
+				"video_url":       "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/graphql_reel_720.mp4",
+				"video_duration":  9.8,
+				" dimensions":     map[string]any{"width": 720, "height": 1280},
+				"original_width":  720,
+				"original_height": 1280,
+				"owner": map[string]any{
+					"id":       "999",
+					"username": "mrcigar",
+				},
+			},
+		},
+	})
+
+	var hitEmbed, hitGraphQL bool
+	reelFallbackParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return nil, &ytengine.Error{Code: ytengine.CodeUpstreamBlocked, Message: "login required"}
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				if strings.HasSuffix(req.URL, "/embed/captioned/") {
+					hitEmbed = true
+					return fetch.Response{
+						StatusCode: http.StatusOK,
+						Body:       []byte(embedPosterOnlyHTML),
+						URL:        req.URL,
+					}, nil
+				}
+				if req.URL == "https://www.instagram.com/api/graphql" && req.Method == http.MethodPost {
+					hitGraphQL = true
+					if req.Header.Get("X-IG-App-ID") != instagramAppID {
+						t.Fatalf("missing X-IG-App-ID header on GraphQL request")
+					}
+					return fetch.Response{
+						StatusCode: http.StatusOK,
+						Body:       graphqlVideoResp,
+						URL:        req.URL,
+					}, nil
+				}
+				t.Fatalf("unexpected request: %s %s", req.Method, req.URL)
+				return fetch.Response{}, nil
+			},
+		},
+	)
+
+	reelEnv, err := reelFallbackParser.Parse(context.Background(), "https://www.instagram.com/reel/CTApqC8BGWd/", now)
+	if err != nil {
+		t.Fatalf("reel fallback Parse failed: %v", err)
+	}
+	if !hitEmbed || !hitGraphQL {
+		t.Fatalf("expected Reel poster-only Embed to fall through to GraphQL: hitEmbed=%v hitGraphQL=%v", hitEmbed, hitGraphQL)
+	}
+	if err := unified.ValidateEnvelopeAt(unified.PublicView(reelEnv, false, now), now); err != nil {
+		t.Fatalf("reel GraphQL fallback failed ValidateEnvelopeAt: %v", err)
+	}
+	reelItem := unified.Map(unified.Slice(unified.Map(reelEnv["data"])["items"])[0])
+	if unified.Str(reelItem["type"]) != "video" || !strings.Contains(unified.Str(unified.Map(reelItem["default"])["url"]), "graphql_reel_720.mp4") {
+		t.Fatalf("expected graphql_reel_720.mp4 video default, got %+v", reelItem)
+	}
+
+	// 3. LocalBusy on yt-dlp must return RATE_LIMITED immediately without invoking native fetcher
+	busyParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return nil, &ytengine.Error{
+					Code:       ytengine.CodeRateLimited,
+					Message:    "本地解析引擎繁忙，请稍后重试",
+					Retryable:  true,
+					RetryAfter: 1,
+					LocalBusy:  true,
+				}
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				t.Fatalf("native fetcher must not be called when yt-dlp returns LocalBusy: %s", req.URL)
+				return fetch.Response{}, nil
+			},
+		},
+	)
+	busyEnv, err := busyParser.Parse(context.Background(), "https://www.instagram.com/reel/CTApqC8BGWd/", now)
+	if err != nil || unified.Str(busyEnv["code"]) != "RATE_LIMITED" {
+		t.Fatalf("expected RATE_LIMITED on LocalBusy, got env=%v err=%v", busyEnv, err)
 	}
 }

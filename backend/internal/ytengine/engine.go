@@ -33,6 +33,8 @@ const PinnedVersion = "2026.10.26"
 const (
 	defaultMaxConcurrency   = 2
 	maxAllowedConcurrency   = 8
+	defaultBootConcurrency  = 3
+	defaultStaleTempMaxAge  = 2 * time.Hour
 	defaultExtractTimeout   = 25 * time.Second
 	minExtractTimeout       = 2 * time.Second
 	maxExtractTimeout       = 40 * time.Second
@@ -41,6 +43,16 @@ const (
 	defaultMaxStderrBytes   = 64 << 10 // 64 KiB
 	maxBinaryFileBytes      = 128 << 20
 )
+
+var staleTempCleanupOnce sync.Once
+
+// YouTubeFallbackClientProfiles defines the ordered anonymous player_client
+// profiles used when the default YouTube client hits SABR/nsig errors or
+// degrades to 360p-only without DASH high-resolution formats.
+var YouTubeFallbackClientProfiles = []string{
+	"player_client=tv_downgraded,ios,android,web_safari",
+	"player_client=ios,mweb",
+}
 
 // OfficialSHA256Sums20261026 contains the official SHA2-256SUMS for yt-dlp 2026.10.26:
 // https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS
@@ -74,6 +86,7 @@ type Config struct {
 	ProxyURL            string
 	EnvPath             string
 	GatePorts           []int
+	ExtractorArgs       []string
 }
 
 // Engine executes a SHA-256 verified yt-dlp binary in isolated metadata-only mode.
@@ -83,17 +96,112 @@ type Engine struct {
 	binaryPath          string
 	binarySHA256        string
 	binaryAsset         string
+	pythonPath          string
 	allowedURL          func(string) bool
 	allowedOutboundHost func(string) bool
 	resolver            Resolver
 	dialAddr            func(netip.Addr, string) string
 	sem                 chan struct{}
+	bootSem             chan struct{}
 	timeout             time.Duration
 	socketTimeoutSec    int
 	maxStdoutBytes      int64
 	proxyURL            string
 	envPath             string
 	gatePorts           *gatePortPool
+	extractorArgs       []string
+}
+
+// CleanupStaleTempDirs removes orphaned dokitool-ytdlp-* and PyInstaller _MEI*
+// directories in tmpRoot whose modification time is older than maxAge.
+func CleanupStaleTempDirs(tmpRoot string, maxAge time.Duration) int {
+	trimmed := strings.TrimSpace(tmpRoot)
+	if trimmed == "" {
+		return 0
+	}
+	if maxAge <= 0 {
+		maxAge = defaultStaleTempMaxAge
+	}
+	entries, err := os.ReadDir(trimmed)
+	if err != nil {
+		return 0
+	}
+	cutoff := time.Now().Add(-maxAge)
+	cleaned := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, "dokitool-ytdlp-") && !strings.HasPrefix(name, "_MEI") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().IsZero() || info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(trimmed, name)); err == nil {
+			cleaned++
+		}
+	}
+	return cleaned
+}
+
+func detectPythonZipapp(absPath string) bool {
+	stat, err := os.Stat(absPath)
+	if err != nil || !stat.Mode().IsRegular() {
+		return false
+	}
+	f, err := os.Open(absPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	buf := make([]byte, 512)
+	n, _ := f.Read(buf)
+	if n < 4 {
+		return false
+	}
+	head := buf[:n]
+	if !bytes.HasPrefix(head, []byte("#!")) {
+		return false
+	}
+	nl := bytes.IndexByte(head, '\n')
+	firstLine := head
+	var rest []byte
+	if nl >= 0 {
+		firstLine = head[:nl]
+		rest = head[nl+1:]
+	}
+	if !strings.Contains(strings.ToLower(string(firstLine)), "python") {
+		return false
+	}
+	if bytes.Contains(rest, []byte("PK\x03\x04")) {
+		return true
+	}
+	return stat.Mode()&0o111 == 0
+}
+
+func lookupPython3InPath(envPath string) string {
+	searchPath := envPath
+	if strings.TrimSpace(searchPath) == "" {
+		searchPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+	}
+	for _, dir := range filepath.SplitList(searchPath) {
+		trimmedDir := strings.TrimSpace(dir)
+		if trimmedDir == "" {
+			continue
+		}
+		for _, candidateName := range []string{"python3", "python3.exe"} {
+			candidate := filepath.Join(trimmedDir, candidateName)
+			stat, err := os.Stat(candidate)
+			if err != nil || !stat.Mode().IsRegular() {
+				continue
+			}
+			return candidate
+		}
+	}
+	return ""
 }
 
 // NewDisabled returns an Engine that is explicitly disabled with the given reason.
@@ -173,6 +281,9 @@ func lookupBinaryInPath(envPath string) (string, error) {
 // When verification fails, New returns both a disabled *Engine and the verification
 // error so the caller can log a startup warning without crashing the API process.
 func New(cfg Config) (*Engine, error) {
+	staleTempCleanupOnce.Do(func() {
+		CleanupStaleTempDirs(os.TempDir(), defaultStaleTempMaxAge)
+	})
 	envPath := cfg.EnvPath
 	if envPath == "" {
 		envPath = os.Getenv("PATH")
@@ -232,22 +343,29 @@ func New(cfg Config) (*Engine, error) {
 	if err != nil {
 		return NewDisabled(err.Error()), err
 	}
+	var pythonPath string
+	if detectPythonZipapp(absPath) {
+		pythonPath = lookupPython3InPath(envPath)
+	}
 	return &Engine{
 		gatePorts:           gatePorts,
 		enabled:             true,
 		binaryPath:          absPath,
 		binarySHA256:        digest,
 		binaryAsset:         asset,
+		pythonPath:          pythonPath,
 		allowedURL:          cfg.AllowedURL,
 		allowedOutboundHost: cfg.AllowedOutboundHost,
 		resolver:            cfg.Resolver,
 		dialAddr:            cfg.DialAddr,
 		sem:                 sem,
+		bootSem:             make(chan struct{}, defaultBootConcurrency),
 		timeout:             timeout,
 		socketTimeoutSec:    socketTimeout,
 		maxStdoutBytes:      maxStdout,
 		proxyURL:            proxyURL,
 		envPath:             envPath,
+		extractorArgs:       MergeExtractorArgs(cfg.ExtractorArgs),
 	}, nil
 }
 
@@ -341,19 +459,111 @@ func (e *Engine) BinaryAsset() string {
 	return e.binaryAsset
 }
 
+// UsingPythonZipapp reports whether the verified yt-dlp asset is executed directly
+// via python3 as a zero-unpack zipapp rather than a PyInstaller self-extracting binary.
+func (e *Engine) UsingPythonZipapp() bool {
+	return e != nil && e.pythonPath != ""
+}
+
+// MergeYouTubeExtractorArgs combines multiple YouTube extractor sub-arguments
+// (e.g. "player_client=tv_downgraded,ios,android,web_safari", "player_skip=webpage")
+// into a single "youtube:..." string separated by ';'. Later clauses with the
+// same key (such as "player_client=") override earlier ones so yt-dlp never
+// drops arguments due to multiple --extractor-args flags.
+func MergeYouTubeExtractorArgs(clauses ...string) string {
+	var orderedKeys []string
+	byKey := make(map[string]string)
+	for _, rawClause := range clauses {
+		trimmed := strings.TrimSpace(rawClause)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(trimmed), "youtube:") {
+			trimmed = trimmed[len("youtube:"):]
+		}
+		for _, part := range strings.Split(trimmed, ";") {
+			sub := strings.TrimSpace(part)
+			if sub == "" {
+				continue
+			}
+			key := sub
+			if eq := strings.IndexByte(sub, '='); eq > 0 {
+				key = strings.ToLower(strings.TrimSpace(sub[:eq]))
+			}
+			if _, exists := byKey[key]; !exists {
+				orderedKeys = append(orderedKeys, key)
+			}
+			byKey[key] = sub
+		}
+	}
+	if len(orderedKeys) == 0 {
+		return ""
+	}
+	merged := make([]string, 0, len(orderedKeys))
+	for _, k := range orderedKeys {
+		merged = append(merged, byKey[k])
+	}
+	return "youtube:" + strings.Join(merged, ";")
+}
+
+// MergeExtractorArgs merges multiple slices of --extractor-args values, combining
+// all YouTube ("youtube:...") clauses into a single argument while preserving
+// non-YouTube extractor arguments in order.
+func MergeExtractorArgs(groups ...[]string) []string {
+	var ytClauses []string
+	var otherArgs []string
+	seenOther := make(map[string]bool)
+	for _, group := range groups {
+		for _, raw := range group {
+			trimmed := strings.TrimSpace(raw)
+			if trimmed == "" {
+				continue
+			}
+			if strings.HasPrefix(strings.ToLower(trimmed), "youtube:") {
+				ytClauses = append(ytClauses, trimmed)
+				continue
+			}
+			if !seenOther[trimmed] {
+				seenOther[trimmed] = true
+				otherArgs = append(otherArgs, trimmed)
+			}
+		}
+	}
+	out := make([]string, 0, len(otherArgs)+1)
+	if ytMerged := MergeYouTubeExtractorArgs(ytClauses...); ytMerged != "" {
+		out = append(out, ytMerged)
+	}
+	out = append(out, otherArgs...)
+	return out
+}
+
 // CommandArgs returns the hardened CLI argument slice for a single URL extraction.
 func (e *Engine) CommandArgs(targetURL string) []string {
+	return e.CommandArgsWithOptions(targetURL, ExtractOptions{})
+}
+
+// CommandArgsWithOptions returns the hardened CLI argument slice including any
+// merged per-invocation --extractor-args flags.
+func (e *Engine) CommandArgsWithOptions(targetURL string, opts ExtractOptions) []string {
 	var proxy string
 	if e != nil {
 		proxy = e.proxyURL
 	}
-	return e.commandArgsWithProxy(targetURL, proxy)
+	return e.commandArgsWithOptions(targetURL, proxy, opts.ExtractorArgs)
 }
 
 func (e *Engine) commandArgsWithProxy(targetURL, effectiveProxy string) []string {
+	return e.commandArgsWithOptions(targetURL, effectiveProxy, nil)
+}
+
+func (e *Engine) commandArgsWithOptions(targetURL, effectiveProxy string, extraExtractorArgs []string) []string {
 	socketSec := defaultSocketTimeoutSec
-	if e != nil && e.socketTimeoutSec > 0 {
-		socketSec = e.socketTimeoutSec
+	var baseExtractorArgs []string
+	if e != nil {
+		if e.socketTimeoutSec > 0 {
+			socketSec = e.socketTimeoutSec
+		}
+		baseExtractorArgs = e.extractorArgs
 	}
 	args := []string{
 		"--ignore-config",
@@ -370,12 +580,168 @@ func (e *Engine) commandArgsWithProxy(targetURL, effectiveProxy string) []string
 	if effectiveProxy != "" {
 		args = append(args, "--proxy", effectiveProxy)
 	}
+	for _, extArg := range MergeExtractorArgs(baseExtractorArgs, extraExtractorArgs) {
+		args = append(args, "--extractor-args", extArg)
+	}
 	args = append(args, "-J", "--", targetURL)
 	return args
 }
 
+// IsDegradedYouTube360p reports whether a single-video YouTube extraction result
+// contains only low-resolution (<= 360p) googlevideo.com video formats and lacks
+// any higher-resolution DASH video streams.
+func IsDegradedYouTube360p(info *Info) bool {
+	if info == nil || len(info.Entries) > 0 || len(info.Formats) == 0 {
+		return false
+	}
+	hasGoogleVideoHost := false
+	maxEdge := int64(0)
+	videoCount := 0
+	for _, f := range info.Formats {
+		if u, err := url.Parse(f.URL); err == nil {
+			h := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+			if h == "googlevideo.com" || strings.HasSuffix(h, ".googlevideo.com") {
+				hasGoogleVideoHost = true
+			}
+		}
+		if isNoCodec(f.VCodec) {
+			continue
+		}
+		edge := shortEdge(f)
+		if edge <= 0 && f.Height != nil && *f.Height > 0 {
+			edge = *f.Height
+		}
+		if edge > 0 {
+			videoCount++
+			if edge > maxEdge {
+				maxEdge = edge
+			}
+		}
+	}
+	return hasGoogleVideoHost && videoCount > 0 && maxEdge <= 360
+}
+
+func maxVideoShortEdge(info *Info) int64 {
+	if info == nil {
+		return 0
+	}
+	var maxEdge int64
+	for _, f := range info.Formats {
+		if isNoCodec(f.VCodec) {
+			continue
+		}
+		edge := shortEdge(f)
+		if edge <= 0 && f.Height != nil && *f.Height > 0 {
+			edge = *f.Height
+		}
+		if edge > maxEdge {
+			maxEdge = edge
+		}
+	}
+	return maxEdge
+}
+
+// IsRecoverableYouTubeStderr reports whether a yt-dlp stderr failure on YouTube is
+// caused by a client-specific SABR/nsig/player restriction that can be recovered
+// by cascading to an alternate anonymous player_client profile.
+func IsRecoverableYouTubeStderr(stderrText string) bool {
+	lower := strings.ToLower(stderrText)
+	if strings.Contains(lower, "upstream blocked by outbound security policy") ||
+		strings.Contains(lower, "429") ||
+		strings.Contains(lower, "too many requests") ||
+		strings.Contains(lower, "rate limit") ||
+		strings.Contains(lower, "private video") ||
+		strings.Contains(lower, "members-only") ||
+		strings.Contains(lower, "sign in to confirm your age") {
+		return false
+	}
+	for _, pattern := range []string{
+		"sabr streaming",
+		"forcing sabr",
+		"nsig extraction failed",
+		"signature solving failed",
+		"unable to extract sig",
+		"the page needs to be reloaded",
+		"this content is not available on this app",
+		"requested format is not available",
+		"failed to extract any player response",
+		"unable to extract player",
+	} {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func isYouTubeTargetURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	h := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	switch h {
+	case "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be":
+		return true
+	default:
+		return false
+	}
+}
+
 // Extract invokes yt-dlp -J in an isolated temporary directory and parses the subset Info.
 func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
+	return e.ExtractWithOptions(ctx, rawURL, ExtractOptions{})
+}
+
+// ExtractYouTubeWithCascade executes YouTube metadata extraction with automatic
+// anonymous player_client fallback on recoverable SABR/nsig errors and 360p-only
+// degradation. When ext is *Engine, the cascade runs inside a single semaphore
+// slot and outbound gate session.
+func ExtractYouTubeWithCascade(ctx context.Context, ext Extractor, canonicalURL string) (*Info, error) {
+	if eng, ok := ext.(*Engine); ok {
+		return eng.Extract(ctx, canonicalURL)
+	}
+	optExt, ok := ext.(OptionsExtractor)
+	if !ok {
+		return ext.Extract(ctx, canonicalURL)
+	}
+	info, err := optExt.ExtractWithOptions(ctx, canonicalURL, ExtractOptions{})
+	if err != nil {
+		if ctx.Err() == nil && IsRecoverableYouTubeStderr(err.Error()) {
+			for _, profile := range YouTubeFallbackClientProfiles {
+				if ctx.Err() != nil {
+					break
+				}
+				retryInfo, retryErr := optExt.ExtractWithOptions(ctx, canonicalURL, ExtractOptions{
+					ExtractorArgs: []string{"youtube:" + profile},
+				})
+				if retryErr == nil {
+					return retryInfo, nil
+				}
+				err = retryErr
+				if !IsRecoverableYouTubeStderr(retryErr.Error()) {
+					break
+				}
+			}
+		}
+		return nil, err
+	}
+	if IsDegradedYouTube360p(info) && ctx.Err() == nil && len(YouTubeFallbackClientProfiles) > 0 {
+		upgraded, upgErr := optExt.ExtractWithOptions(ctx, canonicalURL, ExtractOptions{
+			ExtractorArgs: []string{"youtube:" + YouTubeFallbackClientProfiles[0]},
+		})
+		if upgErr == nil && maxVideoShortEdge(upgraded) > maxVideoShortEdge(info) {
+			return upgraded, nil
+		}
+	}
+	return info, nil
+}
+
+// ExtractWithOptions invokes yt-dlp -J with optional per-invocation extractor args.
+// For YouTube targets without explicit caller ExtractorArgs, it automatically
+// cascades across YouTubeFallbackClientProfiles on recoverable SABR/nsig client
+// errors and attempts a single upgrade pass when the default client degrades to 360p-only.
+func (e *Engine) ExtractWithOptions(ctx context.Context, rawURL string, opts ExtractOptions) (*Info, error) {
 	if e == nil || !e.enabled {
 		return nil, &Error{
 			Code:      CodeServiceNotConfigured,
@@ -465,8 +831,54 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 		}
 	}
 
-	args := e.commandArgsWithProxy(rawURL, effectiveProxy)
-	cmd := exec.CommandContext(callCtx, e.binaryPath, args...)
+	info, stderrText, extractErr := e.runSubprocess(callCtx, rawURL, effectiveProxy, tempDir, opts.ExtractorArgs)
+	if len(opts.ExtractorArgs) == 0 && isYouTubeTargetURL(rawURL) {
+		if extractErr != nil && callCtx.Err() == nil && IsRecoverableYouTubeStderr(stderrText) {
+			for _, profile := range YouTubeFallbackClientProfiles {
+				if callCtx.Err() != nil {
+					break
+				}
+				retryInfo, retryStderr, retryErr := e.runSubprocess(callCtx, rawURL, effectiveProxy, tempDir, []string{"youtube:" + profile})
+				if retryErr == nil {
+					return retryInfo, nil
+				}
+				extractErr = retryErr
+				stderrText = retryStderr
+				if !IsRecoverableYouTubeStderr(retryStderr) {
+					break
+				}
+			}
+			return nil, extractErr
+		}
+		if extractErr == nil && IsDegradedYouTube360p(info) && callCtx.Err() == nil && len(YouTubeFallbackClientProfiles) > 0 {
+			if upgraded, _, upgErr := e.runSubprocess(callCtx, rawURL, effectiveProxy, tempDir, []string{"youtube:" + YouTubeFallbackClientProfiles[0]}); upgErr == nil && maxVideoShortEdge(upgraded) > maxVideoShortEdge(info) {
+				return upgraded, nil
+			}
+		}
+	}
+	return info, extractErr
+}
+
+func (e *Engine) runSubprocess(callCtx context.Context, rawURL, effectiveProxy, tempDir string, extraExtractorArgs []string) (*Info, string, error) {
+	if e.bootSem != nil {
+		select {
+		case e.bootSem <- struct{}{}:
+			defer func() { <-e.bootSem }()
+		case <-callCtx.Done():
+			return nil, "", classifyContextErr(callCtx.Err())
+		}
+	}
+
+	args := e.commandArgsWithOptions(rawURL, effectiveProxy, extraExtractorArgs)
+	var cmd *exec.Cmd
+	if e.pythonPath != "" {
+		pyArgs := make([]string, 0, len(args)+1)
+		pyArgs = append(pyArgs, e.binaryPath)
+		pyArgs = append(pyArgs, args...)
+		cmd = exec.CommandContext(callCtx, e.pythonPath, pyArgs...)
+	} else {
+		cmd = exec.CommandContext(callCtx, e.binaryPath, args...)
+	}
 	cmd.Dir = tempDir
 	cmd.Stdin = nil
 	cmd.Env = buildIsolatedEnv(tempDir, e.envPath)
@@ -478,23 +890,24 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 	cmd.Stderr = stderr
 
 	runErr := cmd.Run()
+	stderrText := stderr.String()
 	if callCtx.Err() != nil {
-		return nil, classifyContextErr(callCtx.Err())
+		return nil, stderrText, classifyContextErr(callCtx.Err())
 	}
 	if stdout.overflow {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeUpstreamInvalidResponse,
 			Message:   "上游返回的元数据超出大小限制",
 			Retryable: false,
 		}
 	}
 	if runErr != nil {
-		return nil, classifyStderr(stderr.String(), runErr)
+		return nil, stderrText, classifyStderr(stderrText, runErr)
 	}
 
 	rawJSON := bytes.TrimSpace(stdout.Bytes())
 	if len(rawJSON) == 0 {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeUpstreamInvalidResponse,
 			Message:   "上游未返回有效的元数据",
 			Retryable: false,
@@ -502,7 +915,7 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 	}
 	var info Info
 	if err := json.Unmarshal(rawJSON, &info); err != nil {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeUpstreamInvalidResponse,
 			Message:   "上游返回的元数据格式异常",
 			Retryable: false,
@@ -510,13 +923,13 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 		}
 	}
 	if info.ID == "" && len(info.Formats) == 0 && len(info.Entries) == 0 {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeContentUnavailable,
 			Message:   "未找到可用的作品内容",
 			Retryable: false,
 		}
 	}
-	return &info, nil
+	return &info, stderrText, nil
 }
 
 func (e *Engine) verifyPublicTargetHost(ctx context.Context, rawURL string) *Error {
