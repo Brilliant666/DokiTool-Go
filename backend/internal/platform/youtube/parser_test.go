@@ -294,3 +294,109 @@ func TestYouTubeSourceIdentityPreservedAcrossSignatureRenewal(t *testing.T) {
 		t.Fatalf("expected YouTube source_id to change when itag changes")
 	}
 }
+
+type stubOptionsExtractor struct {
+	enabled            bool
+	extractWithOptions func(context.Context, string, ytengine.ExtractOptions) (*ytengine.Info, error)
+}
+
+func (s *stubOptionsExtractor) Enabled() bool { return s != nil && s.enabled }
+
+func (s *stubOptionsExtractor) Extract(ctx context.Context, rawURL string) (*ytengine.Info, error) {
+	return s.ExtractWithOptions(ctx, rawURL, ytengine.ExtractOptions{})
+}
+
+func (s *stubOptionsExtractor) ExtractWithOptions(ctx context.Context, rawURL string, opts ytengine.ExtractOptions) (*ytengine.Info, error) {
+	if s.extractWithOptions == nil {
+		return nil, &ytengine.Error{Code: ytengine.CodeServiceNotConfigured, Message: "disabled"}
+	}
+	return s.extractWithOptions(ctx, rawURL, opts)
+}
+
+func TestParseYouTubeClientCascadeAnd360pDegradationUpgrade(t *testing.T) {
+	const now int64 = 1762300800
+	sourceURL := "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+
+	format360 := ytengine.Format{
+		FormatID: "18",
+		URL:      "https://rr2---sn-ogueln67.googlevideo.com/videoplayback?itag=18&mime=video%2Fmp4",
+		Ext:      "mp4",
+		Protocol: "https",
+		Width:    int64Ptr(640),
+		Height:   int64Ptr(360),
+		VCodec:   "avc1.42001E",
+		ACodec:   "mp4a.40.2",
+		Filesize: int64Ptr(28523658),
+	}
+	format1080 := ytengine.Format{
+		FormatID: "299",
+		URL:      "https://rr2---sn-ogueln67.googlevideo.com/videoplayback?itag=299&mime=video%2Fmp4",
+		Ext:      "mp4",
+		Protocol: "https",
+		Width:    int64Ptr(1920),
+		Height:   int64Ptr(1080),
+		VCodec:   "avc1.64002A",
+		ACodec:   "none",
+		Filesize: int64Ptr(257619653),
+	}
+
+	// Case 1: Degraded 360p-only on default client upgrades to 1080p + 360p via anonymous fallback profile
+	var seenArgs []string
+	pUpgrade := New(&stubOptionsExtractor{
+		enabled: true,
+		extractWithOptions: func(_ context.Context, _ string, opts ytengine.ExtractOptions) (*ytengine.Info, error) {
+			seenArgs = append(seenArgs, strings.Join(opts.ExtractorArgs, ";"))
+			if len(opts.ExtractorArgs) == 0 {
+				return &ytengine.Info{
+					ID:      "aqz-KE-bpKQ",
+					Title:   "Big Buck Bunny",
+					Formats: []ytengine.Format{format360},
+				}, nil
+			}
+			return &ytengine.Info{
+				ID:      "aqz-KE-bpKQ",
+				Title:   "Big Buck Bunny",
+				Formats: []ytengine.Format{format360, format1080},
+			}, nil
+		},
+	})
+	envUpg, err := pUpgrade.Parse(context.Background(), sourceURL, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if err := unified.ValidateEnvelopeAt(envUpg, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+	}
+	if len(seenArgs) != 2 || !strings.Contains(seenArgs[1], "player_client=tv_downgraded,ios,android,web_safari") {
+		t.Fatalf("expected 360p degradation to trigger fallback client profile, got calls=%v", seenArgs)
+	}
+	variantsUpg := unified.Slice(unified.Map(unified.Slice(unified.Map(envUpg["data"])["items"])[0])["variants"])
+	if len(variantsUpg) != 2 {
+		t.Fatalf("expected 2 variants (1080p silent + 360p audible) after upgrade, got %d", len(variantsUpg))
+	}
+
+	// Case 2: Degraded 360p-only where fallback fails still preserves valid 360p envelope (fail-soft)
+	pFailSoft := New(&stubOptionsExtractor{
+		enabled: true,
+		extractWithOptions: func(_ context.Context, _ string, opts ytengine.ExtractOptions) (*ytengine.Info, error) {
+			if len(opts.ExtractorArgs) == 0 {
+				return &ytengine.Info{
+					ID:      "aqz-KE-bpKQ",
+					Title:   "Big Buck Bunny",
+					Formats: []ytengine.Format{format360},
+				}, nil
+			}
+			return nil, &ytengine.Error{Code: ytengine.CodeUpstreamUnavailable, Message: "fallback failed", Retryable: true}
+		},
+	})
+	envKeep, err := pFailSoft.Parse(context.Background(), sourceURL, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if err := unified.ValidateEnvelopeAt(envKeep, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt failed on retained 360p envelope: %v", err)
+	}
+	if unified.Str(envKeep["code"]) != "OK" {
+		t.Fatalf("expected retained 360p envelope to be OK, got %v", envKeep)
+	}
+}
