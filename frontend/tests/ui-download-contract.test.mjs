@@ -54,7 +54,44 @@ before(async () => {
   globalThis.window = { setTimeout, clearTimeout, addEventListener() {}, removeEventListener() {} };
   globalThis.location = { href: 'https://snap.dokitool.com/', origin: 'https://snap.dokitool.com' };
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto });
-  globalThis.document = { body: { appendChild(element) { if (element.tag === 'iframe') nativeFrames.push(element); }, style: {} }, createElement(tag) { return { tag, setAttribute(name, value) { this[name] = value; }, click() { clicked.push({ href: this.href, filename: this.download, target: this.target, rel: this.rel, referrerPolicy: this.referrerPolicy }); }, remove() {} }; } };
+  const docListeners = new Map();
+  globalThis.document = {
+    body: { appendChild(element) { if (element.tag === 'iframe') nativeFrames.push(element); }, style: {} },
+    addEventListener(type, fn) { if (!docListeners.has(type)) docListeners.set(type, new Set()); docListeners.get(type).add(fn); },
+    removeEventListener(type, fn) { docListeners.get(type)?.delete(fn); },
+    createElement(tag) {
+      const elListeners = new Map();
+      return {
+        tag,
+        setAttribute(name, value) { this[name] = value; },
+        addEventListener(type, fn) { if (!elListeners.has(type)) elListeners.set(type, new Set()); elListeners.get(type).add(fn); },
+        removeEventListener(type, fn) { elListeners.get(type)?.delete(fn); },
+        click() {
+          const event = {
+            type: 'click',
+            target: this,
+            currentTarget: this,
+            bubbles: true,
+            cancelable: true,
+            defaultPrevented: false,
+            preventDefault() { this.defaultPrevented = true; },
+          };
+          for (const fn of [...(elListeners.get('click') || [])]) {
+            event.currentTarget = this;
+            fn.call(this, event);
+          }
+          for (const fn of [...(docListeners.get('click') || [])]) {
+            event.currentTarget = globalThis.document;
+            fn.call(globalThis.document, event);
+          }
+          if (!event.defaultPrevented) {
+            clicked.push({ href: this.href, filename: this.download, target: this.target, rel: this.rel, referrerPolicy: this.referrerPolicy });
+          }
+        },
+        remove() {},
+      };
+    },
+  };
   URL.createObjectURL = (blob) => { blobs.push(blob); return `blob:test-${blobs.length}`; };
   URL.revokeObjectURL = () => {};
 });
@@ -2266,6 +2303,48 @@ test('googlevideo delivery uses isolated browsing context for attachment attempt
   } finally {
     if (origActivation) Object.defineProperty(globalThis.navigator, 'userActivation', origActivation);
     else delete globalThis.navigator.userActivation;
+  }
+
+  // 1c. Document bubble-phase listener calling preventDefault() after anchor target listener -> no navigation, settles in manual, recovers after listener removal
+  clicked = []; fetched = [];
+  let bubbleObservedTargetPhaseUnprevented = false;
+  const bubbleCancel = (event) => {
+    if (event.target?.tag === 'a') {
+      bubbleObservedTargetPhaseUnprevented = event.defaultPrevented === false;
+      event.preventDefault();
+    }
+  };
+  globalThis.document.addEventListener('click', bubbleCancel);
+  try {
+    const hBubble = harness({ items: [item] });
+    await hBubble.instance.downloadMainVideo();
+    assert.equal(bubbleObservedTargetPhaseUnprevented, true, 'anchor target phase must have run before document bubble listener called preventDefault()');
+    assert.equal(hBubble.store.downloads.length, 1);
+    assert.equal(hBubble.store.downloads[0].status, 'manual');
+    assert.equal(hBubble.store.downloads[0].statusText, '打开源链接');
+    assert.equal(hBubble.store.downloads[0].nativeAvailable, true);
+    assert.equal(clicked.length, 0, 'document bubble preventDefault() must prevent navigation and avoid false handed-off');
+    assert.equal(globalThis.location.href, 'https://snap.dokitool.com/');
+    assert.equal(JSON.stringify(hBubble.selection.currentSelection.value), initialSelection);
+
+    // While document bubble listener is still active, manual 打开源链接 click is also intercepted and remains manual
+    hBubble.instance.handleBrowserDownload(hBubble.store.downloads[0].id);
+    assert.equal(hBubble.store.downloads[0].status, 'manual');
+    assert.equal(clicked.length, 0);
+
+    // Removing the document bubble listener allows 打开源链接 to hand off normally
+    globalThis.document.removeEventListener('click', bubbleCancel);
+    hBubble.instance.handleBrowserDownload(hBubble.store.downloads[0].id);
+    assert.equal(hBubble.store.downloads[0].status, 'handed-off');
+    assert.equal(clicked.length, 1);
+    assert.equal(clicked[0].href, verifiedUrl);
+    assert.equal(clicked[0].target, '_blank');
+    assert.equal(clicked[0].rel, 'noopener noreferrer');
+    assert.equal(clicked[0].referrerPolicy, 'no-referrer');
+    assert.equal(globalThis.location.href, 'https://snap.dokitool.com/');
+    assert.equal(JSON.stringify(hBubble.selection.currentSelection.value), initialSelection);
+  } finally {
+    globalThis.document.removeEventListener('click', bubbleCancel);
   }
 
   // 2. Explicit selection of unverified 4K silent stream -> transport=undefined, status='manual', no auto-click

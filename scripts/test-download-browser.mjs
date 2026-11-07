@@ -450,8 +450,37 @@ async function checkNative() {
         const manualTask = mid.tasks.find(t => t.state === 'manual' && t.hasManualLink)
         assert.ok(manualTask, 'popup-restricted attempt must settle in manual state with explicit 打开源链接 button')
 
-        // Now click explicit 打开源链接 button WITH user gesture
+        // Register a document bubble-phase listener that cancels anchor click default action
         await evaluate(page, `(() => {
+          window.__bubblePreventedSawUnpreventedTarget = false;
+          window.__cancelAnchorBubble = (e) => {
+            const a = e.target && e.target.closest ? e.target.closest('a') : null;
+            if (a) {
+              window.__bubblePreventedSawUnpreventedTarget = (e.defaultPrevented === false);
+              e.preventDefault();
+            }
+          };
+          document.addEventListener('click', window.__cancelAnchorBubble, false);
+          const btn = [...document.querySelectorAll('[data-download-state="manual"] button')].find(b => b.textContent.includes('打开源链接'));
+          if (!btn) throw new Error('missing 打开源链接 button');
+          btn.click();
+        })()`, true)
+        await delay(200)
+        const bubbleSawTargetUnprevented = await evaluate(page, 'Boolean(window.__bubblePreventedSawUnpreventedTarget)', false)
+        assert.equal(bubbleSawTargetUnprevented, true, 'document bubble listener must observe defaultPrevented===false after anchor target listener before calling preventDefault()')
+        const bubbleMid = await readPageState()
+        assert.equal(bubbleMid.href, before.href, 'document bubble preventDefault() must not navigate current page')
+        assert.equal(bubbleMid.title, before.title, 'document bubble preventDefault() must preserve parsed result')
+        assert.equal(bubbleMid.activeQuality, before.activeQuality, 'document bubble preventDefault() must preserve active quality label')
+        assert.equal(bubbleMid.videoSrc, before.videoSrc, 'document bubble preventDefault() must preserve selected source')
+        const bubbleNavReqs = received.slice(beforeReqCount).filter(r => !r.range)
+        assert.equal(bubbleNavReqs.length, 0, 'document bubble preventDefault() must not issue any document navigation request')
+        assert.ok(bubbleMid.tasks.find(t => t.state === 'manual' && t.hasManualLink), 'document bubble preventDefault() must keep task in manual state, not false handed-off')
+
+        // Remove document bubble listener and click explicit 打开源链接 button WITH user gesture
+        await evaluate(page, `(() => {
+          document.removeEventListener('click', window.__cancelAnchorBubble, false);
+          delete window.__cancelAnchorBubble;
           const btn = [...document.querySelectorAll('[data-download-state="manual"] button')].find(b => b.textContent.includes('打开源链接'));
           if (!btn) throw new Error('missing 打开源链接 button');
           btn.click();

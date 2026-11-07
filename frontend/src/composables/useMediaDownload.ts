@@ -69,21 +69,22 @@ function triggerBrowserDownload(
     anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
   }
-  let prevented = false;
+  let clickEvent: Event | undefined;
+  let threw = false;
   const onClick = (event: Event) => {
-    if (event.defaultPrevented) prevented = true;
+    clickEvent = event;
   };
   anchor.addEventListener?.("click", onClick);
   document.body.appendChild(anchor);
   try {
     anchor.click();
   } catch {
-    prevented = true;
+    threw = true;
   } finally {
     anchor.removeEventListener?.("click", onClick);
     anchor.remove();
   }
-  return !prevented;
+  return !threw && !clickEvent?.defaultPrevented;
 }
 
 function isCorsBlockedDirectCdn(rawUrl: string): boolean {
