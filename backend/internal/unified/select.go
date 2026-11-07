@@ -266,6 +266,20 @@ func isAudibleVideoFile(v Object) bool {
 	return ok && hasAudio
 }
 
+func isUnknownAudioMP4VideoFile(v Object) bool {
+	if isAudioOnlyFile(v) {
+		return false
+	}
+	meta := Map(v["metadata"])
+	if nonNullField(meta, "has_audio") || nonNullField(Map(meta["field_conflicts"]), "has_audio") {
+		return false
+	}
+	mime := strings.ToLower(strings.TrimSpace(Str(meta["mime_type"])))
+	container := strings.ToLower(strings.TrimSpace(Str(meta["container"])))
+	ext := strings.ToLower(strings.TrimSpace(Str(meta["extension"])))
+	return mime == "video/mp4" && container == "mp4" && ext == "mp4"
+}
+
 func defaultEligibleFiles(platform, itemType string, usableFiles []Object) []Object {
 	if !isYTDLPPlatform(platform) || itemType != "video" {
 		return usableFiles
@@ -278,6 +292,17 @@ func defaultEligibleFiles(platform, itemType string, usableFiles []Object) []Obj
 	}
 	if len(audible) > 0 {
 		return audible
+	}
+	if platform == "instagram" {
+		unknownMP4 := make([]Object, 0, len(usableFiles))
+		for _, v := range usableFiles {
+			if isUnknownAudioMP4VideoFile(v) {
+				unknownMP4 = append(unknownMP4, v)
+			}
+		}
+		if len(unknownMP4) > 0 {
+			return unknownMP4
+		}
 	}
 	nonAudio := make([]Object, 0, len(usableFiles))
 	for _, v := range usableFiles {

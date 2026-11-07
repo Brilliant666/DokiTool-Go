@@ -367,3 +367,107 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 		t.Fatalf("expected X request after slot release to return 200 OK, got %d: %s", wAfter.Code, wAfter.Body.String())
 	}
 }
+
+func TestInstagramHTTPParseAndResolveDefaultConsistency(t *testing.T) {
+	const now int64 = 1793448000
+	w720, h720 := int64(720), int64(1280)
+	w480, h480 := int64(480), int64(854)
+
+	c, err := catalog.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Register(catalog.InstagramPlatform()); err != nil {
+		t.Fatal(err)
+	}
+
+	igAdapter := instagram.New(&stubXExtractor{
+		enabled: true,
+		extract: func(_ context.Context, _ string) (*ytengine.Info, error) {
+			return &ytengine.Info{
+				ID:       "CTApqC8BGWd",
+				Title:    "Video by mrcigar",
+				Uploader: "RON GOH",
+				Formats: []ytengine.Format{
+					{
+						FormatID: "dash-high-1",
+						URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4",
+						Ext:      "mp4",
+						Protocol: "https",
+						Width:    &w720,
+						Height:   &h720,
+						VCodec:   "avc1.64001F",
+						ACodec:   "none",
+					},
+					{
+						FormatID: "dash-high-2",
+						URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash480.mp4",
+						Ext:      "mp4",
+						Protocol: "https",
+						Width:    &w480,
+						Height:   &h480,
+						VCodec:   "avc1.64001F",
+						ACodec:   "none",
+					},
+					{
+						FormatID: "1",
+						URL:      "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/progressive_default.mp4",
+						Ext:      "mp4",
+						Protocol: "https",
+					},
+					{
+						FormatID: "dash-audio",
+						URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/audio.mp4",
+						Ext:      "m4a",
+						Protocol: "https",
+						VCodec:   "none",
+						ACodec:   "mp4a.40.5",
+					},
+				},
+			}, nil
+		},
+	})
+
+	h, err := New(c, map[string]Adapter{"instagram": igAdapter}, func() time.Time { return time.Unix(now, 0) }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reelURL := "https://www.instagram.com/reel/CTApqC8BGWd/"
+	var expectedItemID, expectedVariantID, expectedSourceID string
+
+	for _, endpoint := range []string{"/api/parse", "/api/resolve"} {
+		for _, debug := range []string{"0", "1"} {
+			target := endpoint + "?schema_version=1.0&url=" + url.QueryEscape(reelURL) + "&debug=" + debug
+			if endpoint == "/api/resolve" {
+				target += "&item_id=" + url.QueryEscape(expectedItemID)
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, target, nil))
+			if w.Code != http.StatusOK {
+				t.Fatalf("%s debug=%s status=%d body=%s", endpoint, debug, w.Code, w.Body.String())
+			}
+			env, err := unified.Decode(w.Body.Bytes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+				t.Fatalf("%s debug=%s failed ValidateEnvelopeAt: %v", endpoint, debug, err)
+			}
+			item := unified.Map(unified.Slice(unified.Map(env["data"])["items"])[0])
+			def := unified.Map(item["default"])
+			if expectedItemID == "" {
+				expectedItemID = unified.Str(item["id"])
+				expectedVariantID = unified.Str(def["variant_id"])
+				expectedSourceID = unified.Str(def["source_id"])
+			}
+			if unified.Str(def["variant_id"]) != expectedVariantID || unified.Str(def["source_id"]) != expectedSourceID {
+				t.Fatalf("%s debug=%s default mismatch: got %+v, want variant=%s source=%s",
+					endpoint, debug, def, expectedVariantID, expectedSourceID)
+			}
+			if !strings.Contains(unified.Str(def["url"]), "progressive_default.mp4") {
+				t.Fatalf("%s debug=%s expected progressive_default.mp4 default, got %v", endpoint, debug, def["url"])
+			}
+		}
+	}
+}

@@ -252,6 +252,309 @@ async function check() {
   console.log('Browser download fixtures passed:', report.cases.length, report.build)
 }
 
+async function checkNative() {
+  await mkdir(runDir, { recursive: true })
+  const downloads = path.join(runDir, 'saved-native')
+  await mkdir(downloads, { recursive: true })
+  assert.equal((await readdir(downloads)).length, 0, 'use an empty download directory')
+  const distRoot = path.resolve(only || new URL('../frontend/dist', import.meta.url).pathname)
+  const received = []
+  let cdnPort = 0
+
+  const cdnServer = createServer((req, res) => {
+    const u = new URL(req.url, `http://127.0.0.1:${cdnPort}`)
+    if (u.pathname === '/favicon.ico') return res.writeHead(204).end()
+    const id = u.searchParams.get('id') || ''
+    received.push({
+      id,
+      path: u.pathname,
+      query: u.search,
+      referer: req.headers.referer || null,
+      range: req.headers.range || null,
+    })
+    if (id === 'attachment') {
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Disposition': 'attachment; filename="r1-direct.mp4"',
+        'Content-Length': String(media.mp4.length),
+        'Cache-Control': 'no-store',
+      })
+      res.end(media.mp4)
+    } else if (id === 'redirect-attachment') {
+      res.writeHead(302, { Location: `/videoplayback?id=redirect-attachment-hop2&itag=18&source=youtube&sparams=id,itag,source&title=R1_redirect-attachment` })
+      res.end()
+    } else if (id === 'redirect-attachment-hop2') {
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Disposition': 'attachment; filename="r1-redirected.mp4"',
+        'Content-Length': String(media.mp4.length),
+        'Cache-Control': 'no-store',
+      })
+      res.end(media.mp4)
+    } else if (id === 'redirect-403') {
+      res.writeHead(302, { Location: `/videoplayback?id=redirect-403-hop2&itag=18` })
+      res.end()
+    } else if (id === 'redirect-403-hop2') {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end('403 Forbidden (simulated cross-network rejection)')
+    } else if (id === 'inline') {
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Disposition': 'inline',
+        'Content-Length': String(media.mp4.length),
+        'Cache-Control': 'no-store',
+      })
+      res.end(media.mp4)
+    } else if (id === 'network-failure') {
+      req.socket.destroy()
+    } else if (id === 'popup-restricted') {
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Disposition': 'attachment; filename="r1-popup-recovered.mp4"',
+        'Content-Length': String(media.mp4.length),
+        'Cache-Control': 'no-store',
+      })
+      res.end(media.mp4)
+    } else {
+      res.writeHead(404).end()
+    }
+  })
+  await new Promise((resolve, reject) => cdnServer.once('error', reject).listen(0, '127.0.0.1', resolve))
+  cdnPort = cdnServer.address().port
+  const cdnHost = `http://rr2---sn-a5mekn6s.googlevideo.com:${cdnPort}`
+
+  const appServer = createServer(async (req, res) => {
+    const u = new URL(req.url, 'http://localhost')
+    if (u.pathname === '/api/parse') {
+      const inputUrl = u.searchParams.get('url') || ''
+      const caseMatch = /r1_([a-z0-9-]+)/i.exec(inputUrl)
+      const caseName = caseMatch ? caseMatch[1] : 'attachment'
+      const primaryUrl = `${cdnHost}/videoplayback?id=${caseName}&itag=18&source=youtube&sparams=id%2Citag%2Csource&title=R1_${caseName}`
+      const silent4kUrl = `${cdnHost}/videoplayback?id=${caseName}-4k&itag=401&source=youtube&sparams=id%2Citag%2Csource`
+      const item = {
+        id: `video-${caseName}`,
+        type: 'video',
+        state: 'ready',
+        title: `Title_${caseName}`,
+        default: { variant_id: 'v-360p', source_id: `s-360p-${caseName}`, url: primaryUrl },
+        variants: [
+          {
+            id: 'v-4k-silent',
+            label: '2160p60 (4K · 仅视频无声)',
+            metadata: { width: 3840, height: 2160, has_audio: false, container: 'mp4', extension: 'mp4', mime_type: 'video/mp4' },
+            delivery: { kind: 'file', sources: [{ id: `s-4k-${caseName}`, url: silent4kUrl, size_bytes: media.mp4.length }] },
+          },
+          {
+            id: 'v-360p',
+            label: '360p (含音频)',
+            metadata: { width: 640, height: 360, has_audio: true, container: 'mp4', extension: 'mp4', mime_type: 'video/mp4' },
+            delivery: { kind: 'file', sources: [{ id: `s-360p-${caseName}`, url: primaryUrl, size_bytes: media.mp4.length }] },
+          },
+        ],
+      }
+      return res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+        schema_version: '1.0',
+        code: 'OK',
+        data: { platform: 'youtube', title: `Title_${caseName}`, source_url: inputUrl, default_item_id: item.id, items: [item] },
+      }))
+    }
+    if (u.pathname === '/api/platforms') {
+      return res.writeHead(200, { 'Content-Type': 'application/json' })
+        .end(await readFile(new URL('../frontend/src/generated/platform-catalog.json', import.meta.url)))
+    }
+    const file = path.resolve(distRoot, '.' + (u.pathname === '/' ? '/index.html' : u.pathname))
+    if (!file.startsWith(distRoot + path.sep)) return res.writeHead(404).end()
+    const type = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }[path.extname(file)] || 'application/octet-stream'
+    try {
+      const body = await readFile(file)
+      return res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' }).end(body)
+    } catch (error) {
+      if (error.code === 'ENOENT') return res.writeHead(404).end()
+      throw error
+    }
+  })
+  await new Promise((resolve, reject) => appServer.once('error', reject).listen(0, '127.0.0.1', resolve))
+  const appOrigin = `http://127.0.0.1:${appServer.address().port}`
+
+  const browser = await connect(profile)
+  const { send } = browser
+  const report = { browser: await send('Browser.getVersion'), appOrigin, cdnHost, cases: [] }
+  try {
+    await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads })
+    const { targetId } = await send('Target.createTarget', { url: appOrigin + '/' })
+    const attach = async id => (await send('Target.attachToTarget', { targetId: id, flatten: true })).sessionId
+    const page = await attach(targetId)
+    async function evaluate(session, expression, userGesture = false) {
+      const reply = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture }, session)
+      if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description || reply.exceptionDetails.text)
+      return reply.result.value
+    }
+
+    await until(() => evaluate(page, "!!document.querySelector('input[data-initial-url]')"), 'initial SPA form')
+
+    const readPageState = () => evaluate(page, `(() => ({
+      href: location.href,
+      title: document.querySelector('.rs-info-val')?.textContent?.trim() || '',
+      activeQuality: document.querySelector('.rs-quality-tag')?.textContent?.trim() || '',
+      videoSrc: document.querySelector('video.rs-video')?.getAttribute('src') || '',
+      tasks: [...document.querySelectorAll('[data-download-state]')].map(el => ({
+        id: el.dataset.downloadId,
+        state: el.dataset.downloadState,
+        transport: el.dataset.downloadTransport || null,
+        hasManualLink: [...el.querySelectorAll('button')].some(b => b.textContent.includes('打开源链接')),
+      })),
+    }))()`, false)
+
+    const nativeCases = [
+      { name: 'popup-restricted', file: 'r1-popup-recovered.mp4', restrictFirst: true },
+      { name: 'attachment', file: 'r1-direct.mp4' },
+      { name: 'redirect-attachment', file: 'r1-redirected.mp4' },
+      { name: 'redirect-403', inspectNewTab: true },
+      { name: 'inline', inspectNewTab: true },
+      { name: 'network-failure' },
+    ]
+
+    for (const tc of nativeCases) {
+      await evaluate(page, `(() => {
+        const clearBtn = [...document.querySelectorAll('[data-download-panel] button')].find(b => /清空|清除/.test(b.textContent));
+        if (clearBtn) clearBtn.click();
+        const input = document.querySelector('input[data-initial-url]');
+        input.value = ${JSON.stringify('https://www.youtube.com/watch?v=r1_' + tc.name)};
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`, false)
+      await delay(50)
+      await evaluate(page, "document.querySelector('input[data-initial-url]').parentElement.querySelector('button').click()", false)
+      await until(async () => {
+        const st = await readPageState()
+        return st.title === `Title_${tc.name}` && st.videoSrc.includes(`id=${tc.name}`) && st
+      }, `parsed ${tc.name}`)
+
+      const before = await readPageState()
+      const beforeReqCount = received.length
+
+      if (tc.restrictFirst) {
+        // Trigger primary download WITHOUT transient user activation (popup restricted)
+        await evaluate(page, `(() => {
+          const btn = [...document.querySelectorAll('button.rs-btn--primary')].find(x => /Download Video|下载视频/i.test(x.innerText));
+          if (!btn) throw new Error('missing primary download button');
+          btn.click();
+        })()`, false)
+        await delay(300)
+        const mid = await readPageState()
+        assert.equal(mid.href, before.href, 'popup-restricted attempt must not navigate current page')
+        assert.equal(mid.title, before.title, 'popup-restricted attempt must preserve parsed result')
+        assert.equal(mid.activeQuality, before.activeQuality, 'popup-restricted attempt must preserve active quality label')
+        assert.equal(mid.videoSrc, before.videoSrc, 'popup-restricted attempt must preserve selected source')
+        const midNavReqs = received.slice(beforeReqCount).filter(r => !r.range)
+        assert.equal(midNavReqs.length, 0, 'popup-restricted attempt must not issue any document navigation request')
+        const manualTask = mid.tasks.find(t => t.state === 'manual' && t.hasManualLink)
+        assert.ok(manualTask, 'popup-restricted attempt must settle in manual state with explicit 打开源链接 button')
+
+        // Register a document bubble-phase listener that cancels anchor click default action
+        await evaluate(page, `(() => {
+          window.__bubblePreventedSawUnpreventedTarget = false;
+          window.__cancelAnchorBubble = (e) => {
+            const a = e.target && e.target.closest ? e.target.closest('a') : null;
+            if (a) {
+              window.__bubblePreventedSawUnpreventedTarget = (e.defaultPrevented === false);
+              e.preventDefault();
+            }
+          };
+          document.addEventListener('click', window.__cancelAnchorBubble, false);
+          const btn = [...document.querySelectorAll('[data-download-state="manual"] button')].find(b => b.textContent.includes('打开源链接'));
+          if (!btn) throw new Error('missing 打开源链接 button');
+          btn.click();
+        })()`, true)
+        await delay(200)
+        const bubbleSawTargetUnprevented = await evaluate(page, 'Boolean(window.__bubblePreventedSawUnpreventedTarget)', false)
+        assert.equal(bubbleSawTargetUnprevented, true, 'document bubble listener must observe defaultPrevented===false after anchor target listener before calling preventDefault()')
+        const bubbleMid = await readPageState()
+        assert.equal(bubbleMid.href, before.href, 'document bubble preventDefault() must not navigate current page')
+        assert.equal(bubbleMid.title, before.title, 'document bubble preventDefault() must preserve parsed result')
+        assert.equal(bubbleMid.activeQuality, before.activeQuality, 'document bubble preventDefault() must preserve active quality label')
+        assert.equal(bubbleMid.videoSrc, before.videoSrc, 'document bubble preventDefault() must preserve selected source')
+        const bubbleNavReqs = received.slice(beforeReqCount).filter(r => !r.range)
+        assert.equal(bubbleNavReqs.length, 0, 'document bubble preventDefault() must not issue any document navigation request')
+        assert.ok(bubbleMid.tasks.find(t => t.state === 'manual' && t.hasManualLink), 'document bubble preventDefault() must keep task in manual state, not false handed-off')
+
+        // Remove document bubble listener and click explicit 打开源链接 button WITH user gesture
+        await evaluate(page, `(() => {
+          document.removeEventListener('click', window.__cancelAnchorBubble, false);
+          delete window.__cancelAnchorBubble;
+          const btn = [...document.querySelectorAll('[data-download-state="manual"] button')].find(b => b.textContent.includes('打开源链接'));
+          if (!btn) throw new Error('missing 打开源链接 button');
+          btn.click();
+        })()`, true)
+      } else {
+        await evaluate(page, `(() => {
+          const btn = [...document.querySelectorAll('button.rs-btn--primary')].find(x => /Download Video|下载视频/i.test(x.innerText));
+          if (!btn) throw new Error('missing primary download button');
+          btn.click();
+        })()`, true)
+      }
+
+      await delay(500)
+      const after = await readPageState()
+      assert.equal(after.href, before.href, `${tc.name}: current DokiTool page URL must be preserved`)
+      assert.equal(after.title, before.title, `${tc.name}: parsed result title must be preserved`)
+      assert.equal(after.activeQuality, before.activeQuality, `${tc.name}: active quality selection must be preserved`)
+      assert.equal(after.videoSrc, before.videoSrc, `${tc.name}: selected variant/source must be preserved`)
+      assert.ok(after.tasks.some(t => t.state === 'handed-off'), `${tc.name}: download card state must be handed-off`)
+
+      const caseReqs = received.slice(beforeReqCount)
+      const navReqs = caseReqs.filter(r => !r.range)
+      assert.ok(navReqs.length >= 1, `${tc.name}: expected CDN document navigation request`)
+      for (const r of navReqs) {
+        assert.equal(r.referer, null, `${tc.name}: navigation Referer header must be omitted (no-referrer)`)
+      }
+      for (const r of caseReqs) {
+        assert.equal(Boolean(r.referer && r.referer.includes(appOrigin)), false, `${tc.name}: Referer must never leak DokiTool origin`)
+      }
+
+      let isolatedOpenerNull = null
+      if (tc.inspectNewTab) {
+        const targets = (await send('Target.getTargets')).targetInfos
+        const aux = targets.find(t => t.type === 'page' && t.targetId !== targetId && t.url.includes('googlevideo.com'))
+        assert.ok(aux, `${tc.name}: expected isolated auxiliary tab for non-attachment response`)
+        const auxSession = await attach(aux.targetId)
+        isolatedOpenerNull = await evaluate(auxSession, 'window.opener === null', false)
+        assert.equal(isolatedOpenerNull, true, `${tc.name}: auxiliary tab must have window.opener === null`)
+        await send('Target.closeTarget', { targetId: aux.targetId })
+      }
+
+      let savedFile = null
+      if (tc.file) {
+        const data = await until(async () => {
+          const bytes = await readFile(path.join(downloads, tc.file)).catch(() => null)
+          return bytes?.length === media.mp4.length && bytes
+        }, `saved file ${tc.file}`)
+        assert.equal(sha256(data), sha256(media.mp4))
+        savedFile = { filename: tc.file, bytes: data.length, sha256: sha256(data) }
+      }
+
+      report.cases.push({
+        name: tc.name,
+        preservedHref: after.href === before.href,
+        preservedResult: after.title === before.title,
+        preservedQuality: after.activeQuality,
+        preservedSelection: after.videoSrc === before.videoSrc,
+        taskState: after.tasks[0]?.state,
+        requests: caseReqs,
+        isolatedOpenerNull,
+        savedFile,
+      })
+    }
+    report.passed = true
+  } finally {
+    await writeFile(path.join(runDir, 'native-isolation-results.json'), JSON.stringify(report, null, 2) + '\n')
+    browser.close()
+    cdnServer.close()
+    appServer.close()
+  }
+  console.log('Cross-origin native isolation browser fixtures passed:', report.cases.length)
+}
+
 if (command === 'serve' || (command === 'serve-ui' && profile)) await serve()
 else if (command === 'check' && profile) await check()
-else throw new Error('Expected serve <run-dir> or check <run-dir> <browser-profile> [case]')
+else if (command === 'check-native' && profile) await checkNative()
+else throw new Error('Expected serve <run-dir>, check <run-dir> <browser-profile> [case], or check-native <run-dir> <browser-profile> [dist-dir]')

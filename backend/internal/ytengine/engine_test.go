@@ -1427,26 +1427,42 @@ func TestPR36Review5788284772C1AndExport(t *testing.T) {
 		t.Fatal("expected ValidateEnvelopeAt to reject 1080p silent default when 4K silent file is present")
 	}
 
-	// 3. Unknown audio (omitted has_audio) is not forged as true
+	// 3. Unknown audio (omitted has_audio) is not forged as true, and on Instagram is preferred over silent DASH tracks
 	igOpts := AdaptOptions{
 		PlatformID:                   "instagram",
-		ContentID:                    "DCZ12345678",
-		SourceURL:                    "https://www.instagram.com/reel/DCZ12345678/",
+		ContentID:                    "CTApqC8BGWd",
+		SourceURL:                    "https://www.instagram.com/reel/CTApqC8BGWd/",
 		MaxEntries:                   1,
 		EnableDASHMux:                true,
 		AllowCodecLessProgressiveMP4: true,
 	}
 	igUnknown := AdaptInfo(&Info{
-		ID:     "DCZ12345678",
-		Title:  "Instagram Reel Unknown Codec",
-		Width:  &w1080,
-		Height: &h1080,
+		ID:    "CTApqC8BGWd",
+		Title: "Video by mrcigar",
 		Formats: []Format{
 			{
-				FormatID: "1",
-				URL:      "https://scontent-nrt1-1.cdninstagram.com/v/t50.2886-16/10000000_1_n.mp4?efg=eyJ2ZW5jb2RlX3RhZyI6InZ0c192b2RfdXJsZ2VuIn0&_nc_ht=scontent-nrt1-1.cdninstagram.com&oe=690D8A00",
+				FormatID: "dash-720-silent",
+				URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4?efg=eyJ2ZW5jb2RlX3RhZyI6ImRhc2hfaGlnaF8xX3YxIn0&_nc_ht=scontent-nrt1-1.cdninstagram.com&oe=690D8A00",
 				Ext:      "mp4",
 				Protocol: "https",
+				Width:    &w720,
+				Height:   &h720,
+				VCodec:   "avc1.64001F",
+				ACodec:   "none",
+			},
+			{
+				FormatID: "1",
+				URL:      "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/10000000_1_n.mp4?efg=eyJ2ZW5jb2RlX3RhZyI6InZ0c192b2RfdXJsZ2VuIn0&_nc_ht=scontent-nrt1-2.cdninstagram.com&oe=690D8A00",
+				Ext:      "mp4",
+				Protocol: "https",
+			},
+			{
+				FormatID: "dash-audio",
+				URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/audio.mp4?_nc_ht=scontent-nrt1-1.cdninstagram.com&oe=690D8A00",
+				Ext:      "m4a",
+				Protocol: "https",
+				VCodec:   "none",
+				ACodec:   "mp4a.40.5",
 			},
 		},
 	}, igOpts, now)
@@ -1456,7 +1472,13 @@ func TestPR36Review5788284772C1AndExport(t *testing.T) {
 		if err := unified.ValidateEnvelopeAt(env, now); err != nil {
 			t.Fatalf("Instagram unknown-audio %s envelope failed ValidateEnvelopeAt: %v", viewName, err)
 		}
-		meta := unified.Map(unified.Map(unified.Slice(unified.Map(unified.Slice(unified.Map(env["data"])["items"])[0])["variants"])[0])["metadata"])
+		item := unified.Map(unified.Slice(unified.Map(env["data"])["items"])[0])
+		def := unified.Map(item["default"])
+		if def == nil || !strings.Contains(unified.Str(def["url"]), "10000000_1_n.mp4") {
+			t.Fatalf("expected Instagram unknown-audio MP4 default in %s view, got %v", viewName, def)
+		}
+		variants := unified.Slice(item["variants"])
+		meta := unified.Map(unified.Map(variants[1])["metadata"])
 		if _, exists := meta["has_audio"]; exists {
 			t.Fatalf("expected unknown audio to omit has_audio in %s view, got %v", viewName, meta["has_audio"])
 		}
