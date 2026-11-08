@@ -1614,3 +1614,88 @@ func TestOmniGetPoint2PythonZipappAndStaleTempCleanup(t *testing.T) {
 		t.Fatalf("expected zipapp extraction via python3 to succeed, got info=%+v err=%v", info, err)
 	}
 }
+
+func TestOmniGetPythonZipappStartupVersionSelfCheckFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix python3 fixture")
+	}
+
+	realPython3 := lookupPython3InPath(os.Getenv("PATH"))
+	if realPython3 == "" {
+		t.Skip("python3 not found in PATH")
+	}
+
+	// Create a fake "python3" in a custom PATH directory that simulates an incompatible/old python3 failing self-check.
+	badPyDir := t.TempDir()
+	badPyPath := filepath.Join(badPyDir, "python3")
+	badPyScript := "#!/bin/sh\necho 'SyntaxError: future feature annotations is not defined' >&2\nexit 1\n"
+	if err := os.WriteFile(badPyPath, []byte(badPyScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	customEnvPath := badPyDir + string(os.PathListSeparator) + os.Getenv("PATH")
+
+	// Case 1: python3 in PATH exists but fails startup --version self-check, AND the verified zipapp is executable (0755)
+	// with a working direct interpreter -> falls back cleanly to direct execution (UsingPythonZipapp() == false, Enabled() == true).
+	execZipDir := t.TempDir()
+	execZipPath := filepath.Join(execZipDir, "yt-dlp")
+	execZipBody := fmt.Sprintf("#!%s\n# PK\x03\x04 simulated zipapp header\nimport json, sys\nif '--version' in sys.argv:\n    print('2026.10.26')\n    sys.exit(0)\nprint(json.dumps({'id':'direct-fallback-ok','title':'Direct Fallback','formats':[{'format_id':'18','url':'https://rr1---sn-test.googlevideo.com/videoplayback?itag=18','ext':'mp4','protocol':'https','width':1280,'height':720,'vcodec':'avc1.42001E','acodec':'mp4a.40.2'}]}))\n", realPython3)
+	if err := os.WriteFile(execZipPath, []byte(execZipBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	execSum := sha256.Sum256([]byte(execZipBody))
+	execDigest := hex.EncodeToString(execSum[:])
+
+	fallbackEng, err := New(Config{
+		BinaryPath:    execZipPath,
+		AllowedHashes: map[string]string{execDigest: "yt-dlp"},
+		EnvPath:       customEnvPath,
+	})
+	if err != nil || fallbackEng == nil || !fallbackEng.Enabled() {
+		t.Fatalf("expected zipapp with executable direct fallback to stay enabled when python3 fails self-check, got enabled=%v err=%v", fallbackEng != nil && fallbackEng.Enabled(), err)
+	}
+	if fallbackEng.UsingPythonZipapp() {
+		t.Fatalf("expected UsingPythonZipapp() == false after python3 self-check failure and direct binary fallback")
+	}
+	info, err := fallbackEng.Extract(context.Background(), "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
+	if err != nil || info == nil || info.ID != "direct-fallback-ok" {
+		t.Fatalf("expected direct fallback extraction to succeed, got info=%+v err=%v", info, err)
+	}
+
+	// Case 2: python3 in PATH exists but fails startup --version self-check, AND direct execution of the zipapp also fails
+	// (e.g. non-executable 0644 or shebang uses the broken python3) -> engine is disabled at startup with clear reason.
+	nonExecZipDir := t.TempDir()
+	nonExecZipPath := filepath.Join(nonExecZipDir, "yt-dlp")
+	if err := os.WriteFile(nonExecZipPath, []byte(execZipBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	disabledEng, err := New(Config{
+		BinaryPath:    nonExecZipPath,
+		AllowedHashes: map[string]string{execDigest: "yt-dlp"},
+		EnvPath:       customEnvPath,
+	})
+	if err == nil || disabledEng == nil || disabledEng.Enabled() {
+		t.Fatalf("expected engine to be disabled when both python3 self-check and direct execution fail, got enabled=%v err=%v", disabledEng != nil && disabledEng.Enabled(), err)
+	}
+	if !strings.Contains(disabledEng.DisableReason(), "zipapp startup self-check failed") {
+		t.Fatalf("expected DisableReason to mention zipapp startup self-check failure, got %q", disabledEng.DisableReason())
+	}
+
+	// Case 3: python3 in PATH outputs wrong yt-dlp version (not PinnedVersion) and direct execution also outputs wrong version -> disabled.
+	wrongVerDir := t.TempDir()
+	wrongVerPath := filepath.Join(wrongVerDir, "yt-dlp")
+	wrongVerBody := fmt.Sprintf("#!%s\n# PK\x03\x04 simulated zipapp header\nimport sys\nif '--version' in sys.argv:\n    print('2024.01.01')\n    sys.exit(0)\n", realPython3)
+	if err := os.WriteFile(wrongVerPath, []byte(wrongVerBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wrongSum := sha256.Sum256([]byte(wrongVerBody))
+	wrongDigest := hex.EncodeToString(wrongSum[:])
+
+	wrongVerEng, err := New(Config{
+		BinaryPath:    wrongVerPath,
+		AllowedHashes: map[string]string{wrongDigest: "yt-dlp"},
+		EnvPath:       os.Getenv("PATH"),
+	})
+	if err == nil || wrongVerEng == nil || wrongVerEng.Enabled() {
+		t.Fatalf("expected engine to be disabled when --version != %s, got enabled=%v err=%v", PinnedVersion, wrongVerEng != nil && wrongVerEng.Enabled(), err)
+	}
+}

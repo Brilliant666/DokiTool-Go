@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
@@ -32,17 +33,18 @@ import (
 const PinnedVersion = "2026.10.26"
 
 const (
-	defaultMaxConcurrency   = 2
-	maxAllowedConcurrency   = 8
-	defaultBootConcurrency  = 3
-	defaultStaleTempMaxAge  = 2 * time.Hour
-	defaultExtractTimeout   = 25 * time.Second
-	minExtractTimeout       = 2 * time.Second
-	maxExtractTimeout       = 40 * time.Second
-	defaultSocketTimeoutSec = 15
-	defaultMaxStdoutBytes   = 16 << 20 // 16 MiB
-	defaultMaxStderrBytes   = 64 << 10 // 64 KiB
-	maxBinaryFileBytes      = 128 << 20
+	defaultMaxConcurrency      = 2
+	maxAllowedConcurrency      = 8
+	defaultBootConcurrency     = 3
+	defaultStaleTempMaxAge     = 2 * time.Hour
+	defaultStartupCheckTimeout = 5 * time.Second
+	defaultExtractTimeout      = 25 * time.Second
+	minExtractTimeout          = 2 * time.Second
+	maxExtractTimeout          = 40 * time.Second
+	defaultSocketTimeoutSec    = 15
+	defaultMaxStdoutBytes      = 16 << 20 // 16 MiB
+	defaultMaxStderrBytes      = 64 << 10 // 64 KiB
+	maxBinaryFileBytes         = 128 << 20
 )
 
 var staleTempCleanupOnce sync.Once
@@ -238,6 +240,60 @@ func lookupPython3InPath(envPath string) string {
 	return ""
 }
 
+func verifyStartupVersion(pythonPath, binaryPath, envPath string) error {
+	tempDir, err := os.MkdirTemp("", "dokitool-ytdlp-check-*")
+	if err != nil {
+		return fmt.Errorf("create startup check temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	for _, sub := range []string{"cache", "config", "data", "tmp"} {
+		if err := os.MkdirAll(filepath.Join(tempDir, sub), 0o700); err != nil {
+			return fmt.Errorf("init startup check temp dir: %w", err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultStartupCheckTimeout)
+	defer cancel()
+
+	args := []string{
+		"--ignore-config",
+		"--no-plugin-dirs",
+		"--no-warnings",
+		"--version",
+	}
+	var cmd *exec.Cmd
+	if pythonPath != "" {
+		pyArgs := make([]string, 0, len(args)+1)
+		pyArgs = append(pyArgs, binaryPath)
+		pyArgs = append(pyArgs, args...)
+		cmd = exec.CommandContext(ctx, pythonPath, pyArgs...)
+	} else {
+		cmd = exec.CommandContext(ctx, binaryPath, args...)
+	}
+	cmd.Dir = tempDir
+	cmd.Stdin = nil
+	cmd.Env = buildIsolatedEnv(tempDir, envPath)
+	configureProcessGroup(cmd)
+
+	stdout := &limitedBuffer{max: 4096}
+	stderr := &limitedBuffer{max: 4096}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return fmt.Errorf("%w (%s)", err, errMsg)
+		}
+		return err
+	}
+	gotVersion := strings.TrimSpace(stdout.String())
+	if gotVersion != PinnedVersion {
+		return fmt.Errorf("yt-dlp --version returned %q, want %q", gotVersion, PinnedVersion)
+	}
+	return nil
+}
+
 // NewDisabled returns an Engine that is explicitly disabled with the given reason.
 func NewDisabled(reason string) *Engine {
 	if strings.TrimSpace(reason) == "" {
@@ -380,6 +436,24 @@ func New(cfg Config) (*Engine, error) {
 	var pythonPath string
 	if detectPythonZipapp(absPath) {
 		pythonPath = lookupPython3InPath(envPath)
+		if pythonPath != "" {
+			if err := verifyStartupVersion(pythonPath, absPath, envPath); err != nil {
+				log.Printf("dokitool: yt-dlp python3 zipapp self-check failed (%v); attempting direct binary execution fallback", err)
+				pythonPath = ""
+				if directErr := verifyStartupVersion("", absPath, envPath); directErr != nil {
+					reason := fmt.Sprintf("yt-dlp zipapp startup self-check failed (python3: %v; direct: %v)", err, directErr)
+					log.Printf("dokitool: %s; disabling yt-dlp engine", reason)
+					return NewDisabled(reason), errors.New(reason)
+				}
+				log.Printf("dokitool: yt-dlp zipapp direct binary execution fallback succeeded (version %s)", PinnedVersion)
+			}
+		} else {
+			if directErr := verifyStartupVersion("", absPath, envPath); directErr != nil {
+				reason := fmt.Sprintf("yt-dlp zipapp startup self-check failed without python3 in PATH: %v", directErr)
+				log.Printf("dokitool: %s; disabling yt-dlp engine", reason)
+				return NewDisabled(reason), errors.New(reason)
+			}
+		}
 	}
 	return &Engine{
 		gatePorts:           gatePorts,
