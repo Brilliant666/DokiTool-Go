@@ -528,6 +528,7 @@
     "frontend/tests/ui-download-contract.test.mjs",
     "frontend/tsconfig.json",
     "frontend/vite.config.js",
+    "ops/examples/release.conf.example",
     "ops/examples/snap-access.caddy.example",
     "ops/examples/snap-fpm.conf",
     "ops/examples/snap.caddy",

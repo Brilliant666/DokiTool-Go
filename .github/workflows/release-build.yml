@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'build-test-*'
   workflow_dispatch:
     inputs:
       sha:
@@ -58,8 +56,6 @@ jobs:
               echo "Error: commit $TARGET_SHA is not on main history" >&2
               exit 1
             fi
-          elif [[ "$REF_NAME" == refs/tags/build-test-* ]]; then
-            TARGET_SHA="$(git rev-parse "${PUSH_SHA}^{commit}")"
           else
             TARGET_SHA="$PUSH_SHA"
             if ! git merge-base --is-ancestor "$TARGET_SHA" refs/remotes/origin/main; then
@@ -75,11 +71,7 @@ jobs:
           fi
           TREE_SHA="$(git rev-parse HEAD^{tree})"
           SHORT_SHA="${TARGET_SHA:0:7}"
-          if [[ "$REF_NAME" == refs/tags/build-test-* ]]; then
-            RELEASE_TAG="${REF_NAME#refs/tags/}"
-          else
-            RELEASE_TAG="build-${SHORT_SHA}"
-          fi
+          RELEASE_TAG="build-${SHORT_SHA}"
           {
             echo "sha=${TARGET_SHA}"
             echo "short_sha=${SHORT_SHA}"
@@ -97,8 +89,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: ''
 
       - name: Install locked frontend dependencies
         working-directory: frontend
@@ -227,26 +218,21 @@ jobs:
           Automated prerelease build for commit \`${TARGET_SHA}\` (tree \`${TREE_SHA}\`).
 
           - Release tag: \`${RELEASE_TAG}\`
-          - Verification: compare SHA-256 digests against \`release-manifest.json\` and run \`gh attestation verify <artifact> --repo ${GITHUB_REPOSITORY}\`.
+          - Verification: compare SHA-256 digests against \`release-manifest.json\` and run \`gh attestation verify <artifact> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release-build.yml --source-ref refs/heads/main\`.
           EOF
 
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              "$OUT_DIR/dokitool" \
-              "$OUT_DIR/shanghai-resolver" \
-              "$OUT_DIR/frontend-dist.tar.gz" \
-              "$OUT_DIR/release-manifest.json" \
-              --clobber \
-              --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$RELEASE_TAG" \
-              "$OUT_DIR/dokitool" \
-              "$OUT_DIR/shanghai-resolver" \
-              "$OUT_DIR/frontend-dist.tar.gz" \
-              "$OUT_DIR/release-manifest.json" \
-              --prerelease \
-              --target "$TARGET_SHA" \
-              --title "Release Build ${SHORT_SHA} (${TARGET_SHA})" \
-              --notes-file "$NOTES_FILE" \
-              --repo "$GITHUB_REPOSITORY"
+            echo "Error: release ${RELEASE_TAG} already exists; refusing to overwrite immutable release artifacts" >&2
+            exit 1
           fi
+
+          gh release create "$RELEASE_TAG" \
+            "$OUT_DIR/dokitool" \
+            "$OUT_DIR/shanghai-resolver" \
+            "$OUT_DIR/frontend-dist.tar.gz" \
+            "$OUT_DIR/release-manifest.json" \
+            --prerelease \
+            --target "$TARGET_SHA" \
+            --title "Release Build ${SHORT_SHA} (${TARGET_SHA})" \
+            --notes-file "$NOTES_FILE" \
+            --repo "$GITHUB_REPOSITORY"

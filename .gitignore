@@ -247,6 +247,7 @@
 !/frontend/tests/seo-contract.test.mjs
 !/frontend/tests/ui-download-contract.test.mjs
 /ops/examples/*
+!/ops/examples/release.conf.example
 !/ops/examples/snap-access.caddy.example
 !/ops/examples/snap-fpm.conf
 !/ops/examples/snap.caddy
