@@ -1605,9 +1605,6 @@ func TestOmniGetPoint2PythonZipappAndStaleTempCleanup(t *testing.T) {
 	if !eng.UsingPythonZipapp() {
 		t.Fatal("expected UsingPythonZipapp() == true for python zipapp")
 	}
-	if cap(eng.bootSem) != defaultBootConcurrency {
-		t.Fatalf("expected bootSem capacity=%d, got %d", defaultBootConcurrency, cap(eng.bootSem))
-	}
 
 	info, err := eng.Extract(context.Background(), "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
 	if err != nil || info == nil || info.ID != "zipapp-ok" {

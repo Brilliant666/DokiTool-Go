@@ -179,19 +179,18 @@ func AllowedOutboundHost(host string) bool {
 	return false
 }
 
-// AllowedPageURL restricts native Embed and GraphQL HTTP requests to official Instagram web hosts.
+// AllowedPageURL restricts native Embed and GraphQL HTTP requests to official Instagram HTTPS web hosts.
 func AllowedPageURL(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.User != nil || u.Opaque != "" {
 		return false
 	}
-	scheme := strings.ToLower(u.Scheme)
-	if scheme != "https" && scheme != "http" {
+	if strings.ToLower(u.Scheme) != "https" {
 		return false
 	}
 	if port := u.Port(); port != "" {
 		n, err := strconv.Atoi(port)
-		if err != nil || (scheme == "https" && n != 443) || (scheme == "http" && n != 80) {
+		if err != nil || n != 443 {
 			return false
 		}
 	}

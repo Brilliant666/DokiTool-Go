@@ -239,8 +239,8 @@ Python 校验依赖仍由 `scripts/requirements-validation.txt` 声明。导出�
      - **Tier 2（Anonymous GraphQL）**：通过受控 `fetch.Executor` 发送匿名 `POST https://www.instagram.com/api/graphql`（`fb_api_req_friendly_name=PolarisPostActionLoadPostQueryQuery`，`doc_id=8845758582119845`，公开 Web App ID `936619743392459`，仅请求解析媒体所需的 `{"shortcode":"..."}` 变量，不含评论字段），解析 `xdt_shortcode_media` / `shortcode_media`。当 `doc_id`、`lsd` 或 App ID 失效返回 200 错误 JSON、HTML 或 4xx 时，平稳回退到原有 `yt-dlp` 错误分类。
    - 原生支持单视频（`GraphVideo` / `XDTGraphVideo`，保持未知音轨语义不伪造 `has_audio: true`，命中 `#38` Instagram 默认资格规则）、单图（`GraphImage`）与多图/视频混排轮播图集（`GraphSidecar` -> `media.type=album`），全部走 SSRF 防护与 DNS 绑定的 `fetch.Executor`，并保持确定性 `private_source_identity` 以支持签名续期（`/api/resolve`）。本地信号量饱和（`LocalBusy`）时仍立即返回 `RATE_LIMITED`，不触发回退。
 
-2. **`yt-dlp` Python Zipapp 零解压启动、启动自检、启动信号量与陈旧临时目录清理**
+2. **`yt-dlp` Python Zipapp 零解压启动、启动自检与陈旧临时目录清理**
    - `internal/ytengine` 自动识别 SHA-256 校验通过的 `yt-dlp` 文件是否为官方 Python Zipapp（头部 `#!...python` + 内嵌 ZIP 归档）。若主机 `PATH` 存在可执行 `python3`，引擎初始化时先用 `python3 <zipapp> --version` 执行启动自检（要求输出严格等于固定版本 `2026.10.26`）；自检通过则直接通过 `python3 <zipapp>` 零解压运行（兼容 `0644` 只读权限文件，避免每次调用解压约 30MB 运行时），自检失败则记录启动日志并回退为直接执行已校验二进制（若直接执行亦不可用则禁用引擎并记录日志）。
-   - 新增 `bootSem`（默认并发上限 3）限制子进程并发启动峰值，并在引擎初始化时执行 `CleanupStaleTempDirs` 自动清理系统临时目录中属于本服务当前 UID、非符号链接且修改时间超过 **2 小时**（`defaultStaleTempMaxAge = 2 * time.Hour`）的残留 `dokitool-ytdlp-*` 目录（不清理任何 `_MEI*` 或非本服务 UID 的目录）。
+   - 在引擎初始化时执行 `CleanupStaleTempDirs` 自动清理系统临时目录中属于本服务当前 UID、非符号链接且修改时间超过 **2 小时**（`defaultStaleTempMaxAge = 2 * time.Hour`）的残留 `dokitool-ytdlp-*` 目录（不清理任何 `_MEI*` 或非本服务 UID 的目录）。
 
 

@@ -20,7 +20,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,7 +34,6 @@ const PinnedVersion = "2026.10.26"
 const (
 	defaultMaxConcurrency      = 2
 	maxAllowedConcurrency      = 8
-	defaultBootConcurrency     = 3
 	defaultStaleTempMaxAge     = 2 * time.Hour
 	defaultStartupCheckTimeout = 5 * time.Second
 	defaultExtractTimeout      = 25 * time.Second
@@ -96,7 +94,6 @@ type Engine struct {
 	resolver            Resolver
 	dialAddr            func(netip.Addr, string) string
 	sem                 chan struct{}
-	bootSem             chan struct{}
 	timeout             time.Duration
 	socketTimeoutSec    int
 	maxStdoutBytes      int64
@@ -150,37 +147,6 @@ func cleanupStaleTempDirsForUID(tmpRoot string, maxAge time.Duration, expectedUI
 		}
 	}
 	return cleaned
-}
-
-func dirOwnedByUID(info os.FileInfo, expectedUID int) bool {
-	if expectedUID < 0 {
-		return true
-	}
-	if info == nil || info.Sys() == nil {
-		return false
-	}
-	v := reflect.ValueOf(info.Sys())
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return false
-		}
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
-		return false
-	}
-	uidField := v.FieldByName("Uid")
-	if !uidField.IsValid() {
-		return false
-	}
-	switch uidField.Kind() {
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return int(uidField.Uint()) == expectedUID
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(uidField.Int()) == expectedUID
-	default:
-		return false
-	}
 }
 
 func detectPythonZipapp(absPath string) bool {
@@ -467,7 +433,6 @@ func New(cfg Config) (*Engine, error) {
 		resolver:            cfg.Resolver,
 		dialAddr:            cfg.DialAddr,
 		sem:                 sem,
-		bootSem:             make(chan struct{}, defaultBootConcurrency),
 		timeout:             timeout,
 		socketTimeoutSec:    socketTimeout,
 		maxStdoutBytes:      maxStdout,
@@ -701,15 +666,6 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 }
 
 func (e *Engine) runSubprocess(callCtx context.Context, rawURL, effectiveProxy, tempDir string) (*Info, string, error) {
-	if e.bootSem != nil {
-		select {
-		case e.bootSem <- struct{}{}:
-			defer func() { <-e.bootSem }()
-		case <-callCtx.Done():
-			return nil, "", classifyContextErr(callCtx.Err())
-		}
-	}
-
 	args := e.commandArgsWithProxy(rawURL, effectiveProxy)
 	var cmd *exec.Cmd
 	if e.pythonPath != "" {

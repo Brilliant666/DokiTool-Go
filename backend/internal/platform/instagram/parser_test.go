@@ -816,3 +816,31 @@ func TestParseInstagramGraphQLFailurePathsFallbackToYtDlpError(t *testing.T) {
 		})
 	}
 }
+
+func TestAllowedPageURLHTTPSOnly(t *testing.T) {
+	allowed := []string{
+		"https://www.instagram.com/p/CTApqC8BGWd/embed/captioned/",
+		"https://www.instagram.com:443/api/graphql",
+		"https://instagram.com/p/CTApqC8BGWd/embed/captioned/",
+		"https://i.instagram.com/api/v1/media/123/info/",
+	}
+	for _, raw := range allowed {
+		if !AllowedPageURL(raw) {
+			t.Fatalf("expected AllowedPageURL(%q) == true", raw)
+		}
+	}
+
+	rejected := []string{
+		"http://www.instagram.com/p/CTApqC8BGWd/embed/captioned/",
+		"http://www.instagram.com:80/p/CTApqC8BGWd/embed/captioned/",
+		"http://instagram.com/api/graphql",
+		"https://www.instagram.com:8443/p/CTApqC8BGWd/embed/captioned/",
+		"https://user:pass@www.instagram.com/p/CTApqC8BGWd/embed/captioned/",
+		"https://evil.example.com/p/CTApqC8BGWd/embed/captioned/",
+	}
+	for _, raw := range rejected {
+		if AllowedPageURL(raw) {
+			t.Fatalf("expected AllowedPageURL(%q) == false", raw)
+		}
+	}
+}
