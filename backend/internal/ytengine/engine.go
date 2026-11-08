@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
@@ -31,16 +32,20 @@ import (
 const PinnedVersion = "2026.10.26"
 
 const (
-	defaultMaxConcurrency   = 2
-	maxAllowedConcurrency   = 8
-	defaultExtractTimeout   = 25 * time.Second
-	minExtractTimeout       = 2 * time.Second
-	maxExtractTimeout       = 40 * time.Second
-	defaultSocketTimeoutSec = 15
-	defaultMaxStdoutBytes   = 16 << 20 // 16 MiB
-	defaultMaxStderrBytes   = 64 << 10 // 64 KiB
-	maxBinaryFileBytes      = 128 << 20
+	defaultMaxConcurrency      = 2
+	maxAllowedConcurrency      = 8
+	defaultStaleTempMaxAge     = 2 * time.Hour
+	defaultStartupCheckTimeout = 5 * time.Second
+	defaultExtractTimeout      = 25 * time.Second
+	minExtractTimeout          = 2 * time.Second
+	maxExtractTimeout          = 40 * time.Second
+	defaultSocketTimeoutSec    = 15
+	defaultMaxStdoutBytes      = 16 << 20 // 16 MiB
+	defaultMaxStderrBytes      = 64 << 10 // 64 KiB
+	maxBinaryFileBytes         = 128 << 20
 )
+
+var staleTempCleanupOnce sync.Once
 
 // OfficialSHA256Sums20261026 contains the official SHA2-256SUMS for yt-dlp 2026.10.26:
 // https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS
@@ -83,6 +88,7 @@ type Engine struct {
 	binaryPath          string
 	binarySHA256        string
 	binaryAsset         string
+	pythonPath          string
 	allowedURL          func(string) bool
 	allowedOutboundHost func(string) bool
 	resolver            Resolver
@@ -94,6 +100,164 @@ type Engine struct {
 	proxyURL            string
 	envPath             string
 	gatePorts           *gatePortPool
+}
+
+// CleanupStaleTempDirs removes orphaned dokitool-ytdlp-* directories in tmpRoot
+// that are owned by the current service UID, are not symlinks, and whose
+// modification time is older than maxAge (defaulting to 2 hours).
+func CleanupStaleTempDirs(tmpRoot string, maxAge time.Duration) int {
+	return cleanupStaleTempDirsForUID(tmpRoot, maxAge, os.Geteuid())
+}
+
+func cleanupStaleTempDirsForUID(tmpRoot string, maxAge time.Duration, expectedUID int) int {
+	trimmed := strings.TrimSpace(tmpRoot)
+	if trimmed == "" {
+		return 0
+	}
+	if maxAge <= 0 {
+		maxAge = defaultStaleTempMaxAge
+	}
+	entries, err := os.ReadDir(trimmed)
+	if err != nil {
+		return 0
+	}
+	cutoff := time.Now().Add(-maxAge)
+	cleaned := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "dokitool-ytdlp-") {
+			continue
+		}
+		if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
+			continue
+		}
+		fullPath := filepath.Join(trimmed, name)
+		info, err := os.Lstat(fullPath)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			continue
+		}
+		if !dirOwnedByUID(info, expectedUID) {
+			continue
+		}
+		if info.ModTime().IsZero() || info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.RemoveAll(fullPath); err == nil {
+			cleaned++
+		}
+	}
+	return cleaned
+}
+
+func detectPythonZipapp(absPath string) bool {
+	stat, err := os.Stat(absPath)
+	if err != nil || !stat.Mode().IsRegular() {
+		return false
+	}
+	f, err := os.Open(absPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	buf := make([]byte, 512)
+	n, _ := f.Read(buf)
+	if n < 4 {
+		return false
+	}
+	head := buf[:n]
+	if !bytes.HasPrefix(head, []byte("#!")) {
+		return false
+	}
+	nl := bytes.IndexByte(head, '\n')
+	firstLine := head
+	var rest []byte
+	if nl >= 0 {
+		firstLine = head[:nl]
+		rest = head[nl+1:]
+	}
+	if !strings.Contains(strings.ToLower(string(firstLine)), "python") {
+		return false
+	}
+	if bytes.Contains(rest, []byte("PK\x03\x04")) {
+		return true
+	}
+	return stat.Mode()&0o111 == 0
+}
+
+func lookupPython3InPath(envPath string) string {
+	searchPath := envPath
+	if strings.TrimSpace(searchPath) == "" {
+		searchPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+	}
+	for _, dir := range filepath.SplitList(searchPath) {
+		trimmedDir := strings.TrimSpace(dir)
+		if trimmedDir == "" {
+			continue
+		}
+		for _, candidateName := range []string{"python3", "python3.exe"} {
+			candidate := filepath.Join(trimmedDir, candidateName)
+			stat, err := os.Stat(candidate)
+			if err != nil || !stat.Mode().IsRegular() {
+				continue
+			}
+			return candidate
+		}
+	}
+	return ""
+}
+
+func verifyStartupVersion(pythonPath, binaryPath, envPath string) error {
+	tempDir, err := os.MkdirTemp("", "dokitool-ytdlp-check-*")
+	if err != nil {
+		return fmt.Errorf("create startup check temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	for _, sub := range []string{"cache", "config", "data", "tmp"} {
+		if err := os.MkdirAll(filepath.Join(tempDir, sub), 0o700); err != nil {
+			return fmt.Errorf("init startup check temp dir: %w", err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultStartupCheckTimeout)
+	defer cancel()
+
+	args := []string{
+		"--ignore-config",
+		"--no-plugin-dirs",
+		"--no-warnings",
+		"--version",
+	}
+	var cmd *exec.Cmd
+	if pythonPath != "" {
+		pyArgs := make([]string, 0, len(args)+1)
+		pyArgs = append(pyArgs, binaryPath)
+		pyArgs = append(pyArgs, args...)
+		cmd = exec.CommandContext(ctx, pythonPath, pyArgs...)
+	} else {
+		cmd = exec.CommandContext(ctx, binaryPath, args...)
+	}
+	cmd.Dir = tempDir
+	cmd.Stdin = nil
+	cmd.Env = buildIsolatedEnv(tempDir, envPath)
+	configureProcessGroup(cmd)
+
+	stdout := &limitedBuffer{max: 4096}
+	stderr := &limitedBuffer{max: 4096}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return fmt.Errorf("%w (%s)", err, errMsg)
+		}
+		return err
+	}
+	gotVersion := strings.TrimSpace(stdout.String())
+	if gotVersion != PinnedVersion {
+		return fmt.Errorf("yt-dlp --version returned %q, want %q", gotVersion, PinnedVersion)
+	}
+	return nil
 }
 
 // NewDisabled returns an Engine that is explicitly disabled with the given reason.
@@ -173,6 +337,9 @@ func lookupBinaryInPath(envPath string) (string, error) {
 // When verification fails, New returns both a disabled *Engine and the verification
 // error so the caller can log a startup warning without crashing the API process.
 func New(cfg Config) (*Engine, error) {
+	staleTempCleanupOnce.Do(func() {
+		CleanupStaleTempDirs(os.TempDir(), defaultStaleTempMaxAge)
+	})
 	envPath := cfg.EnvPath
 	if envPath == "" {
 		envPath = os.Getenv("PATH")
@@ -232,12 +399,35 @@ func New(cfg Config) (*Engine, error) {
 	if err != nil {
 		return NewDisabled(err.Error()), err
 	}
+	var pythonPath string
+	if detectPythonZipapp(absPath) {
+		pythonPath = lookupPython3InPath(envPath)
+		if pythonPath != "" {
+			if err := verifyStartupVersion(pythonPath, absPath, envPath); err != nil {
+				log.Printf("dokitool: yt-dlp python3 zipapp self-check failed (%v); attempting direct binary execution fallback", err)
+				pythonPath = ""
+				if directErr := verifyStartupVersion("", absPath, envPath); directErr != nil {
+					reason := fmt.Sprintf("yt-dlp zipapp startup self-check failed (python3: %v; direct: %v)", err, directErr)
+					log.Printf("dokitool: %s; disabling yt-dlp engine", reason)
+					return NewDisabled(reason), errors.New(reason)
+				}
+				log.Printf("dokitool: yt-dlp zipapp direct binary execution fallback succeeded (version %s)", PinnedVersion)
+			}
+		} else {
+			if directErr := verifyStartupVersion("", absPath, envPath); directErr != nil {
+				reason := fmt.Sprintf("yt-dlp zipapp startup self-check failed without python3 in PATH: %v", directErr)
+				log.Printf("dokitool: %s; disabling yt-dlp engine", reason)
+				return NewDisabled(reason), errors.New(reason)
+			}
+		}
+	}
 	return &Engine{
 		gatePorts:           gatePorts,
 		enabled:             true,
 		binaryPath:          absPath,
 		binarySHA256:        digest,
 		binaryAsset:         asset,
+		pythonPath:          pythonPath,
 		allowedURL:          cfg.AllowedURL,
 		allowedOutboundHost: cfg.AllowedOutboundHost,
 		resolver:            cfg.Resolver,
@@ -339,6 +529,12 @@ func (e *Engine) BinaryAsset() string {
 		return ""
 	}
 	return e.binaryAsset
+}
+
+// UsingPythonZipapp reports whether the verified yt-dlp asset is executed directly
+// via python3 as a zero-unpack zipapp rather than a PyInstaller self-extracting binary.
+func (e *Engine) UsingPythonZipapp() bool {
+	return e != nil && e.pythonPath != ""
 }
 
 // CommandArgs returns the hardened CLI argument slice for a single URL extraction.
@@ -465,8 +661,21 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 		}
 	}
 
+	info, _, extractErr := e.runSubprocess(callCtx, rawURL, effectiveProxy, tempDir)
+	return info, extractErr
+}
+
+func (e *Engine) runSubprocess(callCtx context.Context, rawURL, effectiveProxy, tempDir string) (*Info, string, error) {
 	args := e.commandArgsWithProxy(rawURL, effectiveProxy)
-	cmd := exec.CommandContext(callCtx, e.binaryPath, args...)
+	var cmd *exec.Cmd
+	if e.pythonPath != "" {
+		pyArgs := make([]string, 0, len(args)+1)
+		pyArgs = append(pyArgs, e.binaryPath)
+		pyArgs = append(pyArgs, args...)
+		cmd = exec.CommandContext(callCtx, e.pythonPath, pyArgs...)
+	} else {
+		cmd = exec.CommandContext(callCtx, e.binaryPath, args...)
+	}
 	cmd.Dir = tempDir
 	cmd.Stdin = nil
 	cmd.Env = buildIsolatedEnv(tempDir, e.envPath)
@@ -478,23 +687,24 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 	cmd.Stderr = stderr
 
 	runErr := cmd.Run()
+	stderrText := stderr.String()
 	if callCtx.Err() != nil {
-		return nil, classifyContextErr(callCtx.Err())
+		return nil, stderrText, classifyContextErr(callCtx.Err())
 	}
 	if stdout.overflow {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeUpstreamInvalidResponse,
 			Message:   "上游返回的元数据超出大小限制",
 			Retryable: false,
 		}
 	}
 	if runErr != nil {
-		return nil, classifyStderr(stderr.String(), runErr)
+		return nil, stderrText, classifyStderr(stderrText, runErr)
 	}
 
 	rawJSON := bytes.TrimSpace(stdout.Bytes())
 	if len(rawJSON) == 0 {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeUpstreamInvalidResponse,
 			Message:   "上游未返回有效的元数据",
 			Retryable: false,
@@ -502,7 +712,7 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 	}
 	var info Info
 	if err := json.Unmarshal(rawJSON, &info); err != nil {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeUpstreamInvalidResponse,
 			Message:   "上游返回的元数据格式异常",
 			Retryable: false,
@@ -510,13 +720,13 @@ func (e *Engine) Extract(ctx context.Context, rawURL string) (*Info, error) {
 		}
 	}
 	if info.ID == "" && len(info.Formats) == 0 && len(info.Entries) == 0 {
-		return nil, &Error{
+		return nil, stderrText, &Error{
 			Code:      CodeContentUnavailable,
 			Message:   "未找到可用的作品内容",
 			Retryable: false,
 		}
 	}
-	return &info, nil
+	return &info, stderrText, nil
 }
 
 func (e *Engine) verifyPublicTargetHost(ctx context.Context, rawURL string) *Error {

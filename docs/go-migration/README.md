@@ -228,3 +228,19 @@ Python 校验依赖仍由 `scripts/requirements-validation.txt` 声明。导出�
 ## 阶段顺序
 
 骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；当时的实施授权不含生产切流。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器仍在范围外；小红书新增页面传输已在独立 PR #5 获得实施授权，不追溯改变原迁移排除项，真实原画的专项结果见上文。此处保留迁移阶段记录，现网状态见本文开头。
+
+## 匿名增强管线（Instagram 三级回退与 `yt-dlp` Zipapp 零解压启动）
+
+在不引入用户登录态/Cookie 托管、不新增服务端媒体中继或转码合流的前提下，后端已落地两项匿名解析与运行稳定增强：
+
+1. **Instagram 免登录三级解析管线（`yt-dlp` -> Embed Captioned -> Anonymous GraphQL）**
+   - 当 `yt-dlp` 因匿名登录墙或上游变更未产出有效视频/图集格式时，`internal/platform/instagram` 在同一请求内按序回退到：
+     - **Tier 1（Embed Captioned）**：通过受控 `fetch.Executor` 请求 `https://www.instagram.com/p/{shortcode}/embed/captioned/`，提取 `contextJSON`（含反义 JSON 字符串）或 `<video>` / `<img class="EmbeddedMediaImage">` 直链。
+     - **Tier 2（Anonymous GraphQL）**：通过受控 `fetch.Executor` 发送匿名 `POST https://www.instagram.com/api/graphql`（`fb_api_req_friendly_name=PolarisPostActionLoadPostQueryQuery`，`doc_id=8845758582119845`，公开 Web App ID `936619743392459`，仅请求解析媒体所需的 `{"shortcode":"..."}` 变量，不含评论字段），解析 `xdt_shortcode_media` / `shortcode_media`。当 `doc_id`、`lsd` 或 App ID 失效返回 200 错误 JSON、HTML 或 4xx 时，平稳回退到原有 `yt-dlp` 错误分类。
+   - 原生支持单视频（`GraphVideo` / `XDTGraphVideo`，保持未知音轨语义不伪造 `has_audio: true`，命中 `#38` Instagram 默认资格规则）、单图（`GraphImage`）与多图/视频混排轮播图集（`GraphSidecar` -> `media.type=album`），全部走 SSRF 防护与 DNS 绑定的 `fetch.Executor`，并保持确定性 `private_source_identity` 以支持签名续期（`/api/resolve`）。本地信号量饱和（`LocalBusy`）时仍立即返回 `RATE_LIMITED`，不触发回退。
+
+2. **`yt-dlp` Python Zipapp 零解压启动、启动自检与陈旧临时目录清理**
+   - `internal/ytengine` 自动识别 SHA-256 校验通过的 `yt-dlp` 文件是否为官方 Python Zipapp（头部 `#!...python` + 内嵌 ZIP 归档）。若主机 `PATH` 存在可执行 `python3`，引擎初始化时先用 `python3 <zipapp> --version` 执行启动自检（要求输出严格等于固定版本 `2026.10.26`）；自检通过则直接通过 `python3 <zipapp>` 零解压运行（兼容 `0644` 只读权限文件，避免每次调用解压约 30MB 运行时），自检失败则记录启动日志并回退为直接执行已校验二进制（若直接执行亦不可用则禁用引擎并记录日志）。
+   - 在引擎初始化时执行 `CleanupStaleTempDirs` 自动清理系统临时目录中属于本服务当前 UID、非符号链接且修改时间超过 **2 小时**（`defaultStaleTempMaxAge = 2 * time.Hour`）的残留 `dokitool-ytdlp-*` 目录（不清理任何 `_MEI*` 或非本服务 UID 的目录）。
+
+

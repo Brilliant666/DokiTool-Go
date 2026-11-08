@@ -1519,3 +1519,180 @@ func TestPR36Review5788284772C1AndExport(t *testing.T) {
 		}
 	}
 }
+
+func TestOmniGetPoint2PythonZipappAndStaleTempCleanup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix python3 fixture")
+	}
+
+	// 1. CleanupStaleTempDirs only removes stale dokitool-ytdlp-* real directories owned by our UID,
+	// never removes _MEI* directories, never follows or removes symlinks, and never removes other-UID dirs.
+	tmpRoot := t.TempDir()
+	staleMEI := filepath.Join(tmpRoot, "_MEI123456")
+	staleDoki := filepath.Join(tmpRoot, "dokitool-ytdlp-old")
+	freshDoki := filepath.Join(tmpRoot, "dokitool-ytdlp-fresh")
+	unrelatedDir := filepath.Join(tmpRoot, "other-dir")
+	symlinkTarget := filepath.Join(tmpRoot, "protected-target")
+	symlinkSentinel := filepath.Join(symlinkTarget, "keep.txt")
+	dokiSymlink := filepath.Join(tmpRoot, "dokitool-ytdlp-symlink")
+
+	for _, dir := range []string{staleMEI, staleDoki, freshDoki, unrelatedDir, symlinkTarget} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(symlinkSentinel, []byte("preserve"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(symlinkTarget, dokiSymlink); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTime := time.Now().Add(-3 * time.Hour)
+	for _, dir := range []string{staleMEI, staleDoki, unrelatedDir, symlinkTarget} {
+		if err := os.Chtimes(dir, oldTime, oldTime); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify that a mismatched UID removes 0 directories even when staleDoki is >2h old.
+	if cleanedOtherUID := cleanupStaleTempDirsForUID(tmpRoot, 2*time.Hour, os.Geteuid()+1); cleanedOtherUID != 0 {
+		t.Fatalf("expected 0 dirs removed for non-matching UID, got %d", cleanedOtherUID)
+	}
+	if _, err := os.Stat(staleDoki); err != nil {
+		t.Fatalf("expected staleDoki to remain when UID does not match: %v", err)
+	}
+
+	// Verify normal CleanupStaleTempDirs removes only staleDoki (1 dir), preserving _MEI*, symlinks, fresh dirs, and unrelated dirs.
+	cleaned := CleanupStaleTempDirs(tmpRoot, 2*time.Hour)
+	if cleaned != 1 {
+		t.Fatalf("expected CleanupStaleTempDirs to remove exactly 1 stale dokitool-ytdlp-* dir, got %d", cleaned)
+	}
+	if _, err := os.Stat(staleDoki); !os.IsNotExist(err) {
+		t.Fatalf("expected stale dir %s to be removed", staleDoki)
+	}
+	for _, kept := range []string{staleMEI, freshDoki, unrelatedDir, symlinkTarget, symlinkSentinel} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Fatalf("expected %s to be preserved: %v", kept, err)
+		}
+	}
+	if lstat, err := os.Lstat(dokiSymlink); err != nil || lstat.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected symlink %s to remain untouched, err=%v", dokiSymlink, err)
+	}
+
+	// 2. Python zipapp execution (mode 0644, non-executable, invoked via python3)
+	pyPath := lookupPython3InPath(os.Getenv("PATH"))
+	if pyPath == "" {
+		t.Skip("python3 not found in PATH")
+	}
+	zipappDir := t.TempDir()
+	zipappPath := filepath.Join(zipappDir, "yt-dlp")
+	pyBody := "#!/usr/bin/env python3\n# PK\x03\x04 simulated zipapp header\nimport json, sys\nif '--version' in sys.argv:\n    print('2026.10.26')\n    sys.exit(0)\nprint(json.dumps({'id':'zipapp-ok','title':'Zipapp Test','formats':[{'format_id':'18','url':'https://rr1---sn-test.googlevideo.com/videoplayback?itag=18','ext':'mp4','protocol':'https','width':1280,'height':720,'vcodec':'avc1.42001E','acodec':'mp4a.40.2'}]}))\n"
+	if err := os.WriteFile(zipappPath, []byte(pyBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(pyBody))
+	digest := hex.EncodeToString(sum[:])
+
+	eng, err := New(Config{
+		BinaryPath:    zipappPath,
+		AllowedHashes: map[string]string{digest: "yt-dlp"},
+		EnvPath:       os.Getenv("PATH"),
+	})
+	if err != nil || !eng.Enabled() {
+		t.Fatalf("expected zipapp engine to be enabled, got err=%v", err)
+	}
+	if !eng.UsingPythonZipapp() {
+		t.Fatal("expected UsingPythonZipapp() == true for python zipapp")
+	}
+
+	info, err := eng.Extract(context.Background(), "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
+	if err != nil || info == nil || info.ID != "zipapp-ok" {
+		t.Fatalf("expected zipapp extraction via python3 to succeed, got info=%+v err=%v", info, err)
+	}
+}
+
+func TestOmniGetPythonZipappStartupVersionSelfCheckFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix python3 fixture")
+	}
+
+	realPython3 := lookupPython3InPath(os.Getenv("PATH"))
+	if realPython3 == "" {
+		t.Skip("python3 not found in PATH")
+	}
+
+	// Create a fake "python3" in a custom PATH directory that simulates an incompatible/old python3 failing self-check.
+	badPyDir := t.TempDir()
+	badPyPath := filepath.Join(badPyDir, "python3")
+	badPyScript := "#!/bin/sh\necho 'SyntaxError: future feature annotations is not defined' >&2\nexit 1\n"
+	if err := os.WriteFile(badPyPath, []byte(badPyScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	customEnvPath := badPyDir + string(os.PathListSeparator) + os.Getenv("PATH")
+
+	// Case 1: python3 in PATH exists but fails startup --version self-check, AND the verified zipapp is executable (0755)
+	// with a working direct interpreter -> falls back cleanly to direct execution (UsingPythonZipapp() == false, Enabled() == true).
+	execZipDir := t.TempDir()
+	execZipPath := filepath.Join(execZipDir, "yt-dlp")
+	execZipBody := fmt.Sprintf("#!%s\n# PK\x03\x04 simulated zipapp header\nimport json, sys\nif '--version' in sys.argv:\n    print('2026.10.26')\n    sys.exit(0)\nprint(json.dumps({'id':'direct-fallback-ok','title':'Direct Fallback','formats':[{'format_id':'18','url':'https://rr1---sn-test.googlevideo.com/videoplayback?itag=18','ext':'mp4','protocol':'https','width':1280,'height':720,'vcodec':'avc1.42001E','acodec':'mp4a.40.2'}]}))\n", realPython3)
+	if err := os.WriteFile(execZipPath, []byte(execZipBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	execSum := sha256.Sum256([]byte(execZipBody))
+	execDigest := hex.EncodeToString(execSum[:])
+
+	fallbackEng, err := New(Config{
+		BinaryPath:    execZipPath,
+		AllowedHashes: map[string]string{execDigest: "yt-dlp"},
+		EnvPath:       customEnvPath,
+	})
+	if err != nil || fallbackEng == nil || !fallbackEng.Enabled() {
+		t.Fatalf("expected zipapp with executable direct fallback to stay enabled when python3 fails self-check, got enabled=%v err=%v", fallbackEng != nil && fallbackEng.Enabled(), err)
+	}
+	if fallbackEng.UsingPythonZipapp() {
+		t.Fatalf("expected UsingPythonZipapp() == false after python3 self-check failure and direct binary fallback")
+	}
+	info, err := fallbackEng.Extract(context.Background(), "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
+	if err != nil || info == nil || info.ID != "direct-fallback-ok" {
+		t.Fatalf("expected direct fallback extraction to succeed, got info=%+v err=%v", info, err)
+	}
+
+	// Case 2: python3 in PATH exists but fails startup --version self-check, AND direct execution of the zipapp also fails
+	// (e.g. non-executable 0644 or shebang uses the broken python3) -> engine is disabled at startup with clear reason.
+	nonExecZipDir := t.TempDir()
+	nonExecZipPath := filepath.Join(nonExecZipDir, "yt-dlp")
+	if err := os.WriteFile(nonExecZipPath, []byte(execZipBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	disabledEng, err := New(Config{
+		BinaryPath:    nonExecZipPath,
+		AllowedHashes: map[string]string{execDigest: "yt-dlp"},
+		EnvPath:       customEnvPath,
+	})
+	if err == nil || disabledEng == nil || disabledEng.Enabled() {
+		t.Fatalf("expected engine to be disabled when both python3 self-check and direct execution fail, got enabled=%v err=%v", disabledEng != nil && disabledEng.Enabled(), err)
+	}
+	if !strings.Contains(disabledEng.DisableReason(), "zipapp startup self-check failed") {
+		t.Fatalf("expected DisableReason to mention zipapp startup self-check failure, got %q", disabledEng.DisableReason())
+	}
+
+	// Case 3: python3 in PATH outputs wrong yt-dlp version (not PinnedVersion) and direct execution also outputs wrong version -> disabled.
+	wrongVerDir := t.TempDir()
+	wrongVerPath := filepath.Join(wrongVerDir, "yt-dlp")
+	wrongVerBody := fmt.Sprintf("#!%s\n# PK\x03\x04 simulated zipapp header\nimport sys\nif '--version' in sys.argv:\n    print('2024.01.01')\n    sys.exit(0)\n", realPython3)
+	if err := os.WriteFile(wrongVerPath, []byte(wrongVerBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wrongSum := sha256.Sum256([]byte(wrongVerBody))
+	wrongDigest := hex.EncodeToString(wrongSum[:])
+
+	wrongVerEng, err := New(Config{
+		BinaryPath:    wrongVerPath,
+		AllowedHashes: map[string]string{wrongDigest: "yt-dlp"},
+		EnvPath:       os.Getenv("PATH"),
+	})
+	if err == nil || wrongVerEng == nil || wrongVerEng.Enabled() {
+		t.Fatalf("expected engine to be disabled when --version != %s, got enabled=%v err=%v", PinnedVersion, wrongVerEng != nil && wrongVerEng.Enabled(), err)
+	}
+}

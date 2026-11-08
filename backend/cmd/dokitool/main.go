@@ -313,7 +313,7 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 			return err
 		}
 		igEngine := baseEngine.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)
-		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, ytengine.NewSizeProber(executor, instagram.AllowedMediaURL))
+		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, ytengine.NewSizeProber(executor, instagram.AllowedMediaURL)).WithFetcher(executor)
 	}
 	return nil
 }

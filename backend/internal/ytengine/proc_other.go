@@ -4,6 +4,7 @@
 package ytengine
 
 import (
+	"os"
 	"os/exec"
 	"time"
 )
@@ -16,4 +17,8 @@ func configureProcessGroup(cmd *exec.Cmd) {
 		return cmd.Process.Kill()
 	}
 	cmd.WaitDelay = 2 * time.Second
+}
+
+func dirOwnedByUID(_ os.FileInfo, _ int) bool {
+	return false
 }
