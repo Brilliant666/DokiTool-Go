@@ -56,18 +56,6 @@ type Extractor interface {
 	Extract(ctx context.Context, rawURL string) (*Info, error)
 }
 
-// ExtractOptions configures per-invocation extractor arguments for yt-dlp.
-type ExtractOptions struct {
-	ExtractorArgs []string
-}
-
-// OptionsExtractor is an optional extension implemented by Engine for callers
-// that pass per-invocation ExtractorArgs.
-type OptionsExtractor interface {
-	Extractor
-	ExtractWithOptions(ctx context.Context, rawURL string, opts ExtractOptions) (*Info, error)
-}
-
 // Thumbnail models a single thumbnail entry in yt-dlp -J output.
 type Thumbnail struct {
 	ID     string `json:"id"`

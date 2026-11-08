@@ -229,101 +229,18 @@ Python 校验依赖仍由 `scripts/requirements-validation.txt` 声明。导出�
 
 骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；当时的实施授权不含生产切流。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器仍在范围外；小红书新增页面传输已在独立 PR #5 获得实施授权，不追溯改变原迁移排除项，真实原画的专项结果见上文。此处保留迁移阶段记录，现网状态见本文开头。
 
-## 匿名增强管线（吸收 OmniGet 借鉴点 1–3）
+## 匿名增强管线（Instagram 三级回退与 `yt-dlp` Zipapp 零解压启动）
 
-在不引入用户登录态/Cookie 托管、不新增服务端媒体中继或转码合流的前提下，后端已落地三项匿名解析与运行稳定增强：
+在不引入用户登录态/Cookie 托管、不新增服务端媒体中继或转码合流的前提下，后端已落地两项匿名解析与运行稳定增强：
 
-1. **借鉴点 1｜Instagram 免登录三级解析管线（`yt-dlp` -> Embed Captioned -> Anonymous GraphQL）**
+1. **Instagram 免登录三级解析管线（`yt-dlp` -> Embed Captioned -> Anonymous GraphQL）**
    - 当 `yt-dlp` 因匿名登录墙或上游变更未产出有效视频/图集格式时，`internal/platform/instagram` 在同一请求内按序回退到：
      - **Tier 1（Embed Captioned）**：通过受控 `fetch.Executor` 请求 `https://www.instagram.com/p/{shortcode}/embed/captioned/`，提取 `contextJSON`（含反义 JSON 字符串）或 `<video>` / `<img class="EmbeddedMediaImage">` 直链。
-     - **Tier 2（Anonymous GraphQL）**：通过受控 `fetch.Executor` 发送匿名 `POST https://www.instagram.com/api/graphql`（`fb_api_req_friendly_name=PolarisPostActionLoadPostQueryQuery`，`doc_id=8845758582119845`，公开 Web App ID `936619743392459`），解析 `xdt_shortcode_media` / `shortcode_media`。
-   - 原生支持单视频（`GraphVideo` / `XDTGraphVideo`）、单图（`GraphImage`）与多图/视频混排轮播图集（`GraphSidecar` -> `media.type=album`），全部走 SSRF 防护与 DNS 绑定的 `fetch.Executor`，并保持确定性 `private_source_identity` 以支持签名续期（`/api/resolve`）。本地信号量饱和（`LocalBusy`）时仍立即返回 `RATE_LIMITED`，不触发回退风暴。
+     - **Tier 2（Anonymous GraphQL）**：通过受控 `fetch.Executor` 发送匿名 `POST https://www.instagram.com/api/graphql`（`fb_api_req_friendly_name=PolarisPostActionLoadPostQueryQuery`，`doc_id=8845758582119845`，公开 Web App ID `936619743392459`，仅请求解析媒体所需的 `{"shortcode":"..."}` 变量，不含评论字段），解析 `xdt_shortcode_media` / `shortcode_media`。当 `doc_id`、`lsd` 或 App ID 失效返回 200 错误 JSON、HTML 或 4xx 时，平稳回退到原有 `yt-dlp` 错误分类。
+   - 原生支持单视频（`GraphVideo` / `XDTGraphVideo`，保持未知音轨语义不伪造 `has_audio: true`，命中 `#38` Instagram 默认资格规则）、单图（`GraphImage`）与多图/视频混排轮播图集（`GraphSidecar` -> `media.type=album`），全部走 SSRF 防护与 DNS 绑定的 `fetch.Executor`，并保持确定性 `private_source_identity` 以支持签名续期（`/api/resolve`）。本地信号量饱和（`LocalBusy`）时仍立即返回 `RATE_LIMITED`，不触发回退。
 
-2. **借鉴点 2｜`yt-dlp` Python Zipapp 零解压启动、启动信号量与陈旧临时目录清理**
-   - `internal/ytengine` 自动识别 SHA-256 校验通过的 `yt-dlp` 文件是否为官方 Python Zipapp（头部 `#!...python` + 内嵌 ZIP 归档），若主机 `PATH` 存在可执行 `python3`，则通过 `python3 <zipapp>` 直接运行，避免 PyInstaller 单文件二进制每次调用向 `/tmp/_MEIxxxxxx` 解压约 30MB Python 运行时，同时兼容 `0644` 只读权限文件。
-   - 若部署环境使用 PyInstaller 单文件二进制，新增 `bootSem`（默认并发上限 3）限制同时解压启动的子进程峰值，并在引擎初始化时执行 `CleanupStaleTempDirs` 自动清理超过 `maxAge` 的残留 `dokitool-ytdlp-*` 与 `_MEI*` 临时目录。
+2. **`yt-dlp` Python Zipapp 零解压启动、启动自检、启动信号量与陈旧临时目录清理**
+   - `internal/ytengine` 自动识别 SHA-256 校验通过的 `yt-dlp` 文件是否为官方 Python Zipapp（头部 `#!...python` + 内嵌 ZIP 归档）。若主机 `PATH` 存在可执行 `python3`，引擎初始化时先用 `python3 <zipapp> --version` 执行启动自检（要求输出严格等于固定版本 `2026.10.26`）；自检通过则直接通过 `python3 <zipapp>` 零解压运行（兼容 `0644` 只读权限文件，避免每次调用解压约 30MB 运行时），自检失败则记录启动日志并回退为直接执行已校验二进制（若直接执行亦不可用则禁用引擎并记录日志）。
+   - 新增 `bootSem`（默认并发上限 3）限制子进程并发启动峰值，并在引擎初始化时执行 `CleanupStaleTempDirs` 自动清理系统临时目录中属于本服务当前 UID、非符号链接且修改时间超过 **2 小时**（`defaultStaleTempMaxAge = 2 * time.Hour`）的残留 `dokitool-ytdlp-*` 目录（不清理任何 `_MEI*` 或非本服务 UID 的目录）。
 
-3. **借鉴点 3｜YouTube `--extractor-args` 单参数合并与匿名 `player_client` 劣化/错误级联恢复**
-   - `MergeYouTubeExtractorArgs` / `MergeExtractorArgs` 将同一命名空间的多个子项（如 `youtube:player_client=...` 与 `youtube:player_skip=...`）合并为单个 `;` 分隔的 `--extractor-args` 参数，防止 `yt-dlp` 后置同名参数覆盖前置配置。
-   - `ExtractYouTubeWithCascade` 在同一并发槽位（`e.sem`）与同一本地出站代理门禁（`outboundGate`）内执行匿名客户端级联：
-     - 首轮使用默认参数；
-     - 若遇到可恢复的 YouTube 播放器/签名/SABR 报错（`nsig`、`Signature extraction failed`、`sabr`、`Requested format is not available` 等），或返回结果劣化为仅 `<=360p` 的 `googlevideo.com` 渐进流（`IsDegradedYouTube360p`），自动依次尝试匿名备选客户端组合 `tv_downgraded,ios,android,web_safari` 与 `ios,mweb`；
-     - 若备选客户端成功产出更高清格式则自动升级返回；若备选客户端失败但首轮已拿到合法 360p 结果，则保底返回首轮 360p 结果，绝不把已成功的解析降级为报错。
-
----
-
-## 浏览器插件 / 拓展 / 用户脚本辅助前端零服务器流量合流方案（RFC 草案，仅供审查）
-
-> **状态说明**：本节仅作为架构设计提案（RFC）提交审查，**当前 PR 不包含任何前端/后端合流代码或浏览器插件代码实现**。DokiTool 核心服务继续严格保持“纯匿名解析、零服务器媒体中继、零服务端 ffmpeg 转码/合流”。
-
-### 1. 背景与核心痛点
-
-YouTube 的 1080p / 2K / 4K 高清画质均采用 DASH 音画分离流（Video-only `avc1`/`vp9`/`av01` + Audio-only `mp4a`/`opus`），单文件直链（`itag=18`）最高仅 360p。要在**不消耗 DokiTool 服务器带宽、不在服务器运行 `ffmpeg`** 的前提下让用户下载合流后的 1080p/4K MP4，纯网页前端存在两道浏览器安全与平台风控边界：
-
-1. **跨域读取拦截（CORS）**：`*.googlevideo.com` 对普通网页 `fetch()` 请求不返回允许 `https://snap.dokitool.com` 读取字节流的 CORS 响应头，纯网页 Worker 无法直接拉取音视频分片字节。
-2. **出口 IP 与客户端指纹绑定（`sparams=ip`）**：当服务端 `yt-dlp` 提取出的 `googlevideo.com` URL 带有 `ip=<server_ip>` 签名绑定时，用户浏览器（异网 IP）直接请求该 URL 会触发 `HTTP 403 Forbidden`。
-
-通过引入**可选的轻量级浏览器伴侣插件（Manifest V3 Extension）或用户脚本（Tampermonkey / Violentmonkey Userscript）**，可以在完全不经过 DokiTool 服务器中继流量的前提下，同时打通上述两道边界，并在浏览器本地完成零转码容器重封装（Remux）。
-
-### 2. 总体三层架构（零服务器流量）
-
-```text
-+-----------------------------------------------------------------------------------+
-| 用户浏览器本地环境 (User Browser - 100% 消耗用户本地网络与本地算力)               |
-|                                                                                   |
-|  +---------------------------+      postMessage /       +----------------------+  |
-|  | DokiTool 前端主页面       | <----------------------> | 浏览器拓展 / 用户脚本|  |
-|  | (snap.dokitool.com)       |   MessageChannel Port    | (Bridge Companion)   |  |
-|  +-------------+-------------+                          +----------+-----------+  |
-|                |                                                   |              |
-|                | Transferable ReadableStream / ArrayBuffer Chunks  |              |
-|                v                                                   |              |
-|  +---------------------------+                                     |              |
-|  | 专用合流 Web Worker       |                                     |              |
-|  | - OPFS 临时分片缓存       |                                     |              |
-|  | - mp4box.js / WebCodecs   |                                     |              |
-|  |   fMP4 零转码容器重封装   |                                     |              |
-|  +-------------+-------------+                                     |              |
-|                |                                                   |              |
-|                v                                                   v              |
-|       触发本地 Blob 下载                             直接以用户本地出口 IP 拉取   |
-|   (1080p/4K 有声完整 MP4)                            *.googlevideo.com 音视频分片 |
-+-----------------------------------------------------------------------------------+
-```
-
-### 3. 两种伴侣工作模式（解决 IP 绑定与 CORS）
-
-伴侣插件/用户脚本具备宿主机浏览器的特权网络 API（Extension `host_permissions` 或 Userscript `@connect googlevideo.com` + `@connect www.youtube.com`），支持按以下两级模式获取音视频流：
-
-- **模式 A（优先｜客户端本地同 IP 提取 + 跨域分片拉流，彻底规避异网 `403`）**
-  - 当用户在 DokiTool 解析 YouTube 链接且检测到已安装伴侣插件/脚本时，前端可指令伴侣脚本直接在用户浏览器侧请求 YouTube Player API（使用用户本机出口 IP，不上传任何数据到 DokiTool 服务器），或对服务端返回但触发 `403` 的条目在本地刷新签名直链。
-  - 因为提取与下载完全共享用户同一个家庭/办公宽带出口 IP，`sparams=ip` 校验天然 100% 匹配，从根源消除跨国/异网 `403`。
-- **模式 B（回退｜仅特权跨域分片桥接）**
-  - 对于未绑定严格异网 IP 或同区域可访问的音视频分离直链（`video_url` + `audio_url`），伴侣插件/脚本利用 `GM_xmlhttpRequest({ responseType: "arraybuffer", headers: { Range: "bytes=..." } })` 或 MV3 Service Worker `fetch()` 绕过网页 CORS 限制，按固定分片（例如 `4 MiB` Range 请求）拉取字节并通过 `MessagePort` 零拷贝（`Transferable` `ArrayBuffer`）流式传输给 DokiTool 前端合流 Worker。
-
-### 4. 前端流式无损合流管线（复用现有 Worker + OPFS 基建）
-
-DokiTool 前端目前已具备成熟的 `download.worker.ts` 与 Origin Private File System（OPFS）流式写入管线。合流扩展无需引入体积庞大（~25MB）的 `ffmpeg.wasm` 软编解码器，而是采用**纯容器重封装（Container Remuxing，等价于 `ffmpeg -c copy`）**：
-
-1. **编码筛选**：优先选择 MP4 容器原生兼容轨：
-   - 视频轨：`avc1`（H.264，最高 1080p）或 `vp09` / `av01`（2K/4K，现代 MP4 标准与主流播放器均原生支持 MP4 封装的 VP9/AV1）；
-   - 音频轨：`mp4a.40.2`（AAC，`itag=140`）。
-2. **双流并发分片拉取与 OPFS 落盘**：
-   - Worker 通过伴侣 `MessagePort` 并行拉取音频流（通常 3–15 MB）和视频流（按 `Range: bytes=start-end` 分块），实时汇报双轨总字节进度（`loadedBytes / (videoClen + audioClen)`），避免大文件撑爆 JS 堆内存。
-3. **流式 fMP4 / Faststart MP4 重封装**：
-   - 使用轻量纯 JS MP4 解析/封装库（如 `mp4box.js` 或定制 ISO BMFF box 拼接器，仅 ~50KB gzip），解析两路 DASH Fragmented MP4（`init` 段 `ftyp+moov` 与媒体段 `moof+mdat`），将 Video `trak`（`track_id=1`）与 Audio `trak`（`track_id=2`）的时间戳对齐交织写入 OPFS 目标文件句柄。
-   - 全程**零视频重编码、零 CPU 算力瓶颈**，100MB 1080p 视频在普通笔记本/手机浏览器中合流仅需数百毫秒的磁盘 I/O 时间。
-4. **完整性校验与交付**：
-   - 严格校验拉取字节数与上游 `Content-Length` / `clen` 一致、MP4 `moov`/`mdat` 结构完整后，才从 OPFS 生成 `File` / `Blob` 触发浏览器原生保存；任一分片中断、403 或校验不通过均立即中止并清理 OPFS 临时文件，绝不向用户交付残缺或静音文件。
-
-### 5. 安全边界与产品降级契约
-
-1. **零服务器负担与零隐私收集**：
-   - DokiTool 服务端不新增任何媒体代理接口，服务器带宽消耗恒为 0；
-   - 插件/脚本不读取、不上传用户任何平台 Cookie 到 DokiTool 服务器。
-2. **严格的插件通信白名单**：
-   - 插件/用户脚本仅在匹配白名单域名（`https://snap.dokitool.com/*` 与本地开发域名）时注入通信桥，且允许请求的目标域名严格锁定为白名单媒体 CDN（如 `*.googlevideo.com`），拒绝任意 URL 代理请求，防止插件被第三方网页滥用为通用跨域跳板。
-3. **未安装插件时的平滑体验（渐进增强）**：
-   - **未安装插件/脚本的普通匿名用户**：维持现有稳定行为（默认选中带声单文件直链，或在隔离新标签页打开原生流，同时在 1080p/4K 仅视频选项旁清晰提示“高清音画合流需启用浏览器伴侣脚本”）；
-   - **已安装插件/脚本的用户**：前端通过握手事件（`DOKITOOL_COMPANION_PING` -> `DOKITOOL_COMPANION_PONG`）自动解锁“1080p / 4K 音画合流直下（本地零损封装）”按钮，一键完成高清有声 MP4 下载。
 

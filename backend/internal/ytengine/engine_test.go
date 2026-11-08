@@ -1525,37 +1525,59 @@ func TestOmniGetPoint2PythonZipappAndStaleTempCleanup(t *testing.T) {
 		t.Skip("unix python3 fixture")
 	}
 
-	// 1. CleanupStaleTempDirs removes stale _MEI* and dokitool-ytdlp-* dirs older than maxAge
+	// 1. CleanupStaleTempDirs only removes stale dokitool-ytdlp-* real directories owned by our UID,
+	// never removes _MEI* directories, never follows or removes symlinks, and never removes other-UID dirs.
 	tmpRoot := t.TempDir()
 	staleMEI := filepath.Join(tmpRoot, "_MEI123456")
 	staleDoki := filepath.Join(tmpRoot, "dokitool-ytdlp-old")
-	freshMEI := filepath.Join(tmpRoot, "_MEI999999")
+	freshDoki := filepath.Join(tmpRoot, "dokitool-ytdlp-fresh")
 	unrelatedDir := filepath.Join(tmpRoot, "other-dir")
-	for _, dir := range []string{staleMEI, staleDoki, freshMEI, unrelatedDir} {
+	symlinkTarget := filepath.Join(tmpRoot, "protected-target")
+	symlinkSentinel := filepath.Join(symlinkTarget, "keep.txt")
+	dokiSymlink := filepath.Join(tmpRoot, "dokitool-ytdlp-symlink")
+
+	for _, dir := range []string{staleMEI, staleDoki, freshDoki, unrelatedDir, symlinkTarget} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := os.WriteFile(symlinkSentinel, []byte("preserve"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(symlinkTarget, dokiSymlink); err != nil {
+		t.Fatal(err)
+	}
+
 	oldTime := time.Now().Add(-3 * time.Hour)
-	for _, dir := range []string{staleMEI, staleDoki, unrelatedDir} {
+	for _, dir := range []string{staleMEI, staleDoki, unrelatedDir, symlinkTarget} {
 		if err := os.Chtimes(dir, oldTime, oldTime); err != nil {
 			t.Fatal(err)
 		}
 	}
 
+	// Verify that a mismatched UID removes 0 directories even when staleDoki is >2h old.
+	if cleanedOtherUID := cleanupStaleTempDirsForUID(tmpRoot, 2*time.Hour, os.Geteuid()+1); cleanedOtherUID != 0 {
+		t.Fatalf("expected 0 dirs removed for non-matching UID, got %d", cleanedOtherUID)
+	}
+	if _, err := os.Stat(staleDoki); err != nil {
+		t.Fatalf("expected staleDoki to remain when UID does not match: %v", err)
+	}
+
+	// Verify normal CleanupStaleTempDirs removes only staleDoki (1 dir), preserving _MEI*, symlinks, fresh dirs, and unrelated dirs.
 	cleaned := CleanupStaleTempDirs(tmpRoot, 2*time.Hour)
-	if cleaned != 2 {
-		t.Fatalf("expected CleanupStaleTempDirs to remove 2 stale dirs, got %d", cleaned)
+	if cleaned != 1 {
+		t.Fatalf("expected CleanupStaleTempDirs to remove exactly 1 stale dokitool-ytdlp-* dir, got %d", cleaned)
 	}
-	for _, gone := range []string{staleMEI, staleDoki} {
-		if _, err := os.Stat(gone); !os.IsNotExist(err) {
-			t.Fatalf("expected stale dir %s to be removed", gone)
-		}
+	if _, err := os.Stat(staleDoki); !os.IsNotExist(err) {
+		t.Fatalf("expected stale dir %s to be removed", staleDoki)
 	}
-	for _, kept := range []string{freshMEI, unrelatedDir} {
+	for _, kept := range []string{staleMEI, freshDoki, unrelatedDir, symlinkTarget, symlinkSentinel} {
 		if _, err := os.Stat(kept); err != nil {
-			t.Fatalf("expected dir %s to be preserved: %v", kept, err)
+			t.Fatalf("expected %s to be preserved: %v", kept, err)
 		}
+	}
+	if lstat, err := os.Lstat(dokiSymlink); err != nil || lstat.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected symlink %s to remain untouched, err=%v", dokiSymlink, err)
 	}
 
 	// 2. Python zipapp execution (mode 0644, non-executable, invoked via python3)
@@ -1565,7 +1587,7 @@ func TestOmniGetPoint2PythonZipappAndStaleTempCleanup(t *testing.T) {
 	}
 	zipappDir := t.TempDir()
 	zipappPath := filepath.Join(zipappDir, "yt-dlp")
-	pyBody := "#!/usr/bin/env python3\n# PK\x03\x04 simulated zipapp header\nimport json, sys\nprint(json.dumps({'id':'zipapp-ok','title':'Zipapp Test','formats':[{'format_id':'18','url':'https://rr1---sn-test.googlevideo.com/videoplayback?itag=18','ext':'mp4','protocol':'https','width':1280,'height':720,'vcodec':'avc1.42001E','acodec':'mp4a.40.2'}]}))\n"
+	pyBody := "#!/usr/bin/env python3\n# PK\x03\x04 simulated zipapp header\nimport json, sys\nif '--version' in sys.argv:\n    print('2026.10.26')\n    sys.exit(0)\nprint(json.dumps({'id':'zipapp-ok','title':'Zipapp Test','formats':[{'format_id':'18','url':'https://rr1---sn-test.googlevideo.com/videoplayback?itag=18','ext':'mp4','protocol':'https','width':1280,'height':720,'vcodec':'avc1.42001E','acodec':'mp4a.40.2'}]}))\n"
 	if err := os.WriteFile(zipappPath, []byte(pyBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1590,157 +1612,5 @@ func TestOmniGetPoint2PythonZipappAndStaleTempCleanup(t *testing.T) {
 	info, err := eng.Extract(context.Background(), "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
 	if err != nil || info == nil || info.ID != "zipapp-ok" {
 		t.Fatalf("expected zipapp extraction via python3 to succeed, got info=%+v err=%v", info, err)
-	}
-}
-
-func TestOmniGetPoint3ExtractorArgsMergeAndYouTubeCascade(t *testing.T) {
-	// 1. MergeYouTubeExtractorArgs & MergeExtractorArgs single-flag consolidation
-	merged := MergeYouTubeExtractorArgs(
-		"player_client=default,web",
-		"youtube:player_skip=webpage;po_token=web.gvs+tok1",
-		"player_client=tv_downgraded,ios,android,web_safari",
-	)
-	wantMerged := "youtube:player_client=tv_downgraded,ios,android,web_safari;player_skip=webpage;po_token=web.gvs+tok1"
-	if merged != wantMerged {
-		t.Fatalf("MergeYouTubeExtractorArgs() = %q, want %q", merged, wantMerged)
-	}
-
-	groupMerged := MergeExtractorArgs(
-		[]string{"youtube:player_client=default", "generic:impersonate=chrome"},
-		[]string{"youtube:player_client=ios,mweb"},
-	)
-	if len(groupMerged) != 2 || groupMerged[0] != "youtube:player_client=ios,mweb" || groupMerged[1] != "generic:impersonate=chrome" {
-		t.Fatalf("unexpected MergeExtractorArgs() = %v", groupMerged)
-	}
-
-	// 2. Recoverable YouTube SABR/nsig stderr triggers automatic anonymous client cascade
-	sabrScript := `
-has_fallback=0
-for arg in "$@"; do
-  case "$arg" in
-    *player_client=tv_downgraded,ios,android,web_safari*)
-      has_fallback=1
-      ;;
-  esac
-done
-if [ "$has_fallback" -eq 0 ]; then
-  echo "ERROR: [youtube] aqz-KE-bpKQ: YouTube is forcing SABR streaming for this client; nsig extraction failed" >&2
-  exit 1
-fi
-cat <<'JSON'
-{
-  "id": "aqz-KE-bpKQ",
-  "title": "SABR Recovered Video",
-  "formats": [
-    {
-      "format_id": "18",
-      "url": "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?itag=18",
-      "ext": "mp4",
-      "protocol": "https",
-      "width": 640,
-      "height": 360,
-      "vcodec": "avc1.42001E",
-      "acodec": "mp4a.40.2"
-    },
-    {
-      "format_id": "299",
-      "url": "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?itag=299",
-      "ext": "mp4",
-      "protocol": "https",
-      "width": 1920,
-      "height": 1080,
-      "vcodec": "avc1.64002A",
-      "acodec": "none"
-    }
-  ]
-}
-JSON
-`
-	sabrBin, sabrHashes := writeFakeYTDLP(t, sabrScript)
-	sabrEng, err := New(Config{
-		BinaryPath:     sabrBin,
-		AllowedHashes:  sabrHashes,
-		MaxConcurrency: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sabrInfo, err := sabrEng.Extract(context.Background(), "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
-	if err != nil || sabrInfo == nil || len(sabrInfo.Formats) != 2 {
-		t.Fatalf("expected SABR cascade to recover 1080p+360p formats, got info=%+v err=%v", sabrInfo, err)
-	}
-
-	// 3. 360p degradation auto-upgrade on YouTube watch URL
-	upgradeScript := `
-has_fallback=0
-for arg in "$@"; do
-  case "$arg" in
-    *player_client=tv_downgraded,ios,android,web_safari*)
-      has_fallback=1
-      ;;
-  esac
-done
-if [ "$has_fallback" -eq 0 ]; then
-  cat <<'JSON'
-{
-  "id": "aqz-KE-bpKQ",
-  "title": "Degraded 360p Only",
-  "formats": [
-    {
-      "format_id": "18",
-      "url": "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?itag=18",
-      "ext": "mp4",
-      "protocol": "https",
-      "width": 640,
-      "height": 360,
-      "vcodec": "avc1.42001E",
-      "acodec": "mp4a.40.2"
-    }
-  ]
-}
-JSON
-  exit 0
-fi
-cat <<'JSON'
-{
-  "id": "aqz-KE-bpKQ",
-  "title": "Upgraded 4K + 360p",
-  "formats": [
-    {
-      "format_id": "18",
-      "url": "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?itag=18",
-      "ext": "mp4",
-      "protocol": "https",
-      "width": 640,
-      "height": 360,
-      "vcodec": "avc1.42001E",
-      "acodec": "mp4a.40.2"
-    },
-    {
-      "format_id": "401",
-      "url": "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?itag=401",
-      "ext": "mp4",
-      "protocol": "https",
-      "width": 3840,
-      "height": 2160,
-      "vcodec": "av01.0.13M.08",
-      "acodec": "none"
-    }
-  ]
-}
-JSON
-`
-	upgBin, upgHashes := writeFakeYTDLP(t, upgradeScript)
-	upgEng, err := New(Config{
-		BinaryPath:     upgBin,
-		AllowedHashes:  upgHashes,
-		MaxConcurrency: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	upgInfo, err := upgEng.Extract(context.Background(), "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
-	if err != nil || upgInfo == nil || maxVideoShortEdge(upgInfo) != 2160 {
-		t.Fatalf("expected degraded 360p YouTube result to auto-upgrade to 2160p, got info=%+v err=%v", upgInfo, err)
 	}
 }

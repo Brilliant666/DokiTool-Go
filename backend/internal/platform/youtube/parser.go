@@ -166,7 +166,7 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		return unified.ContractError("SERVICE_NOT_CONFIGURED", "当前平台解析服务暂不可用", false), nil
 	}
 
-	info, err := ytengine.ExtractYouTubeWithCascade(ctx, p.engine, canonicalURL)
+	info, err := p.engine.Extract(ctx, canonicalURL)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
 			return nil, ctxErr
