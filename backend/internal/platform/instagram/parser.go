@@ -405,9 +405,7 @@ func (p *Parser) fetchEmbedCaptioned(ctx context.Context, shortcode string) (*na
 
 func (p *Parser) fetchAnonymousGraphQL(ctx context.Context, shortcode string) (*nativePost, error) {
 	varsJSON, err := json.Marshal(map[string]any{
-		"shortcode":             shortcode,
-		"fetch_comment_count":   40,
-		"has_threaded_comments": true,
+		"shortcode": shortcode,
 	})
 	if err != nil {
 		return nil, err

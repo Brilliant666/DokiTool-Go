@@ -480,6 +480,10 @@ func TestParseInstagramNativeEmbedAndGraphQLThreeTierPipeline(t *testing.T) {
 					if req.Header.Get("X-IG-App-ID") != instagramAppID {
 						t.Fatalf("missing X-IG-App-ID header on GraphQL request")
 					}
+					bodyStr := string(req.Body)
+					if strings.Contains(bodyStr, "fetch_comment_count") || strings.Contains(bodyStr, "has_threaded_comments") {
+						t.Fatalf("expected GraphQL variables to omit comment fields, got body=%q", bodyStr)
+					}
 					return fetch.Response{
 						StatusCode: http.StatusOK,
 						Body:       graphqlVideoResp,
@@ -710,5 +714,105 @@ func TestInstagramNativeEnvelopeDefaultSelectionEligibilityWithPR38Rules(t *test
 		if _, hasAudioSet := unified.Map(vidVar["metadata"])["has_audio"]; hasAudioSet {
 			t.Fatalf("debug=%v: expected carousel video variant to omit has_audio, got %+v", debug, vidVar["metadata"])
 		}
+	}
+}
+
+func TestParseInstagramGraphQLFailurePathsFallbackToYtDlpError(t *testing.T) {
+	const now int64 = 1762300800
+
+	failureCases := []struct {
+		name          string
+		graphqlStatus int
+		graphqlBody   []byte
+		ytDlpErr      *ytengine.Error
+		wantCode      string
+		wantMessage   string
+	}{
+		{
+			name:          "200-with-error-json-falls-back-to-ytdlp-error",
+			graphqlStatus: http.StatusOK,
+			graphqlBody:   []byte(`{"errors":[{"message":"Unsupported get request. Object with ID does not exist"}],"status":"fail"}`),
+			ytDlpErr: &ytengine.Error{
+				Code:      ytengine.CodeUpstreamBlocked,
+				Message:   "该内容受访问限制（如私密账号或年龄限制），无法无凭据解析",
+				Retryable: false,
+			},
+			wantCode:    "UPSTREAM_BLOCKED",
+			wantMessage: "该内容受访问限制（如私密账号或年龄限制），无法无凭据解析",
+		},
+		{
+			name:          "200-with-html-falls-back-to-ytdlp-error",
+			graphqlStatus: http.StatusOK,
+			graphqlBody:   []byte(`<!DOCTYPE html><html><head><title>Login • Instagram</title></head><body>Please log in</body></html>`),
+			ytDlpErr: &ytengine.Error{
+				Code:      ytengine.CodeContentUnavailable,
+				Message:   "未找到可用的视频或该推文已不可访问",
+				Retryable: false,
+			},
+			wantCode:    "CONTENT_UNAVAILABLE",
+			wantMessage: "未找到可用的视频或该推文已不可访问",
+		},
+		{
+			name:          "4xx-status-falls-back-to-ytdlp-error",
+			graphqlStatus: http.StatusForbidden,
+			graphqlBody:   []byte(`{"message":"CSRF token missing or incorrect","status":"fail"}`),
+			ytDlpErr: &ytengine.Error{
+				Code:      ytengine.CodeUpstreamBlocked,
+				Message:   "该内容受访问限制（如私密账号或年龄限制），无法无凭据解析",
+				Retryable: false,
+			},
+			wantCode:    "UPSTREAM_BLOCKED",
+			wantMessage: "该内容受访问限制（如私密账号或年龄限制），无法无凭据解析",
+		},
+	}
+
+	for _, tc := range failureCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var hitGraphQL bool
+			p := NewWithFetcher(
+				&stubExtractor{
+					enabled: true,
+					extract: func(context.Context, string) (*ytengine.Info, error) {
+						return nil, tc.ytDlpErr
+					},
+				},
+				nil,
+				fakeFetcher{
+					fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+						if strings.HasSuffix(req.URL, "/embed/captioned/") {
+							return fetch.Response{
+								StatusCode: http.StatusOK,
+								Body:       []byte(`<html><body>No media in embed</body></html>`),
+								URL:        req.URL,
+							}, nil
+						}
+						if req.URL == "https://www.instagram.com/api/graphql" {
+							hitGraphQL = true
+							return fetch.Response{
+								StatusCode: tc.graphqlStatus,
+								Body:       tc.graphqlBody,
+								URL:        req.URL,
+							}, nil
+						}
+						return fetch.Response{StatusCode: http.StatusNotFound}, nil
+					},
+				},
+			)
+
+			env, err := p.Parse(context.Background(), "https://www.instagram.com/reel/CTApqC8BGWd/", now)
+			if err != nil {
+				t.Fatalf("expected Parse not to return raw error, got %v", err)
+			}
+			if !hitGraphQL {
+				t.Fatalf("expected GraphQL tier to be attempted in %s", tc.name)
+			}
+			if gotCode := unified.Str(env["code"]); gotCode != tc.wantCode {
+				t.Fatalf("expected code=%q, got %q (env=%+v)", tc.wantCode, gotCode, env)
+			}
+			errObj := unified.Map(env["error"])
+			if gotMsg := unified.Str(errObj["message"]); gotMsg != tc.wantMessage {
+				t.Fatalf("expected error.message=%q, got %q", tc.wantMessage, gotMsg)
+			}
+		})
 	}
 }
