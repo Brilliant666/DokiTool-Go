@@ -1,0 +1,238 @@
+name: Release build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Complete 40-character commit SHA on main history to build and publish'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-build-${{ github.event.inputs.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    if: github.repository == 'Brilliant666/DokiTool-Go'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve and verify target commit SHA
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
+          INPUT_SHA: ${{ github.event.inputs.sha }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TARGET_SHA="$(printf '%s' "$INPUT_SHA" | tr '[:upper:]' '[:lower:]')"
+            if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Error: workflow_dispatch input 'sha' must be a full 40-character hex commit SHA" >&2
+              exit 1
+            fi
+            if ! git cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
+              echo "Error: commit $TARGET_SHA does not exist in repository" >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$TARGET_SHA" refs/remotes/origin/main; then
+              echo "Error: commit $TARGET_SHA is not on main history" >&2
+              exit 1
+            fi
+          else
+            TARGET_SHA="$PUSH_SHA"
+            if ! git merge-base --is-ancestor "$TARGET_SHA" refs/remotes/origin/main; then
+              echo "Error: commit $TARGET_SHA is not on main history" >&2
+              exit 1
+            fi
+          fi
+          git checkout --detach "$TARGET_SHA"
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [ "$ACTUAL_SHA" != "$TARGET_SHA" ]; then
+            echo "Error: checked out HEAD ($ACTUAL_SHA) does not match target ($TARGET_SHA)" >&2
+            exit 1
+          fi
+          TREE_SHA="$(git rev-parse HEAD^{tree})"
+          SHORT_SHA="${TARGET_SHA:0:7}"
+          RELEASE_TAG="build-${SHORT_SHA}"
+          {
+            echo "sha=${TARGET_SHA}"
+            echo "short_sha=${SHORT_SHA}"
+            echo "tree_sha=${TREE_SHA}"
+            echo "release_tag=${RELEASE_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up pinned Go 1.27.3 toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+
+      - name: Set up Node for frontend build and tests
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: ''
+
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+
+      - name: Run pre-build Go CLI tests
+        working-directory: backend
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          go version | grep -F 'go1.27.3'
+          go test -v ./cmd/dokitool
+
+      - name: Run pre-build frontend tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Build backend binaries, frontend dist archive, and release manifest
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          TREE_SHA: ${{ steps.target.outputs.tree_sha }}
+          RELEASE_TAG: ${{ steps.target.outputs.release_tag }}
+          GOTOOLCHAIN: local
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          set -euo pipefail
+          OUT_DIR="$RUNNER_TEMP/release-out"
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+
+          (
+            cd backend
+            go build -trimpath -ldflags "-X main.version=${TARGET_SHA}" -o "$OUT_DIR/dokitool" ./cmd/dokitool
+            go build -trimpath -ldflags "-X main.version=${TARGET_SHA}" -o "$OUT_DIR/shanghai-resolver" ./cmd/shanghai-resolver
+          )
+          chmod 0755 "$OUT_DIR/dokitool" "$OUT_DIR/shanghai-resolver"
+          test "$("$OUT_DIR/dokitool" version)" = "$TARGET_SHA"
+
+          (
+            cd frontend
+            VITE_API_MODE=php VITE_API_BASE_URL='' npm run build
+          )
+
+          find frontend/dist -type d -exec chmod 0755 {} +
+          find frontend/dist -type f -exec chmod 0644 {} +
+          LC_ALL=C tar \
+            --sort=name \
+            --mtime='UTC 2026-01-01 00:00:00' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -C frontend/dist \
+            -cf - . | gzip -n > "$OUT_DIR/frontend-dist.tar.gz"
+          chmod 0644 "$OUT_DIR/frontend-dist.tar.gz"
+
+          GO_VER="$(go version)"
+          NODE_VER="$(node --version)"
+          export OUT_DIR GO_VER NODE_VER
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          out_dir = Path(os.environ["OUT_DIR"])
+          dist_dir = Path("frontend/dist")
+
+          def sha256_file(path: Path) -> str:
+              h = hashlib.sha256()
+              with path.open("rb") as f:
+                  for chunk in iter(lambda: f.read(65536), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          artifacts = {}
+          for name in ("dokitool", "shanghai-resolver", "frontend-dist.tar.gz"):
+              fpath = out_dir / name
+              artifacts[name] = {
+                  "sha256": sha256_file(fpath),
+                  "size_bytes": fpath.stat().st_size,
+              }
+
+          dist_files = {}
+          for fpath in sorted(p for p in dist_dir.rglob("*") if p.is_file()):
+              rel = fpath.relative_to(dist_dir).as_posix()
+              dist_files[rel] = sha256_file(fpath)
+
+          manifest = {
+              "schema_version": "1.0",
+              "source_sha": os.environ["TARGET_SHA"],
+              "source_tree": os.environ["TREE_SHA"],
+              "release_tag": os.environ["RELEASE_TAG"],
+              "go_version": os.environ["GO_VER"],
+              "node_version": os.environ["NODE_VER"],
+              "artifacts": artifacts,
+              "frontend_dist_files": dist_files,
+          }
+
+          manifest_path = out_dir / "release-manifest.json"
+          manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+
+      - name: Generate build provenance attestations for release artifacts
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release-out/dokitool
+            ${{ runner.temp }}/release-out/shanghai-resolver
+            ${{ runner.temp }}/release-out/frontend-dist.tar.gz
+            ${{ runner.temp }}/release-out/release-manifest.json
+
+      - name: Publish prerelease with verified artifacts and manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          SHORT_SHA: ${{ steps.target.outputs.short_sha }}
+          TREE_SHA: ${{ steps.target.outputs.tree_sha }}
+          RELEASE_TAG: ${{ steps.target.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          OUT_DIR="$RUNNER_TEMP/release-out"
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          cat > "$NOTES_FILE" <<EOF
+          Automated prerelease build for commit \`${TARGET_SHA}\` (tree \`${TREE_SHA}\`).
+
+          - Release tag: \`${RELEASE_TAG}\`
+          - Verification: compare SHA-256 digests against \`release-manifest.json\` and run \`gh attestation verify <artifact> --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release-build.yml --source-ref refs/heads/main\`.
+          EOF
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Error: release ${RELEASE_TAG} already exists; refusing to overwrite immutable release artifacts" >&2
+            exit 1
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            "$OUT_DIR/dokitool" \
+            "$OUT_DIR/shanghai-resolver" \
+            "$OUT_DIR/frontend-dist.tar.gz" \
+            "$OUT_DIR/release-manifest.json" \
+            --prerelease \
+            --target "$TARGET_SHA" \
+            --title "Release Build ${SHORT_SHA} (${TARGET_SHA})" \
+            --notes-file "$NOTES_FILE" \
+            --repo "$GITHUB_REPOSITORY"

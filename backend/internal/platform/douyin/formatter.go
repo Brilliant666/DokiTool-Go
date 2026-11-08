@@ -92,20 +92,17 @@ func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID 
 			return nil, err
 		}
 		playURI := extractVID(unified.Map(detail["video"]))
+		if p.resolver != nil {
+			removeDispatchEntries(&videoInfo)
+		}
 		main := videoInfo.url
 		if truthy(main) {
 			main = toHTTPS(strings.ReplaceAll(main, "playwm", "play"))
 		}
-		if fallback := buildOriginalPlayURL(playURI); fallback != "" {
-			var probed object
-			if p.prober != nil {
-				probed, err = p.prober.Probe(ctx, fallback)
-				if ctx.Err() != nil {
-					return nil, ctx.Err()
-				}
-				if err != nil {
-					probed = nil // An optional enhancement cannot discard known media.
-				}
+		if fallback := OriginalPlayURL(playURI); fallback != "" {
+			probed, err := p.probeOriginal(ctx, playURI, fallback, detail, videoInfo)
+			if err != nil {
+				return nil, err
 			}
 			originalURL := stringValue(pick(probed["url"], fallback))
 			originalMetadata := unified.Clone(unified.Map(probed["metadata"]))
@@ -119,11 +116,15 @@ func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID 
 			if len(originalMetadata) > 0 {
 				originalMetadata["is_original"] = true
 			}
-			originalMetadata["private_media_identity"] = "douyin:original:" + fallback
-			originalMetadata["private_source_identity"] = "douyin:original-route:" + fallback
+			if originalMetadata["sources"] == nil {
+				originalMetadata["private_media_identity"] = "douyin:original:" + fallback
+				originalMetadata["private_source_identity"] = "douyin:original-route:" + fallback
+			}
 			currentPixels, originalPixels := pixelCount(videoInfo.metadata), pixelCount(originalMetadata)
 			better := originalPixels > currentPixels || originalPixels > 0 && originalPixels == currentPixels && bitrate(originalMetadata) > bitrate(videoInfo.metadata)
-			if !truthy(main) || better {
+			if p.resolver != nil && isOriginalDispatcher(originalURL) {
+				// Neither route confirmed a file. Keep only declared renditions.
+			} else if !truthy(main) || better {
 				if truthy(main) && main != originalURL {
 					videoInfo.backup = append(array{withURL(videoInfo.metadata, main, videoInfo.gearName, videoInfo.gearName)}, videoInfo.backup...)
 				}

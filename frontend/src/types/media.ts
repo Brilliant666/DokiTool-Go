@@ -1,4 +1,4 @@
-import type { DeliveryStatus, DownloadTransport } from "../downloads/types";
+import type { DeliveryStatus, DownloadSnapshot, DownloadTransport } from "../downloads/types";
 
 export interface Source {
   id?: string;
@@ -121,6 +121,8 @@ export interface MediaError {
   retry_after_seconds?: number;
 }
 export interface ItemBase {
+  /** Client binding for isolated tbvideo delivery; preview continues to use variants. */
+  tbvideo?: import("../services/tbvideo").TbvideoItem;
   id: string;
   type: "video" | "image" | "live_photo" | "audio";
   index?: number;
@@ -244,6 +246,7 @@ export interface DownloadTask {
   averageSpeed?: number;
   /** Active transfer duration, excluding preparation and queue waits. */
   transferElapsed?: number;
+  timing?: DownloadSnapshot["timing"];
   observation?: "unknown" | "stalled";
   workerBuild?: string;
   workerInstance?: string;

@@ -1,0 +1,8 @@
+# /etc/dokitool/release.conf
+# Owner: root:root, mode: 0644. Contains NO secrets or tokens.
+# Required explicit configuration for ops/release/deploy.sh and ops/release/rollback.sh.
+RELEASES_ROOT=/srv/dokitool-go/releases
+FRONTEND_SYMLINK=/srv/dokitool-go/releases/22522d154a43300872c78603af0532ab44ff1d64/frontend/dist
+EXEC_ARGS=serve -listen 127.0.0.1:19963 -xhs-page-transport chrome131 -client-identity caddy
+LOCAL_API_URL=http://127.0.0.1:19963
+PUBLIC_SITE_URL=https://snap.dokitool.com

@@ -11,18 +11,30 @@ import (
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/media/tbvideo"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
-type Parser struct{ executor fetch.Executor }
+type Parser struct {
+	executor fetch.Executor
+	save     *bool
+}
 
 func New(executor fetch.Executor) *Parser { return &Parser{executor: executor} }
+
+func NewWithTBVideo(executor fetch.Executor, enabled bool) *Parser {
+	return &Parser{executor: executor, save: &enabled}
+}
 
 var detailID = regexp.MustCompile(`/detail/([0-9]+)`)
 var validPID = regexp.MustCompile(`^[1-9][0-9]{0,18}$`)
 
 func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Object, error) {
-	legacy, err := p.parseLegacy(ctx, input)
+	var post *tbvideo.Post
+	if p != nil && p.save != nil {
+		post = &tbvideo.Post{Platform: "zuiyou", Enabled: *p.save}
+	}
+	legacy, err := p.parseLegacy(ctx, input, post)
 	if err != nil {
 		return nil, err
 	}
@@ -50,14 +62,14 @@ func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Ob
 		retry := kind == "RATE_LIMITED" || kind == "UPSTREAM_TIMEOUT" || kind == "UPSTREAM_UNAVAILABLE"
 		return unified.ContractError(kind, unified.Str(wire["msg"]), retry), nil
 	}
-	data := adapt(unified.Map(wire["data"]), input, now)
+	data := adapt(unified.Map(wire["data"]), input, now, post)
 	if len(unified.Slice(data["items"])) == 0 {
 		return unified.ContractError("NO_MEDIA", "作品未提供可用媒体", false), nil
 	}
 	return unified.FinalizeData(data, now), nil
 }
 
-func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Object, error) {
+func (p *Parser) parseLegacy(parent context.Context, input string, save *tbvideo.Post) (unified.Object, error) {
 	if err := parent.Err(); err != nil {
 		return nil, err
 	}
@@ -111,7 +123,10 @@ func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Obje
 	if err != nil || !root.isArray() {
 		return failure(502, "API响应解析失败"), nil
 	}
-	return formatResponse(root), nil
+	if save != nil {
+		save.PID = pid
+	}
+	return formatResponse(root, save), nil
 }
 
 func emptyString(value string) bool { return value == "" || value == "0" }

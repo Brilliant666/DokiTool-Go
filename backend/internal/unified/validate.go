@@ -326,16 +326,26 @@ func ValidateEnvelopeAt(payload Object, fallbackNow int64) error {
 				return fmt.Errorf("adaptive manifest has no fixed resolution")
 			}
 		}
-		expected := SelectDefault(item, now)
+		platform := Str(data["platform"])
+		expected := SelectDefaultForPlatform(platform, item, now)
 		if item["default"] != nil {
 			if expected["default"] == nil {
 				return fmt.Errorf("no eligible complete file")
 			}
 			projection := Map(item["default"])
-			var selected Object
+			usableFiles := make([]Object, 0)
 			for _, value := range variants {
-				if variant := Map(value); Equal(variant["id"], projection["variant_id"]) {
+				v := Map(value)
+				if readyState(v) && Str(Map(v["delivery"])["kind"]) == "file" && DeliveryUsable(Map(v["delivery"]), now) {
+					usableFiles = append(usableFiles, v)
+				}
+			}
+			eligibleFiles := defaultEligibleFiles(platform, Str(item["type"]), usableFiles)
+			var selected Object
+			for _, variant := range eligibleFiles {
+				if Equal(variant["id"], projection["variant_id"]) {
 					selected = variant
+					break
 				}
 			}
 			if selected == nil || !readyState(selected) || Str(Map(selected["delivery"])["kind"]) != "file" {
@@ -365,16 +375,20 @@ func ValidateEnvelopeAt(payload Object, fallbackNow int64) error {
 			if !Equal(source["url"], projection["url"]) || sourceAccess != defaultAccess || !Equal(source["expires_at"], projection["expires_at"]) {
 				return fmt.Errorf("default source projection mismatch")
 			}
+			for _, variant := range eligibleFiles {
+				if cmp, comparable := QualityCompare(variant, selected); comparable && cmp == 1 {
+					return fmt.Errorf("higher complete file omitted from default")
+				}
+			}
 			higher := Array{}
 			for _, value := range variants {
 				variant := Map(value)
 				if cmp, comparable := QualityCompare(variant, selected); !comparable || cmp != 1 || !DeliveryUsable(Map(variant["delivery"]), now) {
 					continue
 				}
-				if Str(Map(variant["delivery"])["kind"]) == "file" {
-					return fmt.Errorf("higher complete file omitted from default")
+				if required := DeliveryRequires(Map(variant["delivery"])); len(required) > 0 {
+					higher = append(higher, Object{"variant_id": variant["id"], "requires": Slice(required)})
 				}
-				higher = append(higher, Object{"variant_id": variant["id"], "requires": Slice(DeliveryRequires(Map(variant["delivery"])))})
 			}
 			expected["higher_quality_variants"] = higher
 		} else if expected["default"] != nil {

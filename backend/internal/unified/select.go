@@ -244,8 +244,85 @@ func comparePHPID(a, b string) int {
 	return 0
 }
 
+func isYTDLPPlatform(platform string) bool {
+	switch platform {
+	case "x", "youtube", "instagram":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAudioOnlyFile(v Object) bool {
+	mime := strings.ToLower(strings.TrimSpace(Str(Map(v["metadata"])["mime_type"])))
+	return strings.HasPrefix(mime, "audio/")
+}
+
+func isAudibleVideoFile(v Object) bool {
+	if isAudioOnlyFile(v) {
+		return false
+	}
+	hasAudio, ok := Map(v["metadata"])["has_audio"].(bool)
+	return ok && hasAudio
+}
+
+func isUnknownAudioMP4VideoFile(v Object) bool {
+	if isAudioOnlyFile(v) {
+		return false
+	}
+	meta := Map(v["metadata"])
+	if nonNullField(meta, "has_audio") || nonNullField(Map(meta["field_conflicts"]), "has_audio") {
+		return false
+	}
+	mime := strings.ToLower(strings.TrimSpace(Str(meta["mime_type"])))
+	container := strings.ToLower(strings.TrimSpace(Str(meta["container"])))
+	ext := strings.ToLower(strings.TrimSpace(Str(meta["extension"])))
+	return mime == "video/mp4" && container == "mp4" && ext == "mp4"
+}
+
+func defaultEligibleFiles(platform, itemType string, usableFiles []Object) []Object {
+	if !isYTDLPPlatform(platform) || itemType != "video" {
+		return usableFiles
+	}
+	audible := make([]Object, 0, len(usableFiles))
+	for _, v := range usableFiles {
+		if isAudibleVideoFile(v) {
+			audible = append(audible, v)
+		}
+	}
+	if len(audible) > 0 {
+		return audible
+	}
+	if platform == "instagram" {
+		unknownMP4 := make([]Object, 0, len(usableFiles))
+		for _, v := range usableFiles {
+			if isUnknownAudioMP4VideoFile(v) {
+				unknownMP4 = append(unknownMP4, v)
+			}
+		}
+		if len(unknownMP4) > 0 {
+			return unknownMP4
+		}
+	}
+	nonAudio := make([]Object, 0, len(usableFiles))
+	for _, v := range usableFiles {
+		if !isAudioOnlyFile(v) {
+			nonAudio = append(nonAudio, v)
+		}
+	}
+	if len(nonAudio) > 0 {
+		return nonAudio
+	}
+	return usableFiles
+}
+
 // SelectDefault never mutates its input or sorts the displayed candidate list.
 func SelectDefault(input Object, now int64) Object {
+	return SelectDefaultForPlatform("", input, now)
+}
+
+// SelectDefaultForPlatform applies platform-scoped default eligibility rules without mutating input.
+func SelectDefaultForPlatform(platform string, input Object, now int64) Object {
 	item := objectCopy(input)
 	delete(item, "default_unavailable_reason")
 	delete(item, "higher_quality_variants")
@@ -259,13 +336,14 @@ func SelectDefault(input Object, now int64) Object {
 		return item
 	}
 	variants := Slice(item["variants"])
-	eligible := make([]Object, 0)
+	usableFiles := make([]Object, 0)
 	for _, value := range variants {
 		v := Map(value)
 		if readyState(v) && Str(Map(v["delivery"])["kind"]) == "file" && DeliveryUsable(Map(v["delivery"]), now) {
-			eligible = append(eligible, v)
+			usableFiles = append(usableFiles, v)
 		}
 	}
+	eligible := defaultEligibleFiles(platform, Str(item["type"]), usableFiles)
 	highest := make([]Object, 0)
 	for _, v := range eligible {
 		dominated := false
@@ -345,10 +423,11 @@ func SelectDefault(input Object, now int64) Object {
 
 func FinalizeData(input Object, now int64) Object {
 	data := objectCopy(input)
+	platform := Str(data["platform"])
 	data["generated_at"] = time.Unix(now, 0).UTC().Format(time.RFC3339)
 	items := make(Array, 0, len(Slice(data["items"])))
 	for _, value := range Slice(data["items"]) {
-		items = append(items, SelectDefault(Map(value), now))
+		items = append(items, SelectDefaultForPlatform(platform, Map(value), now))
 	}
 	data["items"] = items
 	return Object{"schema_version": SchemaVersion, "code": "OK", "data": data}

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,13 +17,22 @@ import (
 
 const testEdgeKey = "synthetic-test-key-32-bytes-not-a-deployment-key"
 
+// Keep the historical policy as an explicit fixture, not the production default.
+func legacyAdmissionConfig() AdmissionConfig {
+	c := DefaultAdmissionConfig()
+	c.Parse = PoolConfig{4, 12.0 / 60, 8, 1, 1, 2}
+	c.Relay = PoolConfig{12, 1, 24, 2, 2, 2}
+	c.MaxClients = 1024
+	return c
+}
+
 func protected(t *testing.T, mode string, next http.Handler) *admission {
 	t.Helper()
 	key := ""
 	if mode == "caddy" {
 		key = testEdgeKey
 	}
-	entry, err := WithAdmission(next, mode, key)
+	entry, err := WithAdmissionConfig(next, nil, mode, key, legacyAdmissionConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +62,7 @@ func TestAdmissionRateAndContracts(t *testing.T) {
 	now := time.Unix(1000, 0)
 	entry := protected(t, "caddy", next)
 	entry.now = func() time.Time { return now }
-	paths := []string{"/api/parse", "/api/resolve", "/api/platforms", "/api/bilibili"}
+	paths := []string{"/api/parse", "/api/resolve", "/api/parse", "/api/bilibili"}
 	for _, path := range paths {
 		if got := call(entry, edgeRequest(path, "::ffff:198.51.100.11")); got.Code != 200 {
 			t.Fatalf("%s: %d", path, got.Code)
@@ -101,7 +112,7 @@ func TestAdmissionGlobalRateAndIPGroups(t *testing.T) {
 		step     time.Duration
 		path     string
 	}{
-		{"public", 8, time.Second, "/api/platforms"}, {"relay", 24, time.Second / 2, "/api/media/weibo"},
+		{"public", 8, time.Second, "/api/parse"}, {"relay", 24, time.Second / 2, "/api/media/weibo"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Unix(1000, 0)
@@ -143,7 +154,7 @@ func TestAdmissionGlobalRateAndIPGroups(t *testing.T) {
 
 func TestAdmissionClientTrust(t *testing.T) {
 	for _, tc := range []struct{ mode, key string }{{"caddy", ""}, {"caddy", "too-short"}, {"caddy", testEdgeKey + "\n"}, {"auto", testEdgeKey}, {"direct", testEdgeKey}} {
-		if _, err := WithAdmission(nil, tc.mode, tc.key); err == nil {
+		if _, err := WithAdmission(nil, nil, tc.mode, tc.key); err == nil {
 			t.Fatal("invalid identity configuration accepted")
 		}
 	}
@@ -251,7 +262,7 @@ func TestAdmissionFullStreamLeaseAndRelease(t *testing.T) {
 	p1 := hold("/api/parse", "192.0.2.1")
 	defer p1.Body.Close()
 	check("/api/resolve", "192.0.2.1", 429)
-	p2 := hold("/api/platforms", "192.0.2.2")
+	p2 := hold("/api/resolve", "192.0.2.2")
 	defer p2.Body.Close()
 	check("/api/resolve", "192.0.2.3", 429)
 	m1 := hold("/api/media/weibo", "192.0.2.1")
@@ -270,7 +281,7 @@ func TestAdmissionFullStreamLeaseAndRelease(t *testing.T) {
 
 func TestAdmissionBoundedClientsAndIdleExpiry(t *testing.T) {
 	now := time.Unix(1000, 0)
-	p := newPool(12, 1, 24, 2, 2)
+	p := newPool(12, 1, 24, 2, 2, 2, 1024)
 	for i := 0; i < 1024; i++ {
 		release, retry := p.acquire(netip.AddrFrom4([4]byte{192, 0, byte(i >> 8), byte(i)}), now)
 		if retry != 0 {
@@ -280,12 +291,81 @@ func TestAdmissionBoundedClientsAndIdleExpiry(t *testing.T) {
 		now = now.Add(time.Second / 2)
 	}
 	ip := netip.MustParseAddr("198.51.100.5")
-	if release, retry := p.acquire(ip, now); release != nil || retry != 60 {
-		t.Fatal(retry)
+	if release, retry := p.acquire(ip, now); release == nil || retry != 0 {
+		t.Fatal("idle full buckets should be safely reclaimed", retry)
+	} else {
+		release()
+	}
+	if len(p.clients) > 1024 {
+		t.Fatal("client table exceeded capacity")
 	}
 	if release, retry := p.acquire(ip, now.Add(10*time.Minute)); release == nil || retry != 0 {
 		t.Fatal(retry)
 	} else {
 		release()
+	}
+}
+func TestPullControlIngressIsolation(t *testing.T) {
+	entered := make(chan struct{})
+	unblock := make(chan struct{})
+	defer close(unblock)
+	normal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if classify(r.URL.EscapedPath()) == unknown {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	control := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(edgeHeader) != "" || r.Header.Get(clientHeader) != "" {
+			t.Error("forwarded hop credentials into control handler")
+		}
+		if r.URL.EscapedPath() == shresolver.ClaimPath {
+			close(entered)
+			select {
+			case <-r.Context().Done():
+			case <-unblock:
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	h, err := WithAdmissionConfig(normal, control, "caddy", testEdgeKey, legacyAdmissionConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := "203.0.113.4"
+	r := edgeRequest(shresolver.ClaimPath, from)
+	r.Header.Del(edgeHeader)
+	if w := call(h, r); w.Code != 503 {
+		t.Fatalf("untrusted edge reached control: %d", w.Code)
+	}
+	if w := call(h, edgeRequest("/internal/shanghai/%63laim", from)); w.Code != 404 {
+		t.Fatalf("noncanonical path reached control: %d", w.Code)
+	}
+
+	start := edgeRequest(shresolver.ClaimPath, from)
+	ctx, cancel := context.WithCancel(start.Context())
+	defer cancel()
+	done := make(chan int, 1)
+	go func() { done <- call(h, start.WithContext(ctx)).Code }()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("control request did not reach handler")
+	}
+	for _, path := range []string{"/api/parse", "/api/resolve", "/api/platforms", "/api/bilibili", "/api/parse", "/api/media/weibo"} {
+		if w := call(h, edgeRequest(path, from)); w.Code != 200 {
+			t.Fatalf("waiting control poll affected %s: %d", path, w.Code)
+		}
+	}
+	if w := call(h, edgeRequest("/api/parse", from)); w.Code != 429 {
+		t.Fatalf("expected exhausted user tokens: %d", w.Code)
+	}
+	if w := call(h, edgeRequest(shresolver.ResultPath, from)); w.Code != 204 {
+		t.Fatalf("parse quota blocked result: %d", w.Code)
+	}
+	cancel()
+	if code := <-done; code != 204 {
+		t.Fatalf("claim: %d", code)
 	}
 }

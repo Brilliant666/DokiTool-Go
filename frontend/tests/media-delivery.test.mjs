@@ -29,12 +29,13 @@ test('adaptive masters, external audio and encrypted streams cannot become silen
   }
 });
 test('ranged pieces require a matching 206 response; a complete object is never concatenated accidentally',async t=>{
-  t.mock.method(globalThis,'setTimeout',(callback)=>{queueMicrotask(callback);return 1;});
+  const realTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis,'setTimeout',(callback, delay, ...args)=>realTimeout(callback, delay < 1000 ? 0 : delay, ...args));
   const piece={url:'https://cdn.test/fragment',start:2,length:2};
   globalThis.fetch=async()=>new Response(new Uint8Array([1,2,3,4]),{headers:{'content-length':'4'}});
   await assert.rejects(segments.mergeSegments([piece]),/字节范围/);
   globalThis.fetch=async()=>new Response(new Uint8Array([3,4]),{status:206,headers:{'content-length':'2','content-range':'bytes 2-3/4'}});
-  assert.deepEqual(Array.from(await segments.mergeSegments([piece])),[3,4]);
+  assert.deepEqual([...new Uint8Array(await (await segments.mergeSegments([piece])).arrayBuffer())],[3,4]);
 });
 test('extensions follow metadata and delivery output rather than opaque signed filenames',()=>{
   assert.equal(delivery.mediaExtension({mime_type:'image/webp'}),'webp');

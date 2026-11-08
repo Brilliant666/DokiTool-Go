@@ -7,19 +7,37 @@ transport routes are retained. Ordinary
 CDN files travel directly to the user's browser.
 Weibo's signed `/api/media/weibo` route remains a server relay when required.
 
-The policy, ownership and deployment sections describe the current implementation
-(`downloads-20261031.2`, with the pending PR #11 client recovery fix). Dated acceptance entries preserve the investigation
-history; earlier blockers and fallback behavior are not the current release
-contract. The latest controlled refresh, saved-file integrity and natural upgrade results are in
-[the unified-media acceptance record](UNIFIED-MEDIA-ACCEPTANCE.md#下载恢复与候选精简验收2026-10-31).
-Publishing the source or passing a local
-build does not itself establish the production version.
+## Production download capabilities
 
-The open production incident and investigation lessons are recorded in
-[INC-20261031-001](incidents/INC-20261031-001-download-delivery.md).
-Bridge/cache, media-probe compatibility, task recovery and original-source
-throughput have separate evidence and acceptance states. The current closeout is
-in [the PR #11 acceptance summary](UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout).
+下表区分生产按钮验收、浏览器直接打开附件的实测，以及需要手动保存的入口。结论仅限所测作品、版本和网络；截至 [#33 发布回执](https://github.com/Brilliant666/DokiTool-Go/pull/33#issuecomment-6649301507)，日本 Go/Vue 为 `d82ff77`，生产下载 Worker 为 `downloads-20261104.1`；该轮因下述实况 ZIP 缺口尚未接收为新稳定基线。
+
+| 平台 | 已确认的能力和边界 |
+| --- | --- |
+| 抖音 | 上海主动领取取址已启用，4K 原画有[生产基线及维护者保存记录](go-migration/douyin-shanghai.md)。上海提供候选地址，文件由浏览器从 CDN 下载。 |
+| 小红书实况 | **生产 d82ff77 仍有新增 HTTP v28 导致 ZIP 失败的缺口。** 本次修复候选对适配器已提取的实况 motion 直连来源做同址 HTTPS 准备，不再枚举 CDN 节点或域名；尚未部署，也不等同于声明每个来源均可跨域读取。历史 #30 只覆盖 v11/v27：一笔生产样本的两个地址均已升级，原按钮保存了视频、对应封面及同组 ZIP；单视频和 ZIP 中的视频实取 v11，封面沿用自己的来源。视频和封面完整解码，ZIP 通过 CRC，成员与单项的长度及 SHA-256 一致。v27 未单独整存；这不是小红书 4K 全量验收。[发布回执](https://github.com/Brilliant666/DokiTool-Go/pull/30#issuecomment-6628340403) · [Chat 接收记录（非独立生产复测）](https://github.com/Brilliant666/DokiTool-Go/pull/30#issuecomment-6629159922) |
+| 今日头条 | 作品 `7501991960077500979` 原选 1080p：上游缺少允许网页读取的跨域响应头，现网按钮尚未接入原生附件路线。独立 Edge 直接接收该附件后，以系统命名 `download.mp4` 实际保存 25,912,280 字节，H.264 视频和 AAC 音轨全片解码通过。进度由浏览器下载管理器管理，页面只能确认交接。此前一次仅收到 15,662 字节，未证实慢的原因。 |
+| 皮皮搞笑、最右 | 已测作品（分别为 `860538173891`、`163566379`）的 HTTP 媒体被浏览器拦截。同址 HTTPS 可预览，但不允许网页跨域读取，直接打开也未触发附件下载。保留「打开原视频，手动保存」入口；该轮未发现原域名上可一键保存的候选；未启动中继。 |
+
+后三个平台引自 2026-11-04 本地验收原件《三平台无中继保存能力：最终结果记录》。其中只有头条新增一次原生附件保存；皮皮搞笑与最右复用已有记录。非浏览器客户端下载成功不计为网页一键保存。
+
+### 皮皮搞笑 / 最右：tbvideo 候选（已随 d82ff77 发布，分平台开关）
+
+按 #33 回执，生产已显式开启皮皮搞笑、关闭最右，相关 Worker 模块与路由已核对；本轮没有新增这两平台的真实保存验收。下述仍是候选交付能力，不是全平台成功率保证。
+
+新版本保留原播放器地址。单视频下载按钮只尝试所选无水印视频在 `https://tbvideo.ixiaochuan.cn` 的同路径对象，不带签名、查询参数或凭据。每个视频按自己的来源 ID 绑定；没有候选、浏览器不能读取或文件校验不通过，就保留「打开源链接」手动保存，不向原地址再次请求下载字节。媒体不经本站服务器。多视频可逐项保存；该候选不提供 ZIP 打包。
+
+日本 Go 的 `DOKITOOL_TBVIDEO_REWRITE_PIPIGX` 和 `DOKITOOL_TBVIDEO_REWRITE_ZUIYOU` 默认开启。只撤回一个平台时，将对应环境变量设为 `false` 并重启日本 Go，无需改代码、重新构建或更新上海服务；重新解析后生效，已生成的结果和在途任务不被改写。新客户端遇到不支持该能力的旧 Worker 时直接回落，不要求清缓存。
+
+上游是否允许跨域读取以**实际 GET** 为准。最右的不同对象可能返回不同的跨域头；OPTIONS 通过不代表 GET 可读。不给同一失败对象自动重试或加随机查询串。下载管理器只在收到完整、已核验的 MP4 后接收附件；客户端的 `saved` 指已验证文件交给浏览器，不代表站点读过用户磁盘。
+
+日本后端接收同源 `POST /api/downloads/tbvideo-result`，只记录 `tbvideo_save` 事件的 platform、pid、vid、used_candidate、result（saved/fallback）、total_bytes、elapsed_ms，不记录媒体 URL。服务端对上报限流；用户取消、页面关闭、连接中断、旧版数据缺少视频身份等都可能没有结果记录。若获准上线，观察一周：最右以实际尝试候选的 saved / (saved + fallback) 统计**已上报**成功率，开关关闭或旧 Worker 的手动回落另计。不要用这个比例代表所有对象或网络。
+
+## Historical download evidence
+
+The [production incident record](incidents/INC-20261031-001-download-delivery.md) and
+[PR #11 closeout](UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout) preserve earlier failures
+and their scope. Controlled refresh and upgrade results are in the
+[unified-media acceptance record](UNIFIED-MEDIA-ACCEPTANCE.md#下载恢复与候选精简验收2026-10-31).
 
 As of the 2026-10-31 closeout, the owner reports three normal production purple-button
 saves of approximately 540 MB, with playable beginning/end, audio and completed
@@ -33,8 +51,8 @@ The frozen a8 URL was reused after a time encoded in its path without checking i
 validity window. The resulting 403/zero-media attempts cannot support SW or route
 performance conclusions. The incident report explicitly records this serious
 investigation error, excessive repeated manual steps and the required stop rules.
-Do not repeat the old URL or the completed download matrix. Probe compatibility
-and automatic expired-result recovery still await release; the latter requires
+Do not repeat the old URL or the completed download matrix. At that checkpoint, probe compatibility
+and automatic expired-result recovery awaited release; the latter required
 post-release browser verification, preferably using an existing trusted terminal
 record without another transfer. The historical sections below do not prescribe
 new tests. A temporary source replacement alone still is not normal-parser acceptance.
@@ -261,7 +279,7 @@ Restored URL-only history, archives, Live pairs, active/unknown, completed or
 cancelled tasks do not gain a guessed recovery path. Fresh source size/format
 metadata replaces the prior attempt's data; this is a fresh download, not a byte
 resume. Existing transport fallback among the same variant's sources is unchanged.
-See [implementation evidence and remaining identity limitation](go-migration/refresh-recovery.md).
+See [implementation evidence and remaining identity limitation](https://github.com/Brilliant666/DokiTool-Go/blob/7a44c02fdc19fa85e7b959d9146e5e9ae322b188/docs/go-migration/refresh-recovery.md).
 
 ## Deployment
 
@@ -745,3 +763,50 @@ healthy. Later valid version comparisons, the rejected a8 experiment and the own
 successful normal production saves are superseding evidence in the closeout summary;
 do not repeat that comparison. This recovery patch does not
 change timeouts, media routing, quality defaults, proxy settings or the Worker.
+
+## PR31 后稳定性整改（2026-11-05，候选代码未发布）
+
+本节对应维护者提供的《DokiTool-Go 生产端与代码仓库全面审查报告》，不是新的媒体验收或现网发布记录。
+
+| 原报告范围 | 本次处理及边界 |
+| --- | --- |
+| B-01 / B-02 / B-04 | 独立 [PR #32](https://github.com/Brilliant666/DokiTool-Go/pull/32) 处理可配置准入、目录隔离、慢请求体和客户表回收；本前端变更不重复修改后端。 |
+| F-01 分片与 ZIP | 分片元数据 HEAD 最多四路，并共享五秒预探测预算。不可读取的长度保持未知，实际 GET 决定字节完整性。分片按序组成 Blob，不再额外分配整件连续 Uint8Array。ZIP 仍由 JSZip 缓冲生成，不宣称零内存或流式 ZIP；转换成员后及时释放原 Blob 引用。 |
+| F-01 请求与任务生命周期 | 分片、HLS 清单和 ZIP 资源的响应头及每次 body.read 最多等待三十秒；正常持续传输没有总下载时长限制。超时/取消关闭对应请求和 reader。ZIP 与分片成品在页面内共用一个可取消、最多一项执行的缓冲队列；普通 Worker 流式下载的两并发与原生交付不改。已有分片最多两次重试保留，取消不重试。 |
+| F-02 | 删除当前产品没有使用的前端自签自验 AntiReplay 及其导入时周期定时器；不触碰 tbvideo 文件完整性 MD5、服务器认证或签票。 |
+| 下载取消兼容性（报告 5.3.5） | resolve 准备阶段不再依赖 AbortSignal.any；组合信号保留首个取消原因，完成/取消后移除监听。原有三十秒准备期限、选择身份与取消语义不变。 |
+| F-05 可访问性的小修 | 跑马灯第二份链接退出键盘与辅助技术导航；移动端不再重新开启 reduced-motion 下的动画。未执行全仓死代码/依赖清理。 |
+| #31 候选暂存边界 | 新增受控回归证明：tbvideo 整件校验若超过原有两分钟附件准备期限，取消读取、无附件返回并回落手动，释放 Worker 名额。该期限与算法未修改；不借此声称大文件内存问题已全部解决。 |
+
+本批没有更改原画/实况来源选择、HTTP/HTTPS 修正、媒体中继、原生 iframe 生命周期、ObjectURL 回收时长或 IndexedDB 清理规则。报告中 Pull 重派、未启用 secure 协议、旧 direct 服务、网关/CSP/HSTS 和全量 CI/依赖治理建议不在本批内，不能记为已修。缓存/singleflight、连接复用与探测并行属于另一组容量工作，也未由本批实现。
+
+发布时本批只需更新配套正式 Vue；下载 Worker 产品脚本与其 build 未变。上线与否以维护者批准和实际发布回执为准。核验优先复用受控小文件、ZIP 配对与取消/恢复回归，不重新下载抖音原画或重复 CDN 测速。
+
+
+### 小红书上游 CDN 轮换：协议准备不再依赖节点名单
+
+#32/#33 的实际发布源码为 `d82ff77`。其生产验收中，新增首来源
+`http://sns-v28.rednotecdn.com/...` 未被 #30 的两域名规则升级；单视频
+按备用顺序保存了 v11，ZIP 首来源请求被 mixed-content 拦截。旧、新版
+均受该规则影响，因此该回执未宣布新稳定基线，也未因这项旧限制回退。
+参见 [发布与缺口记录](https://github.com/Brilliant666/DokiTool-Go/pull/33#issuecomment-6649301507)。
+
+本次产品规则在 ID 生成后的 `xiaohongshu.PreparePublic` 实施：对已解析
+`live_photo → pair → motion → file` 的直接来源，以及同源凭据备用 URL，
+只将规范 HTTP 协议改为 HTTPS。主机、路径、签名参数、编码、来源 ID、
+主备顺序、可用性和到期信息原样保留；既有 HTTPS 不改。不再只认某几个
+`sns-vNN`，也不将范围替换成另一份 CDN 后缀名单。普通视频/4K、封面、
+其他平台、冻结 PHP 提取基线不变。
+
+该步骤只处理适配器已经返回的结构化媒体来源，不从用户自由文本猜测
+CDN，不拼主机、不扩展服务器抓取权限、不读取完整媒体。含凭据、显式
+端口或格式异常的地址不猜测修正，原来源仍保留。服务器逐跳 DNS/IP、
+TLS 和出站限制不变。
+
+HTTP 升级不是可用性证明：实际浏览器仍须通过 TLS、CORS、完整性检查。
+单项与 ZIP 读取同一份已准备来源；本次不改变 ZIP 的首来源选取策略，
+不新增自动换源，也不把跨来源内容视为同一完整文件。受控回归覆盖新节点
+首项、多来源原序及陌生 CDN 域名，**不等同于生产 v28 完整保存通过**。
+后续获准发布只更新日本 Go；应复用现有生产响应，一次核对同一所选实况
+的视频、封面、ZIP 完整保存/解码、CRC/配对及同源成员一致性。未取得
+该证据前保持“修复候选”，不重新运行大文件下载或 CDN 排名。

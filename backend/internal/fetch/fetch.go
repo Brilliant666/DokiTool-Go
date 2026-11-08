@@ -34,8 +34,10 @@ type Policy struct {
 	MaxBytes           int64
 	MaxHeaderBytes     int64
 	StrictMediaHeaders bool
-	FollowRedirects    bool
-	AutoReferer        bool
+	// PartialMediaOnly refuses complete media before buffering the body.
+	PartialMediaOnly bool
+	FollowRedirects  bool
+	AutoReferer      bool
 	// ReadRedirectBody retains bounded bodies only when redirects are not
 	// followed. It never authorizes a Location, and HEAD never reads a body.
 	ReadRedirectBody bool
@@ -256,6 +258,15 @@ func (c *Client) Do(parent context.Context, in Request) (Response, error) {
 		if method == http.MethodHead || (isRedirect && !p.ReadRedirectBody) {
 			response.Body.Close()
 			return out, nil
+		}
+		if p.PartialMediaOnly {
+			var start, end, total int64
+			span := response.Header.Get("Content-Range")
+			n, scanErr := fmt.Sscanf(span, "bytes %d-%d/%d", &start, &end, &total)
+			if response.StatusCode != http.StatusPartialContent || scanErr != nil || n != 3 || start < 0 || end < start || end >= total || end-start+1 >= total || fmt.Sprintf("bytes %d-%d/%d", start, end, total) != span {
+				response.Body.Close()
+				return Response{}, ErrPolicy
+			}
 		}
 		out.Body, err = readBody(response.Body, response.Header.Get("Content-Encoding"), p.MaxBytes)
 		response.Body.Close()

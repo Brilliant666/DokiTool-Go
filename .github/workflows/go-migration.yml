@@ -257,7 +257,7 @@ jobs:
 
       - name: Verify Go source formatting
         run: |
-          unformatted="$(gofmt -l backend/internal/platform backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/cmd/dokitool)"
+          unformatted="$(gofmt -l backend/internal/platform backend/internal/media/weibo backend/internal/fetch backend/internal/api backend/internal/probe backend/internal/shresolver backend/internal/unified backend/cmd)"
           if [ -n "$unformatted" ]; then
             printf '%s\n' "$unformatted"
             # Show exact formatter repairs without modifying the index.
@@ -326,6 +326,29 @@ jobs:
           export DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT="$RUNNER_TEMP/pipixia-representation.json"
           (cd backend && go test -count=1 ./internal/platform/pipixia -run TestPipixiaRepresentation)
           node frontend/scripts/test-pipixia-representation.mjs "$DOKITOOL_PIPIXIA_REPRESENTATION_OUTPUT"
+
+      - name: Verify Shanghai original resolver, Go responses and existing frontend consumer
+        run: |
+          export DOKITOOL_PULL_EXAMPLES="$RUNNER_TEMP/shanghai-pull.json"
+          export DOKITOOL_SHANGHAI_EXAMPLES="$RUNNER_TEMP/shanghai-originals.json"
+          (
+            cd backend
+            go vet ./internal/shresolver ./internal/probe ./internal/platform/douyin ./internal/fetch ./internal/unified ./cmd/shanghai-resolver ./cmd/dokitool
+            go test -race -count=1 ./internal/shresolver ./internal/probe ./internal/platform/douyin ./internal/fetch ./cmd/shanghai-resolver ./cmd/dokitool
+            go build -o "$RUNNER_TEMP/shanghai-resolver" ./cmd/shanghai-resolver
+          )
+          "$RUNNER_TEMP/dokitool-validation/bin/python" -B scripts/validate-unified-schema.py "$DOKITOOL_SHANGHAI_EXAMPLES"
+          "$RUNNER_TEMP/dokitool-validation/bin/python" -B scripts/validate-unified-schema.py "$DOKITOOL_PULL_EXAMPLES"
+          node frontend/scripts/test-shanghai-original.mjs "$DOKITOOL_SHANGHAI_EXAMPLES"
+          node frontend/scripts/test-shanghai-original.mjs "$DOKITOOL_PULL_EXAMPLES"
+
+      - name: Validate Xiaohongshu live photo delivery through the original frontend
+        env:
+          DOKITOOL_XHS_PUBLIC_INTEGRATION_OUTPUT: ${{ runner.temp }}/xhs-live-delivery.json
+        run: |
+          (cd backend && go test -count=1 ./cmd/dokitool -run '^TestXHSPublicMediaIntegration$')
+          "$RUNNER_TEMP/dokitool-validation/bin/python" -B scripts/validate-unified-schema.py "$DOKITOOL_XHS_PUBLIC_INTEGRATION_OUTPUT"
+          (cd frontend && node --test --test-name-pattern='Go public XHS live pairs' tests/ui-download-contract.test.mjs)
 
       - name: Build the Go executable
         working-directory: backend

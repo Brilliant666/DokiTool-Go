@@ -47,6 +47,18 @@ export function createDownloadManager(implementations: Transports = transports) 
       release = await acquire(signal);
       signal.throwIfAborted();
       publish({ ...snapshot, status: "preparing" });
+      if (request.tbvideo) {
+        // No source, an older Worker, or a blocked candidate all leave the player available.
+        // Only start the validated range transport. Native probes and Blob would read an unverified file.
+        try {
+          if (request.url) return await implementations.downloadStreaming(request, signal, publish);
+        } catch (error) {
+          if (signal.aborted || error instanceof Error && ["AbortError", "StreamingStateUnknownError"].includes(error.name)) throw error;
+        }
+        const manual: DownloadSnapshot = { ...snapshot, status: "manual", speed: 0, error: undefined };
+        publish(manual);
+        return manual;
+      }
       // The format check may already have examined this exact complete GET response.
       // Never infer native eligibility from a partial/failed probe or another source.
       const attachment = request.probe?.url === mediaUrl(request.url)

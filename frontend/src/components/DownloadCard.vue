@@ -22,11 +22,11 @@ const getStatusIcon = (status) => ({ downloading: 'fa-spinner fa-spin', complete
 const observationText = (item) => item.recoveryExpired ? '结果未确认' : item.observation === 'unknown' ? '暂时无法获取进度' : item.observation === 'stalled' ? '传输暂无进展，可等待或取消' : ''
 const isActive = (item) => !item.recoveryExpired && (['queued', 'preparing', 'downloading'].includes(item.status) || item.observation === 'unknown')
 const isSettled = (item) => (item.transport === 'browser_streaming' && item.observation === 'unknown' && item.ownerGone === true && item.recoveryExpired === true)
-  || (!item.observation && ['completed', 'failed', 'cancelled', 'interrupted', 'handed-off'].includes(item.status))
+  || (!item.observation && ['completed', 'failed', 'cancelled', 'interrupted', 'handed-off', 'manual'].includes(item.status))
 const orderedDownloads = computed(() => [...props.downloads.filter(isActive), ...props.downloads.filter(item => !isActive(item))])
 const activeCount = computed(() => props.downloads.filter(isActive).length)
 const settledCount = computed(() => props.downloads.filter(isSettled).length)
-const outcomeSummary = computed(() => [['completed', '完成'], ['failed', '失败'], ['cancelled', '取消'], ['interrupted', '连接中断'], ['handed-off', '浏览器处理']]
+const outcomeSummary = computed(() => [['completed', '完成'], ['failed', '失败'], ['cancelled', '取消'], ['interrupted', '连接中断'], ['handed-off', '浏览器处理'], ['manual', '打开源链接']]
   .map(([status, label]) => [props.downloads.filter(item => isSettled(item) && item.status === status).length, label])
   .filter(([count]) => count > 0).map(([count, label]) => `${label} ${count}`).join(' · '))
 const summary = computed(() => activeCount.value
@@ -34,6 +34,31 @@ const summary = computed(() => activeCount.value
   : [outcomeSummary.value, props.downloads.some(item => item.recoveryExpired) ? `未确认 ${props.downloads.filter(item => item.recoveryExpired).length}` : ''].filter(Boolean).join(' · ') || '下载记录')
 const statusText = (item) => observationText(item) || (item.status === 'completed' ? '传输完成' : item.statusText)
   || ({ queued: '排队中', preparing: '准备下载', downloading: '下载中…', failed: '下载失败', cancelled: '已取消', interrupted: '下载连接已中断', 'handed-off': '已交给浏览器' }[item.status] || item.status)
+
+const timingId = ref(null)
+const copyHint = ref('')
+const toggleTiming = (id) => {
+  timingId.value = timingId.value === id ? null : id
+  copyHint.value = ''
+}
+const timingReport = computed(() => {
+  const item = props.downloads.find(task => task.id === timingId.value)
+  if (!item?.timing) return ''
+  const rows = item.timing.windows.map(({ from, to, ms, readMs, demandMs }) =>
+    [from, to, ms, ms > 0 ? ((to - from) / 1000 / ms).toFixed(2) : '—', readMs, demandMs].join('\t'))
+  return [
+    `Worker ${item.workerBuild} · ${statusText(item)}`,
+    `首块等待 ${item.timing.firstBlockMs} ms`,
+    '起始字节\t结束字节（不含）\t区间 ms\t均速 MB/s\t等来源流 ms\t等浏览器接收 ms',
+    ...rows,
+  ].join('\n')
+})
+const copyTiming = async () => {
+  try {
+    await navigator.clipboard.writeText(timingReport.value)
+    copyHint.value = '已复制'
+  } catch { copyHint.value = '可选中上方文本复制' }
+}
 
 // The panel owns presentation only. Folding never changes a transfer or its history.
 const preferenceKey = 'dokitool.download-panel'
@@ -110,6 +135,10 @@ onBeforeUnmount(stopCollapseTimer)
             </div>
 
             <div class="flex items-center gap-1.5">
+              <button v-if="item.status === 'manual' && item.nativeAvailable && item.url" type="button"
+                @click="emit('handoff', item.id)" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
+                打开源链接
+              </button>
               <button
                 v-if="!item.observation && ['failed', 'cancelled', 'handed-off', 'interrupted'].includes(item.status) && (!item.deliveryId || item.url)"
                 @click="emit('retry', item.id)"
@@ -168,6 +197,16 @@ onBeforeUnmount(stopCollapseTimer)
             </div>
             <div v-if="item.status === 'handed-off'" class="text-xs text-slate-500 mt-2">
               请在浏览器下载列表确认进度和结果，本站无法追踪。
+            </div>
+            <div v-if="item.timing" class="mt-2 text-xs">
+              <button type="button" @click="toggleTiming(item.id)" :aria-expanded="timingId === item.id"
+                class="text-indigo-600 dark:text-indigo-400 hover:underline">分段计时</button>
+              <template v-if="timingId === item.id">
+                <textarea readonly wrap="off" aria-label="下载分段计时" :value="timingReport"
+                  class="mt-1 block w-full h-28 text-xs font-mono bg-transparent text-slate-600 dark:text-slate-300"></textarea>
+                <button type="button" @click="copyTiming" class="mt-1 text-indigo-600 dark:text-indigo-400 hover:underline">复制计时</button>
+                <span class="ml-1 text-slate-500" role="status">{{ copyHint }}</span>
+              </template>
             </div>
             <button v-if="item.nativeAvailable && !item.observation && ['failed', 'cancelled', 'interrupted'].includes(item.status)"
               @click="emit('handoff', item.id)"

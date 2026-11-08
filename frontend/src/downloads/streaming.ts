@@ -23,7 +23,7 @@ let savedProgressAt = 0;
 let listening = false;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
 let polling = false;
-const terminal = (snapshot: DownloadSnapshot) => ["completed", "failed", "cancelled"].includes(snapshot.status);
+const terminal = (snapshot: DownloadSnapshot) => ["completed", "failed", "cancelled", "manual"].includes(snapshot.status);
 const abortError = () => new DOMException("下载已取消", "AbortError");
 const expired = (task: TaskRecord) => !!task.key.recoveryDeadline && Date.now() >= task.key.recoveryDeadline;
 const pending = () => [...tasks.values()].filter(task => !terminal(task.snapshot) && !expired(task));
@@ -48,7 +48,7 @@ function saveTasks(): void {
     const { url: _url, ...last } = snapshot;
     return { id: key.id, token: key.token, filename: snapshot.filename, savedAt: key.savedAt,
       ...(key.recoveryDeadline ? { recoveryDeadline: key.recoveryDeadline } : {}), ...(key.ownerGone ? { ownerGone: true } : {}), ...(cancelRequested ? { cancelRequested: true } : {}),
-      ...(confirmed ? { last, ...(terminal(snapshot) ? { result: last } : {}) } : {}) };
+      ...(confirmed ? (terminal(snapshot) ? { result: last } : { last }) : {}) };
   });
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(retained(records))); } catch { /* Storage restrictions do not stop an active transfer. */ }
 }
@@ -250,6 +250,7 @@ export async function downloadStreaming(request: DownloadRequest, signal: AbortS
     const selected = await workerSession(true);
     if (signal.aborted) throw abortError();
     if (!selected) throw new Error("下载服务未就绪，请重试");
+    if (request.tbvideo && !selected.tbvideo) throw new Error("下载服务版本不兼容");
     owner = selected;
   } catch (error) { releaseBridge(request.id); throw error; }
   listen();
@@ -267,7 +268,7 @@ export async function downloadStreaming(request: DownloadRequest, signal: AbortS
       if (snapshot.recoveryExpired) { reject(stateUnknown(snapshot.error)); return; }
       if (!terminal(snapshot)) return;
       finished = true; cleanup();
-      snapshot.status === "completed" ? resolve(snapshot) : reject(snapshot.status === "cancelled" ? abortError() : new Error(snapshot.error || "下载中断"));
+      (snapshot.status === "completed" || snapshot.status === "manual") ? resolve(snapshot) : reject(snapshot.status === "cancelled" ? abortError() : new Error(snapshot.error || "下载中断"));
     });
     const onAbort = () => {
       void cancel(task).catch(error => {

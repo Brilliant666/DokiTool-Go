@@ -10,7 +10,7 @@ import type {
   ToastType,
 } from "../types/media";
 import { buildMediaFilename } from "../utils/videoFilename";
-import { decodedLength } from "../../public/downloads/decoded-length.js";
+import { fetchMediaBlob, linkAbortSignals, acquireBufferedSlot } from "../downloads/buffered";
 import {
   getDownloadTarget,
   readyItem,
@@ -29,6 +29,8 @@ import {
   mergeSegments,
   type HlsSegment,
 } from "../utils/segmentDownload";
+import type { TbvideoItem } from "../services/tbvideo";
+import { reportTbvideo } from "../../public/downloads/tbvideo.js";
 import { apiConfig } from "../services/apiConfig";
 import type { useVideoStore } from "../stores/video";
 import type { VideoSelection } from "./useVideoSelection";
@@ -42,19 +44,83 @@ function triggerBrowserDownload(
   url: string,
   filename: string,
   newTab = false,
-): void {
+): boolean {
+  const isolate = newTab || !url.startsWith("blob:");
+  if (isolate) {
+    const activation =
+      typeof navigator !== "undefined" ? navigator.userActivation : undefined;
+    if (activation && !activation.isActive) {
+      return false;
+    }
+    if (
+      typeof window !== "undefined" &&
+      "open" in window &&
+      typeof window.open !== "function"
+    ) {
+      return false;
+    }
+  }
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   // 无 Referer 直连，降低 CDN 防盗链拒绝概率
   anchor.referrerPolicy = "no-referrer";
-  if (newTab) {
+  if (isolate) {
     anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
   }
+  let clickEvent: Event | undefined;
+  let threw = false;
+  const onClick = (event: Event) => {
+    clickEvent = event;
+  };
+  anchor.addEventListener?.("click", onClick);
   document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+  try {
+    anchor.click();
+  } catch {
+    threw = true;
+  } finally {
+    anchor.removeEventListener?.("click", onClick);
+    anchor.remove();
+  }
+  return !threw && !clickEvent?.defaultPrevented;
+}
+
+function isCorsBlockedDirectCdn(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    return host === "googlevideo.com" || host.endsWith(".googlevideo.com");
+  } catch {
+    return false;
+  }
+}
+
+// URL parameters only indicate that a direct attachment attempt can be made;
+// they never prove that the actual upstream HTTP response is a verified attachment.
+function canAttemptDirectAttachment(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== "googlevideo.com" && !host.endsWith(".googlevideo.com")) {
+      return false;
+    }
+    if (parsed.pathname.replace(/\/+$/, "") !== "/videoplayback") {
+      return false;
+    }
+    const itag = parsed.searchParams.get("itag")?.trim() ?? "";
+    const title = parsed.searchParams.get("title")?.trim() ?? "";
+    if (itag !== "18" || !title) {
+      return false;
+    }
+    const sparams = (parsed.searchParams.get("sparams") ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase());
+    return !sparams.includes("title");
+  } catch {
+    return false;
+  }
 }
 
 export function useMediaDownload({
@@ -82,6 +148,7 @@ export function useMediaDownload({
       variantId?: string;
       sources?: Source[];
       formatMime?: string;
+      tbvideo?: { item: TbvideoItem; candidate: string };
       selectionKey?: string;
     }
   >();
@@ -94,7 +161,7 @@ export function useMediaDownload({
     task.observation === "unknown" &&
     task.ownerGone === true && task.recoveryExpired === true;
   const clearable = (task: DownloadTask) => clearableUnknown(task) ||
-    (!task.observation && ["completed", "cancelled", "failed", "handed-off", "interrupted"].includes(task.status));
+    (!task.observation && ["completed", "cancelled", "failed", "handed-off", "interrupted", "manual"].includes(task.status));
   const matchesSettledAttempt = (snapshot: DownloadTask) => {
     const current = taskFor(snapshot.id);
     return (
@@ -192,23 +259,8 @@ export function useMediaDownload({
   }
 
   /** 单文件抓取（用于 ZIP 打包） */
-  async function fetchBlob(
-    url: string,
-    signal?: AbortSignal,
-    expectedSize?: number,
-  ): Promise<Blob> {
-    const response = await fetch(url, { method: "GET", mode: "cors", signal });
-    if (!response.ok)
-      throw new Error(`资源请求失败（HTTP ${response.status}）`);
-    const blob = await response.blob();
-    if (signal) checkAbort(signal);
-    if (!blob.size) throw new Error("资源为空");
-    const declared = decodedLength(response);
-    if ((declared && blob.size !== declared) || (expectedSize && blob.size !== expectedSize))
-      throw new Error("资源下载不完整");
-    if (/text\/html|application\/json/i.test(blob.type))
-      throw new Error("资源地址返回了错误页面");
-    return blob;
+  async function fetchBlob(url: string, signal?: AbortSignal, expectedSize?: number): Promise<Blob> {
+    return fetchMediaBlob(url, { signal, expectedSize });
   }
 
   let pageTaskSequence = 0;
@@ -234,6 +286,7 @@ export function useMediaDownload({
     cancelled: "已取消",
     "handed-off": "已交给浏览器",
     interrupted: "下载连接已中断",
+    manual: "打开源链接",
   };
 
   function applyDelivery(snapshot: DownloadSnapshot, restore = false): void {
@@ -268,6 +321,7 @@ export function useMediaDownload({
       elapsed: snapshot.elapsed,
       averageSpeed: snapshot.averageSpeed,
       transferElapsed: snapshot.transferElapsed,
+      timing: snapshot.timing,
       observation: snapshot.observation,
       workerBuild: snapshot.workerBuild,
       workerInstance: snapshot.workerInstance,
@@ -318,7 +372,15 @@ export function useMediaDownload({
       );
     const active = (status: string) =>
       ["queued", "preparing", "downloading"].includes(status);
-    let duplicate = matchingTasks().some((task) => active(task.status) && !task.ownerGone);
+    const isCorsBlockedManualTask = (task: DownloadTask) =>
+      task.status === "manual" &&
+      typeof task.url === "string" &&
+      task.url.length > 0 &&
+      isCorsBlockedDirectCdn(task.url);
+    let duplicate = matchingTasks().some(
+      (task) =>
+        (active(task.status) && !task.ownerGone) || isCorsBlockedManualTask(task),
+    );
     if (
       !duplicate &&
       matchingTasks().some(
@@ -330,6 +392,7 @@ export function useMediaDownload({
         duplicate = matchingTasks().some(
           (task) =>
             (active(task.status) && !task.ownerGone) ||
+            isCorsBlockedManualTask(task) ||
             (task.status === "interrupted" &&
               task.deliveryId &&
               hasStreamingTask(task.deliveryId)),
@@ -352,6 +415,104 @@ export function useMediaDownload({
       globalThis.crypto?.randomUUID?.() ??
       `page-${Date.now()}-${++pageTaskSequence}`;
     deliveryTasks.set(deliveryId, downloadId);
+    if (isCorsBlockedDirectCdn(url)) {
+      if (controller.signal.aborted) {
+        videoStore.updateDownload(downloadId, {
+          deliveryId,
+          status: "cancelled",
+          statusText: "已取消",
+          abortController: null,
+          error: "用户取消下载",
+          nativeAvailable: true,
+        });
+        return;
+      }
+      if (canAttemptDirectAttachment(url)) {
+        if (triggerBrowserDownload(url, filename, true)) {
+          videoStore.updateDownload(downloadId, {
+            deliveryId,
+            transport: "browser_native",
+            status: "handed-off",
+            statusText: "已交给浏览器",
+            abortController: null,
+            percent: 0,
+            loaded: 0,
+            total: 0,
+            speed: 0,
+            elapsed: 0,
+            averageSpeed: 0,
+            transferred: 0,
+            error: null,
+            progressKind: "bytes",
+            nativeAvailable: true,
+            observation: undefined,
+            transferElapsed: undefined,
+            timing: undefined,
+            workerBuild: undefined,
+          });
+          showToast(
+            "已在新标签页尝试浏览器附件下载，请在浏览器下载列表或打开的标签页查看",
+            "info",
+            6000,
+          );
+          return;
+        }
+        videoStore.updateDownload(downloadId, {
+          deliveryId,
+          transport: undefined,
+          status: "manual",
+          statusText: "打开源链接",
+          abortController: null,
+          percent: 0,
+          loaded: 0,
+          total: 0,
+          speed: 0,
+          elapsed: 0,
+          averageSpeed: 0,
+          transferred: 0,
+          error: null,
+          progressKind: "bytes",
+          nativeAvailable: true,
+          observation: undefined,
+          transferElapsed: undefined,
+          timing: undefined,
+          workerBuild: undefined,
+        });
+        showToast(
+          "浏览器限制了新标签页打开，请点击下载卡片中的“打开源链接”继续",
+          "info",
+          6000,
+        );
+        return;
+      }
+      videoStore.updateDownload(downloadId, {
+        deliveryId,
+        transport: undefined,
+        status: "manual",
+        statusText: "打开源链接",
+        abortController: null,
+        percent: 0,
+        loaded: 0,
+        total: 0,
+        speed: 0,
+        elapsed: 0,
+        averageSpeed: 0,
+        transferred: 0,
+        error: null,
+        progressKind: "bytes",
+        nativeAvailable: true,
+        observation: undefined,
+        transferElapsed: undefined,
+        timing: undefined,
+        workerBuild: undefined,
+      });
+      showToast(
+        "该直链未提供附件下载头，请点击下载卡片中的“打开源链接”手动保存",
+        "info",
+        6000,
+      );
+      return;
+    }
     videoStore.updateDownload(downloadId, {
       deliveryId,
       abortController: controller,
@@ -369,6 +530,7 @@ export function useMediaDownload({
       nativeAvailable: true,
       observation: undefined,
       transferElapsed: undefined,
+      timing: undefined,
       workerBuild: undefined,
     });
     const context = sourceContexts.get(downloadId);
@@ -390,8 +552,12 @@ export function useMediaDownload({
     try {
       const { downloadManager } = await import("../downloads/manager");
       checkAbort(controller.signal);
+      const metadata = context?.tbvideo?.item;
+      const tbvideoEvent = metadata && { platform: metadata.platform, pid: metadata.pid, vid: metadata.vid };
       const result = await downloadManager.run(
-        { id: deliveryId, url, filename, routes, sourceSizes, startedAt, probe, formatMime: context?.formatMime },
+        context?.tbvideo
+          ? { id: deliveryId, url: context.tbvideo.candidate, routes: [], filename, startedAt, formatMime: context.formatMime, tbvideo: true, tbvideoEvent }
+          : { id: deliveryId, url, filename, routes, sourceSizes, startedAt, probe, formatMime: context?.formatMime },
         controller.signal,
         (snapshot) => {
           if (
@@ -401,11 +567,17 @@ export function useMediaDownload({
             // Use this attempt's confirmed delivery, never a previous task error.
             cancellationReason = snapshot.status === "cancelled" && !snapshot.observation
               ? snapshot.error : undefined;
-            applyDelivery(snapshot);
+            applyDelivery(context?.tbvideo ? { ...snapshot, url } : snapshot);
           }
         },
       );
       if (!ownsTask(downloadId, controller)) return;
+      if (context?.tbvideo) {
+        // Every admitted Worker task (even an unclaimed one) owns its report.
+        // A pre-START fallback has no tbvideoAttempted marker.
+        if (result.status === "manual" && result.tbvideoAttempted === undefined) void reportTbvideo(tbvideoEvent, result);
+        return;
+      }
       // Finishing an older work must never alter a newly parsed work's player.
       if (
         result.status === "completed" &&
@@ -492,7 +664,11 @@ export function useMediaDownload({
       startedAt,
       false,
     );
+    let release: (() => void) | undefined;
     try {
+      videoStore.updateDownload(downloadId, { status: "queued", statusText: "等待分片或打包任务..." });
+      release = await acquireBufferedSlot(abortController.signal);
+      checkAbort(abortController.signal);
       videoStore.updateDownload(downloadId, {
         status: "downloading",
         statusText: "下载分片中...",
@@ -545,6 +721,7 @@ export function useMediaDownload({
       });
       showToast("分片下载失败：" + message, "error");
     } finally {
+      release?.();
       monitor.finish();
     }
   }
@@ -585,7 +762,12 @@ export function useMediaDownload({
       averageSpeed: 0,
     });
     const monitor = monitorTransfer(id, controller, Date.now(), false);
+    let release: (() => void) | undefined;
     try {
+      videoStore.updateDownload(id, { status: "queued", statusText: "等待分片或打包任务..." });
+      release = await acquireBufferedSlot(controller.signal);
+      checkAbort(controller.signal);
+      videoStore.updateDownload(id, { status: "preparing", statusText: "准备打包..." });
       // Only ZIP actions need this library. The import itself cannot be aborted,
       // so cancellation must settle the task and guard all work after it resolves.
       const { default: JSZip } = await abortable(
@@ -610,7 +792,9 @@ export function useMediaDownload({
       if (!ownsTask(id, controller)) return;
       if (!entries.length) throw new Error("没有可打包的资源");
       const zip = new JSZip();
-      for (const entry of entries) {
+      const entryCount = entries.length;
+      while (entries.length) {
+        const entry = entries.shift()!;
         checkAbort(controller.signal);
         // ArrayBuffer works consistently in browsers and Node's offline regression harness.
         const data =
@@ -645,7 +829,7 @@ export function useMediaDownload({
         abortController: null,
       });
       archiveRetries.delete(id);
-      showToast(`已打包 ${entries.length} 个文件`);
+      showToast(`已打包 ${entryCount} 个文件`);
     } catch (error) {
       if (
         videoStore.downloads.find((task) => task.id === id)?.abortController !==
@@ -673,6 +857,7 @@ export function useMediaDownload({
       });
       showToast("打包失败：" + message, "error");
     } finally {
+      release?.();
       monitor.finish();
     }
   }
@@ -683,6 +868,7 @@ export function useMediaDownload({
     title?: string;
     version: number;
     selectionKey: string;
+    platform?: string;
     resource?: {
       id: string;
       role: Resource["role"];
@@ -715,6 +901,7 @@ export function useMediaDownload({
       // must not change the user's selection or the displayed server default.
       selectionKey: JSON.stringify(choice),
       title: videoStore.resultData?.title,
+      platform: videoStore.resultData?.platform,
       version: videoStore.resultVersion,
     });
   };
@@ -838,7 +1025,8 @@ export function useMediaDownload({
         () => deadline.abort(new Error("解析准备超过 30 秒，请重试")),
         30000,
       );
-      const combined = AbortSignal.any([signal, deadline.signal]);
+      const linked = linkAbortSignals([signal, deadline.signal]);
+      const combined = linked.signal;
       try {
         item = await abortable(resolveItem(item, combined), combined);
       } catch (error) {
@@ -847,6 +1035,7 @@ export function useMediaDownload({
         throw error;
       } finally {
         clearTimeout(timeout);
+        linked.dispose();
       }
       checkAbort(signal);
       if (item.id !== snapshot.item.id || item.type !== snapshot.item.type)
@@ -929,7 +1118,12 @@ export function useMediaDownload({
       const filename = filenameFor(snapshot, suffixes.length && !suffixes.includes(extension) ? suffixes[0] : extension);
       videoStore.updateDownload(id, { filename });
       if (target.kind === "file") {
+        const hints = item.tbvideo;
+        const tbvideo = item.type === "video" && (snapshot.platform === "pipigx" || snapshot.platform === "zuiyou")
+          && hints?.platform === snapshot.platform ? hints : undefined;
+        const sourceId = target.source.id;
         sourceContexts.set(id, {
+          tbvideo: tbvideo && { item: tbvideo, candidate: sourceId && Object.hasOwn(tbvideo.sources, sourceId) ? tbvideo.sources[sourceId] : "" },
           routes: target.routes,
           selectedUrl: target.url,
           resultVersion: snapshot.version,
@@ -1006,6 +1200,9 @@ export function useMediaDownload({
     filename: string,
     retryId?: number,
   ) {
+    // These two video platforms only offer individually verified saves and the original player.
+    // ZIP's fetchBlob path cannot verify their ranged candidates.
+    if (snapshots.some(s => s.item.type === "video" && (s.platform === "pipigx" || s.platform === "zuiyou"))) return;
     const taskSnapshots = [...snapshots];
     await runArchive(
       filename,
@@ -1328,10 +1525,28 @@ export function useMediaDownload({
     // Opening a source is a recovery action. A stale click must not cancel a live transfer.
     if (
       task.observation ||
-      !["failed", "cancelled", "interrupted"].includes(task.status)
+      !["failed", "cancelled", "interrupted", "manual"].includes(task.status)
     )
       return;
     task.abortController?.abort();
+    if (!triggerBrowserDownload(task.url, task.filename, true)) {
+      videoStore.updateDownload(id, {
+        status: "manual",
+        statusText: "打开源链接",
+        abortController: null,
+        speed: 0,
+        averageSpeed: 0,
+        percent: 0,
+        error: null,
+        nativeAvailable: true,
+      });
+      showToast(
+        "浏览器限制了新标签页打开，请允许弹窗后再次点击“打开源链接”",
+        "warning",
+        6000,
+      );
+      return;
+    }
     videoStore.updateDownload(id, {
       status: "handed-off",
       statusText: "已交给浏览器",
@@ -1341,7 +1556,6 @@ export function useMediaDownload({
       percent: 0,
       error: null,
     });
-    triggerBrowserDownload(task.url, task.filename, true);
     showToast(
       "请在打开的页面或浏览器下载列表查看进度；本站无法确认下载是否完成",
       "info",

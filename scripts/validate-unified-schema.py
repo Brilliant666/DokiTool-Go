@@ -140,6 +140,45 @@ def higher(left, right):
     return abs(ratio_a / ratio_b - 1) <= .01 and all(x >= y for x, y in zip(a, b)) and a != b
 
 
+YTDLP_PLATFORMS = {'x', 'youtube', 'instagram'}
+
+
+def audio_only_file(variant):
+    meta = variant.get('metadata', {})
+    mime = meta.get('mime_type') or ''
+    return isinstance(mime, str) and mime.strip().lower().startswith('audio/')
+
+
+def audible_video_file(variant):
+    return not audio_only_file(variant) and variant.get('metadata', {}).get('has_audio') is True
+
+
+def unknown_audio_mp4_video_file(variant):
+    if audio_only_file(variant):
+        return False
+    meta = variant.get('metadata', {})
+    if 'has_audio' in meta or 'has_audio' in meta.get('field_conflicts', {}):
+        return False
+    mime = (meta.get('mime_type') or '').strip().lower()
+    container = (meta.get('container') or '').strip().lower()
+    ext = (meta.get('extension') or '').strip().lower()
+    return mime == 'video/mp4' and container == 'mp4' and ext == 'mp4'
+
+
+def default_eligible_files(platform, item_type, files):
+    if platform not in YTDLP_PLATFORMS or item_type != 'video':
+        return files
+    audible = [v for v in files if audible_video_file(v)]
+    if audible:
+        return audible
+    if platform == 'instagram':
+        unknown_mp4 = [v for v in files if unknown_audio_mp4_video_file(v)]
+        if unknown_mp4:
+            return unknown_mp4
+    non_audio = [v for v in files if not audio_only_file(v)]
+    return non_audio if non_audio else files
+
+
 def metadata_valid(metadata, role=None):
     conflicts = metadata.get('field_conflicts', {})
     definitions = SCHEMA['$defs']['MediaMetadata']['properties']
@@ -263,7 +302,8 @@ def validate_semantics(response):
             metadata_valid(variant.get('metadata', {}), role)
             delivery_valid(variant['delivery'], variant.get('metadata'))
             require((variant['delivery']['kind'] == 'pair') == (item['type'] == 'live_photo'), 'pair and live-photo type must agree')
-        files = [v for v in variants if v['delivery']['kind'] == 'file' and usable(v['delivery'], now)]
+        usable_files = [v for v in variants if v['delivery']['kind'] == 'file' and usable(v['delivery'], now)]
+        files = default_eligible_files(data.get('platform'), item['type'], usable_files)
         selected = item['default']
         if selected is None:
             require(not files, 'null default hides an eligible complete file')

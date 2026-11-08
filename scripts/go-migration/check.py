@@ -110,11 +110,13 @@ def main():
         php25_outputs = temp / "actual-go-php25.json"
         bilibili_outputs = temp / "actual-go-bilibili.json"
         xhs_transport_outputs = temp / "actual-go-xhs-transport.json"
+        ytdlp_outputs = temp / "actual-go-ytdlp.json"
         platform_outputs = {name: temp / f"actual-go-{name}.json" for name in PLATFORM_ORACLES}
         environment = dict(os.environ, DOKITOOL_GO_BASELINE_OUTPUT=str(outputs), DOKITOOL_GO_DOUYIN_OUTPUT=str(douyin_outputs),
                            DOKITOOL_GO_INTEGER_OUTPUT=str(integer_outputs), DOKITOOL_GO_PHP25_OUTPUT=str(php25_outputs),
                            DOKITOOL_GO_BILIBILI_OUTPUT=str(bilibili_outputs),
-                           DOKITOOL_GO_XHS_TRANSPORT_OUTPUT=str(xhs_transport_outputs))
+                           DOKITOOL_GO_XHS_TRANSPORT_OUTPUT=str(xhs_transport_outputs),
+                           DOKITOOL_GO_YTDLP_OUTPUT=str(ytdlp_outputs))
         environment.update({f"DOKITOOL_GO_{name.upper()}_OUTPUT": str(path) for name, path in platform_outputs.items()})
         command = [args.go, "test", "-json", "-count=1"]
         if args.race:
@@ -166,10 +168,17 @@ def main():
         for case in douyin["cases"]:
             actual.extend([case["normal"], case["debug"]])
             labels.extend([case["id"] + "/normal", case["id"] + "/debug"])
+        ytdlp_entries = json.loads(ytdlp_outputs.read_text(encoding="utf-8"))
+        if len(ytdlp_entries) != 8:
+            raise RuntimeError("Actual Go yt-dlp export inventory mismatch")
+        for index, envelope in enumerate(ytdlp_entries):
+            actual.append(envelope)
+            labels.append(f"ytdlp/{index}")
         outputs.write_text(json.dumps(actual, ensure_ascii=False) + "\n")
         schema_report = temp / "independent.json"
         independent = reported_check([sys.executable, str(ROOT / "scripts/validate-unified-schema.py"),
                                       str(outputs), "--output", str(schema_report)], schema_report)
+        run([sys.executable, "-B", "-X", "utf8", str(ROOT / "scripts/test-unified-schema.py")])
         passed = [event for event in events if event.get("Action") == "pass" and "Test" in event]
         by_package = collections.defaultdict(set)
         for event in passed:

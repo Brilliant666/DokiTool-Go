@@ -14,7 +14,7 @@ export async function verifyCredentialRecovery(cases) {
   const descriptors = Object.fromEntries(names.map(name => [name,Object.getOwnPropertyDescriptor(globalThis,name)]));
   const oldCreate = URL.createObjectURL, oldRevoke = URL.revokeObjectURL;
   const body = Buffer.from([0,0,0,20,102,116,121,112,105,115,111,109,0,0,0,0,105,115,111,109,1,2,3,4]);
-  let phase, payload, behavior, saves, wire, source, dl, store, anti;
+  let phase, payload, behavior, saves, wire, source, dl, store;
   const observations = [];
   Object.defineProperty(globalThis,'crypto',{configurable:true,value:webcrypto});
   globalThis.window = {setTimeout,clearTimeout,addEventListener(){},removeEventListener(){}};
@@ -44,7 +44,6 @@ export async function verifyCredentialRecovery(cases) {
     const {useVideoSelection} = await vite.ssrLoadModule('/src/composables/useVideoSelection.ts');
     const {useVideoParser} = await vite.ssrLoadModule('/src/composables/useVideoParser.ts');
     const {useMediaDownload} = await vite.ssrLoadModule('/src/composables/useMediaDownload.ts');
-    anti = (await vite.ssrLoadModule('/src/utils/antiReplay.js')).antiReplayInstance;
     for (const name of ['stale-first','fresh-first','host-changed','object-changed','content-changed']) {
       for (const mode of ['default','explicit']) {
         for (const transport of (name.endsWith('first') ? ['working','all-failed','cancel'] : ['working'])) {
@@ -87,7 +86,7 @@ export async function verifyCredentialRecovery(cases) {
     assert.equal(observations.length,18);
     return observations;
   } finally {
-    anti?.destroy(); await vite.close();
+    await vite.close();
     URL.createObjectURL=oldCreate; URL.revokeObjectURL=oldRevoke;
     for(const name of names) { if(descriptors[name]) Object.defineProperty(globalThis,name,descriptors[name]); else delete globalThis[name]; }
   }

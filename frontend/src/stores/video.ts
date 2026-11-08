@@ -123,6 +123,7 @@ export const useVideoStore = defineStore("video", () => {
           "cancelled",
           "failed",
           "handed-off",
+          "manual",
           "interrupted",
         ].includes(item.status),
     );

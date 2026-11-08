@@ -2,19 +2,21 @@
 
 后续 Go 开发在独立仓库 [Brilliant666/DokiTool-Go](https://github.com/Brilliant666/DokiTool-Go) 进行，维护者已将其公开用于开发协作。原 [Brilliant666/DokiTool](https://github.com/Brilliant666/DokiTool) 的 `main` 继续保留 PHP 开源版本，不整体合入 Go 迁移分支，也不以删除公开 PHP 为迁移目标。
 
-维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)；不部署 Go、不改变 PHP 生产，受控上游测试不等于真实平台或浏览器保存验收。
+维护、选择性同步及许可边界见 [MAINTENANCE.md](MAINTENANCE.md)。行为对照见 [mapping.md](mapping.md)，未来发布或切流前的回滚门槛见 [rollback.md](rollback.md)，各阶段证据见 [acceptance.md](acceptance.md)。抖音和 B 站的实现之后，维护者已授权[持续完成剩余七个平台](remaining-platforms.md)。该迁移阶段只做受控上游测试，不代表真实平台或浏览器保存验收。
 
 ## 当前交付与历史证据
 
-Go 集成基线经 [PR #20](https://github.com/Brilliant666/DokiTool-Go/pull/20) 合入 `main`：`7641d65d9bdb2016a0425e189b9b35f9567d6813`，tree `ed2d4314c57cdee2631fef8ee2d87691ce85762d`。合并 tree 与已验 `e92cfdf` 相同，但后者 CI 不冒称为 merge SHA 的新 CI。当前构建交接见 [#9](https://github.com/Brilliant666/DokiTool-Go/issues/9)，平台和网络待验边界见 [#13](https://github.com/Brilliant666/DokiTool-Go/issues/13)。仅合并源码，未部署、未切 PHP 生产。
+snap 的生产解析入口已是日本 Go。抖音原画的上海 pull 架构、#28 基线和 #30 后的运行组合见[生产版本与恢复入口](douyin-shanghai.md)；小红书实况及三平台无中继保存的范围见[下载说明](../DOWNLOADS.md#production-download-capabilities)。
 
-[验收记录](acceptance.md)、[机器报告](nine-platform-checks.json)、[B 站说明](bilibili.md) 和[五平台实施说明](remaining-platforms-implementation.md)中的 3835/994/918 等数字属于对应历史提交，不是每次构建的新门禁结果；不要为启动交接重复整套九平台矩阵。旧迁移自动调度不恢复；工程领取通过 #11 的唯一 dot 入口和明确任务进行。
+早期 Go 集成基线经 [PR #20](https://github.com/Brilliant666/DokiTool-Go/pull/20) 合入 `main`：`7641d65d9bdb2016a0425e189b9b35f9567d6813`，tree `ed2d4314c57cdee2631fef8ee2d87691ce85762d`。合并 tree 与已验 `e92cfdf` 相同，但后者 CI 不冒称为 merge SHA 的新 CI。后续抖音基线见 [#9](https://github.com/Brilliant666/DokiTool-Go/issues/9)，平台和网络待验边界见 [#13](https://github.com/Brilliant666/DokiTool-Go/issues/13)。PR #20 当时只合并源码，未切换生产。
+
+[验收记录](acceptance.md)、[机器报告](nine-platform-checks.json)、[B 站说明](bilibili.md) 和[五平台实施说明](remaining-platforms-implementation.md)中的 3835/994/918 等数字属于对应历史提交，不是每次构建的新门禁结果；不要为启动交接重复整套九平台矩阵。旧迁移自动调度不恢复；当前协作方式见 [#11 顶部说明](https://github.com/Brilliant666/DokiTool-Go/issues/11)。
 
 [小红书专项](xhs-page-transport.md)和[旧机器报告](xhs-page-online-checks.json)保留当时的真实原画与限制。旧单图长度/MOV 后缀观察不是当前版本必然仍失败的结论，亦不能直接改写为通过。后续下载/身份修正及限定真实验收见 PR #20/#9 的准确 SHA 记录；不外推所有平台、媒体与浏览器均通过。
 
 ## 当前运行方式
 
-Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**。基础解析和标准媒体传输沿用标准库；本专项另引入锁定的 `tls-client` / `fhttp` 页面传输依赖，版本及完整性以 `go.mod/go.sum` 为准。PHP 应用保留为现行生产入口及冻结参考；Go 使用独立的 loopback 端口做迁移验收，没有 PHP 回退调用。
+Go module 为 `github.com/Brilliant666/DokiTool-Go/backend`，位于 `backend/`；内部 import 使用该独立仓库路径。固定工具链为 Go **1.27.3**。基础解析和标准媒体传输沿用标准库；本专项另引入锁定的 `tls-client` / `fhttp` 页面传输依赖，版本及完整性以 `go.mod/go.sum` 为准。PHP 应用保留为冻结参考。下列本地 Go 示例使用独立的回环端口，没有 PHP 回退调用。
 
 ### 1. 固定版本构建
 
@@ -56,15 +58,44 @@ printf 'artifact_directory=%s\n' "$OUT"
 | `VITE_API_MODE=php` | 兼容统一 `/api/*` 的模式名，Go 同样使用；不是 PHP 进程依赖。`go` 无此模式，`secure` 需要本项目未实现的另一协议。 |
 | `VITE_API_BASE_URL=''` | 构建期留空，使浏览器请求同源；不要填 `/api` 路径。 |
 | `DEV_API_TARGET=http://127.0.0.1:9082` | Vite dev/preview 的 `/api` 代理目标，运行时给预览进程；默认值为旧 PHP 网关 8081，Go 必须显式覆盖。 |
+| `DOKITOOL_YTDLP_X_ENABLED` / `DOKITOOL_YTDLP_YOUTUBE_ENABLED` / `DOKITOOL_YTDLP_INSTAGRAM_ENABLED` | 可选启用 X / Twitter、YouTube、Instagram 适配器（均默认 `false`，生产默认不启用；不含 `t.co`、`instagr.am` 短链主机）。仅当共享 `internal/ytengine` 二进制预检（SHA-256 校验）通过后，才向运行时内存目录注册对应已启用平台；预检失败时不写入运行时目录，不影响原有九个平台。 |
+| `DOKITOOL_YTDLP_GATE_PORTS` | 显式逗号分隔的有限回环端口集合，与共享并发匹配；各平台共享租约，每次提取独立认证。日本部署必须配置经审查的固定集合，不能用未配置的动态回环模式。配置、最小 nft 差异及撤回边界见 [任务网关说明](ytdlp-gateway.md)。 |
+| `DOKITOOL_YTDLP_BINARY` | 指定已固定的 `yt-dlp 2026.10.26` 发行产物路径；未设置时在 `PATH` 中查找 `yt-dlp` / `yt-dlp.exe`。无论显式路径还是 `PATH` 发现，启动时均强制核对官方 `SHA2-256SUMS`。 |
+| `DOKITOOL_YTDLP_CONCURRENCY` / `DOKITOOL_YTDLP_TIMEOUT` / `DOKITOOL_YTDLP_PROXY` | 跨平台共享 `yt-dlp` 子进程总并发上限（默认 `2`，范围 `1–8`，X/YouTube/Instagram 共用同一信号量池；满额时新 `yt-dlp` 请求非阻塞立即返回 `429 RATE_LIMITED` 与 `Retry-After: 1` 的本地解析引擎繁忙提示，不挂起等待或占满公共 `/api/parse` 准入池）与单次解析超时（默认 `25s`，范围 `2s–40s`）。当前受控出站边界不支持 `DOKITOOL_YTDLP_PROXY` 外部代理：配置非空值时 `ytengine.NewFromEnv` 与 `NewHTTPSizeProber` 均会拒绝启用（`main` 不注册对应新平台，且不会自动改为绕过保护的直连）；保持空配置时，Go 大小探测复用 `internal/fetch.Executor`，子进程通过进程内回环安全网关强制执行平台域名白名单、`80`/`443` 端口限制及逐跳公网 DNS 校验与 IP 绑定。仅在新 `yt-dlp` 平台（`x` / `youtube` / `instagram`）启用平台作用域默认选择资格规则（原有九个平台默认选择与 `main` 完全一致）：YouTube 默认选中完整音画直链（`360p (含音频)`；`googlevideo.com` URL 参数仅代表附件尝试条件，跨域原生交付在有用户手势支持的隔离标签页 `_blank` + `noopener noreferrer` + `no-referrer` 中发起，绝不导航替换当前 DokiTool 页面，当可观测到缺少用户手势激活、`window.open` 不可用或点击事件最终被取消〔含 `document` 冒泡阶段 `preventDefault()`〕时回退为下载卡片显式“打开源链接”入口，不宣称 JS 能检测全部浏览器级弹窗策略），4K/2K/1080p 仅视频无声裸轨（`has_audio: false`，保留真实宽高元数据）与独立 M4A 音频保留在 `variants` 供显式选择并通过“打开源链接”手动保存；Instagram 视频单文件候选按“明确有声（`has_audio: true`）> 适配器已识别的音轨未知单文件 MP4（省略 `has_audio` 保持未知，不凭标签匹配）> 明确无声轨（`has_audio: false`）”确定默认项，且不覆盖用户显式选择。 |
 
 公网入口应运行单个 Go 实例，显式设置 `-client-identity caddy` 和独立服务端凭据 `SNAP_INGRESS_KEY`（32–512 字节、不含空格的可打印 ASCII）。Caddy 每次向 Go 转发时覆盖 `X-DokiTool-Client-IP` 为真实连接方 IP、`X-DokiTool-Edge-Key` 为双方约定的秘密。Go 仅接受来自回环、已认证且各只出现一次的头；身份配置错误时拒绝请求。直接回环调试默认根据 TCP 对端计数。签名媒体与入口认证使用不同密钥，密钥只从权限受限的运行配置注入。反代和应用日志均不得记录这些头、完整签名 URL、票据或 Referer。
 
 | 入口 | 单客户 / 全局突发 | 单客户 / 全局补充 | 单客户 / 全局在途 |
 |---|---|---|---|
-| parse、resolve、platforms 及六个旧接口 | 4 / 8 | 每分钟 12 / 60 | 1 / 2 |
-| 精确微博 relay | 12 / 24 | 每秒 1 / 2 | 2 / 2 |
+| parse、resolve 及六个旧接口 | 4 / 32 | 每秒 0.2 / 10 | 1 / 16 |
+| platforms 目录 | 20 / 128 | 每秒 5 / 100 | 4 / 64 |
+| 精确微博 relay | 12 / 24 | 每秒 1 / 2 | 2 / 12 |
+| tbvideo 结果上报 | 10 / 60 | 每秒 1 / 5 | 2 / 16 |
 
-两池独立，按 IPv4 地址或 IPv6 /64 分组。并发租约持有至处理返回，含流式传输、错误和取消。过载返回 429 和 `Retry-After`。每池最多记录 1024 个客户，闲置 600 秒可回收。限额在单进程内共享；重启会重置短期令牌，不能并行运行多份面向同一站点的实例。在入口代理前还有 CDN 时，须另行验证可信客户端地址链；直接采用客户端提交的 XFF 不满足上述要求。
+四池独立，按可信 IPv4 地址或 IPv6 /64 分组；目录请求不再占用解析名额。并发租约持有至处理返回，含流式传输、错误和取消。过载返回 429 和 `Retry-After`。每池默认最多记录 4096 个客户。表满时仅回收无在途且令牌已经补满的条目；活动请求和仍欠额度的客户不被驱逐。限额在单进程内共享；重启会重置短期令牌，不能并行运行多份面向同一站点的实例。在入口代理前还有 CDN 时，须另行验证可信客户端地址链；直接采用客户端提交的 XFF 不满足上述要求。
+
+### 可配置的生产容量
+
+以上是本版程序默认值，不是已经测出的生产吞吐量，也不表示现网已改限额。
+每个池分别配置单客户防刷和全局容量；不使用一个全站固定的两并发上限。
+环境变量在日本 Go 启动时读取，修改后按现有流程重启，无需重新编译。
+
+前缀为 `DOKITOOL_PARSE_`、`DOKITOOL_CATALOG_`、`DOKITOOL_WEIBO_`、
+`DOKITOOL_REPORT_`，均支持 `CLIENT_BURST`、`CLIENT_RPS`、
+`CLIENT_CONCURRENCY`、`GLOBAL_BURST`、`GLOBAL_RPS`、`GLOBAL_CONCURRENCY`。
+RPS 为每秒补充令牌数（允许小数）；并发和令牌速率分别生效。
+例如 `DOKITOOL_PARSE_GLOBAL_CONCURRENCY=32`、`DOKITOOL_PARSE_GLOBAL_RPS=20`
+可单独调整服务容量，而不放宽单 IP 限额。不能把它当作实测每秒完成 20 次解析的保证。
+`DOKITOOL_ADMISSION_MAX_CLIENTS` 设置各池客户表上限（默认 4096，最大 65536）。
+所有值必须为有限正数；并发必须为整数且单客户不超过全局。
+微博全局并发最大 12，与内部现有流名额一致；非法值启动失败，不静默关闭保护。
+启动日志记录实际生效的非敏感限额，便于区分程序默认与部署覆盖值。
+
+保留旧生产容量只需显式设置解析 `GLOBAL_CONCURRENCY=2`、`GLOBAL_BURST=8`、
+`GLOBAL_RPS=1` 和微博 `GLOBAL_CONCURRENCY=2`；不必回退媒体处理代码。
+本次源代码交付不修改线上环境变量，提升生产容量仍按维护者批准发布。
+结果上报只接受最多 768 字节且读取期限为 3 秒；其慢请求不能占住解析或目录池。
+上海长轮询、媒体流超时和浏览器下载并发均不改变。
 
 无通用 YAML 配置加载器、PHP 回退、内置前端静态服务器或公开任意 URL 代理。普通媒体仍由浏览器访问 CDN，API 同源代理不能保证 CDN 可访问或浏览器保存成功。
 
@@ -196,4 +227,20 @@ Python 校验依赖仍由 `scripts/requirements-validation.txt` 声明。导出�
 
 ## 阶段顺序
 
-骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；Go 发布和目标环境切流仍另行授权。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器仍在范围外；小红书新增页面传输已在独立 PR #5 获得实施授权，不追溯改变原迁移排除项，真实原画的专项结果见上文，生产切流仍需独立验收。
+骨架、公共合同、稳定身份、票据、抖音与 B 站实现保留为阶段成果。其余七平台的实现、审查和可执行离线验证已经完成，见 [任务结果](remaining-platforms.md)；当时的实施授权不含生产切流。公开 PHP `main` 持续保留。未来需要切流时，先完成相关行为、客户端消费与可恢复发布产物验收，再执行 [回滚门槛](rollback.md)。DASH 合流执行器仍在范围外；小红书新增页面传输已在独立 PR #5 获得实施授权，不追溯改变原迁移排除项，真实原画的专项结果见上文。此处保留迁移阶段记录，现网状态见本文开头。
+
+## 匿名增强管线（Instagram 三级回退与 `yt-dlp` Zipapp 零解压启动）
+
+在不引入用户登录态/Cookie 托管、不新增服务端媒体中继或转码合流的前提下，后端已落地两项匿名解析与运行稳定增强：
+
+1. **Instagram 免登录三级解析管线（`yt-dlp` -> Embed Captioned -> Anonymous GraphQL）**
+   - 当 `yt-dlp` 因匿名登录墙或上游变更未产出有效视频/图集格式时，`internal/platform/instagram` 在同一请求内按序回退到：
+     - **Tier 1（Embed Captioned）**：通过受控 `fetch.Executor` 请求 `https://www.instagram.com/p/{shortcode}/embed/captioned/`，提取 `contextJSON`（含反义 JSON 字符串）或 `<video>` / `<img class="EmbeddedMediaImage">` 直链。
+     - **Tier 2（Anonymous GraphQL）**：通过受控 `fetch.Executor` 发送匿名 `POST https://www.instagram.com/api/graphql`（`fb_api_req_friendly_name=PolarisPostActionLoadPostQueryQuery`，`doc_id=8845758582119845`，公开 Web App ID `936619743392459`，仅请求解析媒体所需的 `{"shortcode":"..."}` 变量，不含评论字段），解析 `xdt_shortcode_media` / `shortcode_media`。当 `doc_id`、`lsd` 或 App ID 失效返回 200 错误 JSON、HTML 或 4xx 时，平稳回退到原有 `yt-dlp` 错误分类。
+   - 原生支持单视频（`GraphVideo` / `XDTGraphVideo`，保持未知音轨语义不伪造 `has_audio: true`，命中 `#38` Instagram 默认资格规则）、单图（`GraphImage`）与多图/视频混排轮播图集（`GraphSidecar` -> `media.type=album`），全部走 SSRF 防护与 DNS 绑定的 `fetch.Executor`，并保持确定性 `private_source_identity` 以支持签名续期（`/api/resolve`）。本地信号量饱和（`LocalBusy`）时仍立即返回 `RATE_LIMITED`，不触发回退。
+
+2. **`yt-dlp` Python Zipapp 零解压启动、启动自检与陈旧临时目录清理**
+   - `internal/ytengine` 自动识别 SHA-256 校验通过的 `yt-dlp` 文件是否为官方 Python Zipapp（头部 `#!...python` + 内嵌 ZIP 归档）。若主机 `PATH` 存在可执行 `python3`，引擎初始化时先用 `python3 <zipapp> --version` 执行启动自检（要求输出严格等于固定版本 `2026.10.26`）；自检通过则直接通过 `python3 <zipapp>` 零解压运行（兼容 `0644` 只读权限文件，避免每次调用解压约 30MB 运行时），自检失败则记录启动日志并回退为直接执行已校验二进制（若直接执行亦不可用则禁用引擎并记录日志）。
+   - 在引擎初始化时执行 `CleanupStaleTempDirs` 自动清理系统临时目录中属于本服务当前 UID、非符号链接且修改时间超过 **2 小时**（`defaultStaleTempMaxAge = 2 * time.Hour`）的残留 `dokitool-ytdlp-*` 目录（不清理任何 `_MEI*` 或非本服务 UID 的目录）。
+
+

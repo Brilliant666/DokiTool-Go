@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { transformWithEsbuild } from 'vite';
 import { build as bundle } from 'esbuild';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fakeIndexedDB } from './helpers/download-idb.mjs';
 
 const source = (await bundle({ entryPoints: [fileURLToPath(new URL('../public/downloads/worker.js', import.meta.url))], bundle: true, write: false, format: 'iife' })).outputFiles[0].text;
@@ -25,9 +25,10 @@ function harness(fetcher, indexedDB) {
   ]);
   const context = vm.createContext({
     self: { location: new URL(origin), clients: { get: async key => { clientLookups.push(key); return clients.get(key); } }, addEventListener: (key, handler) => events.set(key, handler) },
-    fetch: fetcher, URL, Response, ReadableStream, AbortController, DOMException, TextDecoder,
+    fetch: fetcher, URL, Response, Blob, ReadableStream, AbortController, DOMException, TextDecoder,
     crypto: { randomUUID }, indexedDB,
     Date: class extends Date { static now() { return now; } },
+    performance: { now: () => now },
     setTimeout(callback, delay) { const handle = ++nextTimer; timers.set(handle, { callback, delay }); return handle; },
     clearTimeout: handle => timers.delete(handle),
   });
@@ -78,6 +79,72 @@ test('durable terminal survives a lost notification and a same-build execution r
   assert.equal(restored.status, 'completed'); assert.equal(restored.workerInstance, before.workerInstance);
   assert.equal(restored.revision, result.revision); assert.equal(restored.url, ''); assert.equal(fetches, 1);
   assert.equal(first.updates.some(value => value.status === 'completed'), false, 'the test deliberately loses the terminal notification');
+});
+
+test('terminal timing locates source and consumer waits by byte range and survives a Worker restart', async t => {
+  const db = fakeIndexedDB();
+  const delays = [73, 3000, 0, 765]; // First block, two more reads, then EOF.
+  const h = harness(async () => media([bytes[0], bytes[1], bytes[0]], 12, () => h.advance(delays.shift())), db);
+  t.after(() => h.close());
+  await h.admit(1);
+  const reader = (await h.download(1)).body.getReader();
+  await reader.read();
+  await reader.read();
+  h.advance(3400); // Browser holds the second chunk before asking for another.
+  await reader.read();
+  assert.equal((await reader.read()).done, true);
+  const result = await h.query(1);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.timing.firstBlockMs, 73);
+  const observed = Array.from(result.timing.windows, w => [w.from, w.to, w.ms, w.readMs, w.demandMs]);
+  assert.deepEqual(observed, [
+    [0, 8, 3000, 3000, 0],
+    [8, 12, 3400, 0, 3400],
+    [12, 12, 765, 765, 0],
+  ]);
+  const restored = harness(() => assert.fail('restoring timings must not fetch the media'), db);
+  t.after(() => restored.close());
+  assert.deepEqual(structuredClone((await restored.query(1)).timing), structuredClone(result.timing));
+});
+
+test('cancelling a pending source read keeps its elapsed wait and the last delivered offset', async t => {
+  let pulls = 0, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const h = harness(async () => new Response(new ReadableStream({
+    pull(controller) { if (++pulls === 1) controller.enqueue(bytes[0]); else entered(); },
+  }, { highWaterMark: 0 }), { headers: { 'content-type': 'video/mp4' } }));
+  t.after(() => h.close());
+  await h.admit(1);
+  const reader = (await h.download(1)).body.getReader();
+  await reader.read();
+  const interrupted = assert.rejects(reader.read(), { name: 'AbortError' });
+  await waiting;
+  h.advance(2700);
+  await h.cancel(1);
+  await interrupted;
+  const result = await h.query(1);
+  assert.equal(result.status, 'cancelled');
+  assert.equal(result.loaded, 4);
+  const last = result.timing.windows.at(-1);
+  assert.equal(last.to, 4); assert.equal(last.readMs, 2700); assert.equal(last.demandMs, 0);
+});
+
+test('long timing history preserves byte coverage and total wait with bounded snapshot size', async t => {
+  const count = 400;
+  const h = harness(() => media(Array(count).fill(bytes[0]), count * 4));
+  t.after(() => h.close());
+  await h.admit(1);
+  const reader = (await h.download(1)).body.getReader();
+  for (let i = 0; i < count; i++) { h.advance(2100); await reader.read(); }
+  assert.equal((await reader.read()).done, true);
+  const { windows } = (await h.query(1)).timing;
+  assert.ok(windows.length <= 129, 'history remains bounded after several compactions');
+  let end = 0, demandMs = 0;
+  for (const w of windows) {
+    assert.equal(w.from, end); assert.ok(w.to >= w.from);
+    end = w.to; demandMs += w.demandMs;
+  }
+  assert.equal(end, count * 4); assert.equal(demandMs, count * 2100);
 });
 
 test('same-build restart cannot adopt a durable active task or implicitly restart its stream', async t => {
@@ -524,7 +591,7 @@ test('finished elapsed time and average speed remain stable across later queries
 test('worker reports its build and separates total elapsed time from transfer speed', async t => {
   const h = harness(async () => media()); t.after(() => h.close());
   const ping = await h.send({ action: 'ping' });
-  assert.equal(ping.workerBuild, 'downloads-20261101.1');
+  assert.equal(ping.workerBuild, 'downloads-20261104.1');
   assert.equal(ping.capabilities.admission, true);
   await h.start(1, [], { startedAt: 995_000 });
   assert.equal((await h.query(1)).elapsed, 5);
@@ -923,4 +990,152 @@ test('live cancellation acknowledgement failure reports unknown, not cancelled',
   h.update(state('cancelled'));
   assert.equal(observed.at(-1), 'cancelled');
   assert.equal(h.api.hasStreamingTask(request.id), false);
+});
+
+const tbvideoUrl = "https://tbvideo.ixiaochuan.cn/zyvd/object";
+const mp4Fixture = await readFile(new URL("./fixtures/download/one-frame.mp4", import.meta.url));
+const digest = file => '"' + createHash("md5").update(file).digest("hex") + '"';
+function tbvideoResponse(body, extraHeaders = {}, status = 206) {
+  return new Response(body, { status, headers: {
+    "Content-Type": "video/mp4", "Content-Length": String(mp4Fixture.length), ETag: digest(mp4Fixture), ...extraHeaders,
+  } });
+}
+
+test('tbvideo waits for verified EOF before returning a named attachment, even with Content-Range hidden by CORS', async t => {
+  let streamController, pending;
+  const reading = new Promise(resolve => { pending = resolve; });
+  const h = harness(async (url, options) => {
+    assert.equal(url, tbvideoUrl);
+    assert.equal(options.mode, 'cors'); assert.equal(options.redirect, 'error');
+    assert.deepEqual({ ...options.headers }, { Range: "bytes=0-4194303" });
+    return tbvideoResponse(new ReadableStream({
+      start(controller) { streamController = controller; controller.enqueue(mp4Fixture.subarray(0, 10)); },
+      pull() { pending(); },
+    }));
+  });
+  t.after(() => h.close());
+  await h.start(1, [], { url: tbvideoUrl, tbvideo: true });
+  let returned = false;
+  const attachment = h.download(1).then(response => { returned = true; return response; });
+  await reading;
+  assert.equal(returned, false);
+  streamController.enqueue(mp4Fixture.subarray(10)); streamController.close();
+  const saved = await attachment;
+  assert.equal(saved.status, 200); assert.match(saved.headers.get('content-disposition'), /attachment;/);
+  assert.deepEqual(Buffer.from(await saved.arrayBuffer()), mp4Fixture);
+  const result = await h.query(1);
+  assert.equal(result.status, 'completed'); assert.equal(result.loaded, mp4Fixture.length);
+  assert.equal(result.tbvideoAttempted, true); assert.equal(result.url, '');
+});
+
+test('candidate failures release admission and fall back without an attachment or an original-host request', async t => {
+  const corrupt = Buffer.from(mp4Fixture); corrupt[25] ^= 1;
+  const cases = [
+    () => { throw new TypeError("Failed to fetch"); },
+    () => tbvideoResponse(mp4Fixture, {}, 200),
+    () => tbvideoResponse(mp4Fixture, { "Content-Range": `bytes 1-${mp4Fixture.length}/${mp4Fixture.length + 1}` }),
+    () => tbvideoResponse(mp4Fixture, { "Content-Length": "999999999" }),
+    () => tbvideoResponse(mp4Fixture, { ETag: 'W/' + digest(mp4Fixture) }),
+    () => tbvideoResponse(corrupt),
+    () => tbvideoResponse(mp4Fixture.subarray(0, -1)),
+    () => tbvideoResponse(new ReadableStream({ pull(controller) { controller.error(new Error('broken')); } })),
+  ];
+  for (const getResponse of cases) {
+    let count = 0;
+    const h = harness(async url => { count++; assert.equal(url, tbvideoUrl); return getResponse(); });
+    t.after(() => h.close());
+    await h.start(1, [], { url: tbvideoUrl, tbvideo: true });
+    const fallback = await h.download(1);
+    assert.equal(fallback.status, 204); assert.equal(fallback.body, null);
+    assert.equal(fallback.headers.get('content-disposition'), null);
+    const result = await h.query(1);
+    assert.equal(result.status, 'manual'); assert.equal(result.tbvideoAttempted, true);
+    assert.equal(result.error, undefined); assert.equal(count, 1);
+  }
+});
+
+test('candidate tasks reject a different original host, signed query or redirect routes before networking', async t => {
+  const h = harness(async () => { throw Error('unexpected network request'); });
+  t.after(() => h.close());
+  for (const url of ['https://web-v01.izuiyou.com/vid', tbvideoUrl + '?auth_key=test',
+    'http://tbvideo.ixiaochuan.cn/v', 'https://s@tbvideo.ixiaochuan.cn/v', 'https://tbvideo.ixiaochuan.cn/']) {
+    assert.ok((await h.start(1, [], { url, tbvideo: true })).error);
+  }
+  assert.ok((await h.start(1, ['https://web-v01.izuiyou.com/v'], { url: tbvideoUrl, tbvideo: true })).error);
+  await h.start(1, [], { url: tbvideoUrl, tbvideo: true });
+  h.tick(60_000);
+  const result = await h.query(1);
+  assert.equal(result.status, 'manual'); assert.equal(result.tbvideoAttempted, false);
+});
+
+test('multi-range delivery freezes total and object identity, with a metadata HEAD only for a hidden total', async t => {
+  const limit = 4 * 1024 * 1024;
+  // Include non-block-aligned reads so incremental MD5 spans many body chunks.
+  const object = Buffer.alloc(limit + 59, 0x92);
+  mp4Fixture.copy(object);
+  const etag = digest(object);
+  for (const mode of ['exposed', 'hidden', 'changed-total', 'changed-etag']) {
+    const requests = [], hidden = mode === 'hidden';
+    const h = harness(async (url, options) => {
+      assert.equal(url, tbvideoUrl);
+      if (options.method === 'HEAD') {
+        requests.push('HEAD');
+        return new Response(null, { headers: { 'Content-Length': String(object.length), ETag: etag } });
+      }
+      const [, a, b] = /^bytes=(\d+)-(\d+)$/.exec(options.headers.Range);
+      const start = Number(a), end = Number(b);
+      requests.push(options.headers.Range);
+      const chunk = object.subarray(start, end + 1);
+      const changedTotal = mode === 'changed-total' && start > 0;
+      const headers = { 'Content-Length': String(chunk.length),
+        ETag: mode === 'changed-etag' && start ? '"00000000000000000000000000000000"' : etag };
+      if (!hidden) headers['Content-Range'] = `bytes ${start}-${end}/${object.length + Number(changedTotal)}`;
+      return new Response(new ReadableStream({ start(controller) {
+        for (let at = 0; at < chunk.length; at += 65011) controller.enqueue(chunk.subarray(at, at + 65011));
+        controller.close();
+      } }), { status: 206, headers });
+    });
+    t.after(() => h.close());
+    await h.start(1, [], { url: tbvideoUrl, tbvideo: true });
+    const res = await h.download(1);
+    assert.deepEqual(requests, [`bytes=0-${limit - 1}`, ...(hidden ? ['HEAD'] : []), `bytes=${limit}-${object.length - 1}`]);
+    if (mode.startsWith('changed-')) {
+      assert.equal(res.status, 204); assert.equal(res.headers.has('Content-Disposition'), false);
+      assert.equal((await h.query(1)).status, 'manual');
+    } else {
+      assert.deepEqual(Buffer.from(await res.arrayBuffer()), object);
+      assert.equal((await h.query(1)).status, 'completed');
+    }
+  }
+});
+
+// The candidate buffers until verified. Preserve the existing two-minute
+// preparation budget rather than silently turning it into an unlimited wait.
+test('tbvideo preparation deadline cancels a pending read, returns no attachment and releases admission', async t => {
+  let waiting, calls = 0, cancelled = 0;
+  const entered = new Promise(resolve => { waiting = resolve; });
+  const h = harness(async url => {
+    calls++;
+    if (url !== tbvideoUrl) return media();
+    return tbvideoResponse(new ReadableStream({
+      start(controller) { controller.enqueue(mp4Fixture.subarray(0, 10)); },
+      pull() { waiting(); },
+      cancel() { cancelled++; },
+    }, { highWaterMark: 0 }));
+  });
+  t.after(() => h.close());
+  await h.start(1, [], { url: tbvideoUrl, tbvideo: true });
+  const pending = h.download(1);
+  await entered;
+  h.tick(120_000);
+  const response = await pending;
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.has('content-disposition'), false);
+  assert.equal(response.body, null);
+  assert.equal((await h.query(1)).status, 'manual');
+  assert.equal(cancelled, 1); assert.equal(calls, 1, 'deadline never retries or downloads the original host');
+  await h.admit(2);
+  assert.equal((await h.query(2)).delivery, 'ready');
+  assert.equal((await (await h.download(2)).arrayBuffer()).byteLength, 8);
+  assert.equal((await h.query(2)).status, 'completed');
 });

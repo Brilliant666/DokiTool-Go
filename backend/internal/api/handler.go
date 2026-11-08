@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -140,6 +141,11 @@ func send(w http.ResponseWriter, status int, payload unified.Object) {
 		status = 500
 		body = []byte(`{"schema_version":"1.0","code":"INTERNAL_ERROR","error":{"code":"INTERNAL_ERROR","message":"响应编码失败"}}`)
 	}
+	if unified.Str(payload["code"]) != "OK" {
+		if retryAfter, ok := unified.Numeric(unified.Map(payload["error"])["retry_after_seconds"]); ok && retryAfter >= 1 && w.Header().Get("Retry-After") == "" {
+			w.Header().Set("Retry-After", strconv.FormatInt(int64(retryAfter), 10))
+		}
+	}
 	w.Header().Del("Access-Control-Allow-Origin")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -170,6 +176,9 @@ func sendError(w http.ResponseWriter, status int, message string) {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.EscapedPath()
 	switch classify(path) {
+	case telemetry:
+		receiveTBVideoOutcome(w, r, tbvideoLogger)
+		return
 	case legacy:
 		sendError(w, 410, "接口已更新，请等待当前下载结束后刷新页面")
 		return
@@ -180,7 +189,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		sendError(w, 503, "微博播放服务尚未配置，请联系站点维护者")
 		return
-	case parser:
+	case parser, catalogRoute:
 	default:
 		sendError(w, 404, "接口不存在")
 		return

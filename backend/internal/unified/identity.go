@@ -64,6 +64,28 @@ var rawURLPattern = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([
 var domainLabelPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 var douyinSignedPath = regexp.MustCompile(`^/[a-f0-9]{32}/[a-f0-9]{8}(/video/tos/cn/tos-cn-[a-z0-9-]+/[A-Za-z0-9_-]+(?:/media-video-(?:hvc1|avc1))?/?)$`)
 
+// DouyinStoragePath identifies a signed CDN storage object across host/credential
+// changes. Only the observed video object shape is understood; unfamiliar
+// forms can continue through the established original probe without merging.
+func DouyinStoragePath(raw string) string {
+	if len(raw) > 8192 || MediaURL(raw) != raw || strings.Contains(raw, "\\") {
+		return ""
+	}
+	p, ok := splitRawURL(raw)
+	if !ok || p.scheme != "https" || p.userInfo || p.fragment != nil || p.port != nil && *p.port != 443 {
+		return ""
+	}
+	host := strings.ToLower(p.host)
+	if !strings.HasSuffix(host, ".douyinvod.com") && !strings.HasSuffix(host, ".zjcdn.com") {
+		return ""
+	}
+	match := douyinSignedPath.FindStringSubmatch(p.path)
+	if match == nil {
+		return ""
+	}
+	return strings.TrimSuffix(match[1], "/")
+}
+
 // Parse only URL components, retaining raw query/path bytes. net/url.Path is
 // decoded and would wrongly equate e.g. /aweme%2fv1/play with /aweme/v1/play.
 func splitRawURL(raw string) (rawURLParts, bool) {
@@ -182,6 +204,19 @@ func rawPercentDecode(value string) string {
 	return out.String()
 }
 
+func queryHasNonEmptyParam(query *string, wanted string) bool {
+	if query == nil || *query == "" {
+		return false
+	}
+	for _, entry := range strings.Split(*query, "&") {
+		key, val, ok := strings.Cut(entry, "=")
+		if ok && rawPercentDecode(key) == wanted && strings.TrimSpace(val) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // SourceIdentity removes only the credential fields with existing provider
 // evidence. The actual source URL remains untouched by this identity operation.
 func SourceIdentity(raw string) string {
@@ -212,6 +247,12 @@ func SourceIdentity(raw string) string {
 		credentials = []string{"Expires", "ssig", "KID"}
 	} else if host == "bilivideo.com" || strings.HasSuffix(host, ".bilivideo.com") {
 		credentials = []string{"deadline", "upsig"}
+	} else if (host == "googlevideo.com" || strings.HasSuffix(host, ".googlevideo.com")) && strings.TrimRight(p.path, "/") == "/videoplayback" && queryHasNonEmptyParam(p.query, "itag") {
+		credentials = []string{"expire", "sig", "lsig", "signature", "s", "ei", "ip", "ipbits", "mt", "n", "pot", "initcwndbps", "cps", "met", "mh", "mm", "mn", "ms", "mv", "mvi", "pl", "rms", "bui", "spc", "vprv", "sparams", "lsparams", "title"}
+	} else if (strings.HasSuffix(host, ".cdninstagram.com") || strings.HasSuffix(host, ".fbcdn.net")) && strings.Trim(p.path, "/") != "" {
+		credentials = []string{"oe", "oh", "_nc_sid", "_nc_ohc", "_nc_gid", "_nc_zt", "_nc_ht", "_nc_cat", "ccb", "efg", "edm"}
+	} else if (host == "video.twimg.com" || host == "pbs.twimg.com") && strings.Trim(p.path, "/") != "" {
+		credentials = []string{"expires", "signature", "token"}
 	}
 	if len(credentials) == 0 || p.query == nil {
 		return raw

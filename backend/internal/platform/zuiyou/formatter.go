@@ -3,12 +3,13 @@ package zuiyou
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/media/tbvideo"
 	"strconv"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
-func formatResponse(root *jsonNode) unified.Object {
+func formatResponse(root *jsonNode, save *tbvideo.Post) unified.Object {
 	post := root.child("data", "post")
 	if !post.isArray() || len(post.keys) == 0 {
 		return failure(404, "作品不存在或暂时不可用")
@@ -43,6 +44,7 @@ func formatResponse(root *jsonNode) unified.Object {
 				primary = unified.MediaURL(fields["url"])
 			}
 		}
+		save.Observe(key)
 		private = append(private, value)
 	}
 	pictures := unified.Array{}
@@ -83,7 +85,7 @@ func formatResponse(root *jsonNode) unified.Object {
 
 // The frozen public adapter hashes the upstream mapping key after the PHP
 // entry wire conversion. Display index and source URL never replace that ID.
-func adapt(raw unified.Object, source string, now int64) unified.Object {
+func adapt(raw unified.Object, source string, now int64, save *tbvideo.Post) unified.Object {
 	data := unified.SimpleData("zuiyou", raw, source, now)
 	private := unified.Slice(raw["private_videos"])
 	if len(private) == 0 {
@@ -100,6 +102,7 @@ func adapt(raw unified.Object, source string, now int64) unified.Object {
 			digest := sha256.Sum256([]byte(key))
 			id = "video-" + hex.EncodeToString(digest[:])[:24]
 		}
+		save.Bind(index, id, variants, unified.Map(value)["url"])
 		items = append(items, unified.Object{"id": id, "type": "video", "default": nil, "variants": variants, "resolve_url": unified.ResolveURL(source, id)})
 	}
 	if len(items) == 0 {
@@ -112,5 +115,6 @@ func adapt(raw unified.Object, source string, now int64) unified.Object {
 		}
 	}
 	data["items"] = items
+	save.Publish(data)
 	return data
 }

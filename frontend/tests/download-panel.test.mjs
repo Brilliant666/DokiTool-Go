@@ -89,7 +89,7 @@ async function mount(t, downloads = [], { storageBlocked = false, preference } =
   });
   const flush = async () => { await nextTick(); await nextTick(); };
   const nodes = predicate => descendants(root, node => predicate(node) && visible(node));
-  const toggle = () => nodes(node => node.type === 'button' && node.props['aria-expanded'] !== undefined)[0];
+  const toggle = () => nodes(node => node.type === 'button' && node.props['aria-controls'] === 'download-panel-list')[0];
   const panel = () => nodes(node => node.props['data-download-panel'] !== undefined)[0];
   const rows = () => nodes(node => node.props['data-download-id'] !== undefined);
   const row = id => rows().find(node => String(node.props['data-download-id']) === String(id));
@@ -117,6 +117,23 @@ async function mount(t, downloads = [], { storageBlocked = false, preference } =
     },
   };
 }
+
+test('completed stream timing exposes byte intervals and waits without source credentials', async t => {
+  const finished = task('one', 'completed', {
+    url: 'https://example.test/signed-private-source', workerBuild: 'worker-a',
+    timing: { firstBlockMs: 200, windows: [
+      { from: 0, to: 1000000, ms: 1000, readMs: 900, demandMs: 99 },
+      { from: 1000000, to: 1000000, ms: 2000, readMs: 0, demandMs: 2000 },
+    ] },
+  })
+  const view = await mount(t, [finished, task('legacy', 'completed')], { preference: 'expanded' })
+  assert.equal(view.button('分段计时', view.row('legacy')), undefined)
+  await view.click(view.button('分段计时', view.row('one')))
+  const [{ props: { value: report } }] = descendants(view.row('one'), node => node.type === 'textarea')
+  assert.match(report, /Worker worker-a · 传输完成\n首块等待 200 ms/)
+  assert.match(report, /0\t1000000\t1000\t1.00\t900\t99\n1000000\t1000000\t2000\t0.00\t0\t2000$/)
+  assert.doesNotMatch(report, /signed-private-source/)
+})
 
 test('thirteen restored cancellations start as one collapsed summary and expand into all history', async t => {
   const cancelled = Array.from({ length: 13 }, (_, index) => task(`cancel-${index}`, 'cancelled'));
