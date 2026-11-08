@@ -6,10 +6,13 @@
 # - Accepts ONLY a full 40-character hexadecimal commit SHA (no branch names or 'latest').
 # - Reads explicit paths, arguments, and URLs from /etc/dokitool/release.conf (0644, root-owned, no secrets)
 #   with zero fallback defaults in the script.
+# - Acquires an exclusive flock shared with ops/release/rollback.sh to prevent concurrent release operations.
 # - Compares active systemd ExecStart arguments against EXEC_ARGS before making any changes.
-# - Refuses to overwrite the currently active release SHA.
-# - Verifies BOTH release-manifest.json SHA-256 digests AND GitHub build provenance attestations
-#   (--signer-workflow and --source-ref refs/heads/main) before modifying disk state.
+# - Refuses to overwrite the currently active release SHA or any already-existing ${RELEASES_ROOT}/${TARGET_SHA} directory.
+# - Verifies all 4 artifacts via gh attestation verify (--signer-workflow and --source-ref refs/heads/main),
+#   then verifies all 3 artifact SHA-256 digests against release-manifest.json, then inspects all tar archive
+#   members (rejecting symlinks/hardlinks/devices, absolute paths, and '..') BEFORE extracting with
+#   --no-same-owner --no-same-permissions.
 # - Never reads, prints, or writes secret/token values or environment files.
 # - Preserves previous hashed frontend assets (/assets/*) across releases and never unregisters Service Workers.
 # - Verifies binary version/SHA-256, systemd active state, local listener, public /api/platforms,
@@ -54,6 +57,7 @@ PYTHON_BIN="${DOKITOOL_PYTHON_BIN:-python3}"
 
 STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dokitool-deploy-stage.XXXXXXXX")"
 cleanup_stage() {
+  flock -u 9 2>/dev/null || true
   rm -rf "$STAGE_DIR"
 }
 trap cleanup_stage EXIT INT TERM
@@ -179,6 +183,14 @@ while IFS= read -r line || [ -n "$line" ]; do
   esac
 done < "$RELEASE_CONF"
 
+LOCK_FILE="${DOKITOOL_LOCK_FILE:-${RELEASES_ROOT}/.release.lock}"
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "Error: another deploy or rollback operation is already holding lock ${LOCK_FILE}" >&2
+  exit 1
+fi
+
 RAW_EXEC_START="$("$SYSTEMCTL_BIN" show -p ExecStart "$SERVICE_NAME" 2>/dev/null || true)"
 if [ -z "$RAW_EXEC_START" ]; then
   echo "Error: unable to read ExecStart from systemctl show -p ExecStart ${SERVICE_NAME}" >&2
@@ -237,6 +249,11 @@ if [ "$ACTIVE_EXEC_PATH" = "${BACKEND_BIN_DIR}/dokitool-go" ] || \
   exit 1
 fi
 
+if [ -e "$RELEASE_TARGET_DIR" ] || [ -L "$RELEASE_TARGET_DIR" ]; then
+  echo "Error: target release directory ${RELEASE_TARGET_DIR} already exists; refusing to overwrite existing release directory (use ops/release/rollback.sh ${TARGET_SHA} instead)" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Phase 1: Download Release Assets into Isolated Staging Directory
 # ---------------------------------------------------------------------------
@@ -263,17 +280,27 @@ for asset in dokitool shanghai-resolver frontend-dist.tar.gz release-manifest.js
 done
 
 # ---------------------------------------------------------------------------
-# Phase 2: Gate 1 — Verify release-manifest.json and SHA-256 Digests
+# Phase 2: Gate 1 — Verify GitHub Build Provenance Attestations (Before Any Extraction)
 # ---------------------------------------------------------------------------
-log "Verifying release-manifest.json and artifact SHA-256 digests..."
-mkdir -p "${STAGE_DIR}/frontend-extracted"
-tar -xzf "${STAGE_DIR}/frontend-dist.tar.gz" -C "${STAGE_DIR}/frontend-extracted"
+log "Verifying GitHub build provenance attestations (--signer-workflow ${SIGNER_WORKFLOW} --source-ref ${SOURCE_REF})..."
+for asset in dokitool shanghai-resolver frontend-dist.tar.gz release-manifest.json; do
+  "$GH_BIN" attestation verify "${STAGE_DIR}/${asset}" \
+    --repo "$REPO" \
+    --signer-workflow "$SIGNER_WORKFLOW" \
+    --source-ref "$SOURCE_REF" >/dev/null
+done
+log "All 4 release artifacts passed gh attestation verify."
 
+# ---------------------------------------------------------------------------
+# Phase 3: Gate 2 — Verify Manifest & Artifact SHA-256, Inspect Archive Members, Then Extract
+# ---------------------------------------------------------------------------
+log "Verifying release-manifest.json, artifact SHA-256 digests, and archive member safety before extraction..."
 STAGE_DIR_ENV="$STAGE_DIR" TARGET_SHA_ENV="$TARGET_SHA" RELEASE_TAG_ENV="$RELEASE_TAG" "$PYTHON_BIN" - <<'PY'
 import hashlib
 import json
 import os
 import sys
+import tarfile
 from pathlib import Path
 
 stage = Path(os.environ["STAGE_DIR_ENV"])
@@ -313,6 +340,52 @@ for name in ("dokitool", "shanghai-resolver", "frontend-dist.tar.gz"):
         print(f"Error: size mismatch for {name}: got {fpath.stat().st_size}, want {expected_size}", file=sys.stderr)
         sys.exit(1)
 
+tar_path = stage / "frontend-dist.tar.gz"
+with tarfile.open(tar_path, "r:gz") as tf:
+    members = tf.getmembers()
+    if not members:
+        print("Error: frontend-dist.tar.gz is empty", file=sys.stderr)
+        sys.exit(1)
+    for m in members:
+        name = m.name
+        if not name:
+            print("Error: archive contains member with empty name", file=sys.stderr)
+            sys.exit(1)
+        if name.startswith("/") or name.startswith("\\"):
+            print(f"Error: archive member '{name}' uses an absolute path", file=sys.stderr)
+            sys.exit(1)
+        parts = name.replace("\\", "/").split("/")
+        if ".." in parts:
+            print(f"Error: archive member '{name}' contains '..' path traversal", file=sys.stderr)
+            sys.exit(1)
+        if m.issym() or m.islnk() or m.ischr() or m.isblk() or m.isfifo() or not (m.isreg() or m.isdir()):
+            print(f"Error: archive member '{name}' is not a regular file or directory (symlink/hardlink/device rejected)", file=sys.stderr)
+            sys.exit(1)
+PY
+
+mkdir -p "${STAGE_DIR}/frontend-extracted"
+tar -xzf "${STAGE_DIR}/frontend-dist.tar.gz" \
+  --no-same-owner \
+  --no-same-permissions \
+  -C "${STAGE_DIR}/frontend-extracted"
+
+STAGE_DIR_ENV="$STAGE_DIR" "$PYTHON_BIN" - <<'PY'
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+stage = Path(os.environ["STAGE_DIR_ENV"])
+manifest = json.loads((stage / "release-manifest.json").read_text(encoding="utf-8"))
+
+def sha256_path(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
 dist_root = stage / "frontend-extracted"
 manifest_dist = manifest.get("frontend_dist_files", {})
 if not isinstance(manifest_dist, dict) or not manifest_dist:
@@ -320,9 +393,13 @@ if not isinstance(manifest_dist, dict) or not manifest_dist:
     sys.exit(1)
 
 actual_dist = {}
-for fpath in sorted(p for p in dist_root.rglob("*") if p.is_file()):
-    rel = fpath.relative_to(dist_root).as_posix()
-    actual_dist[rel] = sha256_path(fpath)
+for fpath in sorted(dist_root.rglob("*")):
+    if fpath.is_symlink():
+        print(f"Error: extracted frontend/dist contains unexpected symlink {fpath}", file=sys.stderr)
+        sys.exit(1)
+    if fpath.is_file():
+        rel = fpath.relative_to(dist_root).as_posix()
+        actual_dist[rel] = sha256_path(fpath)
 
 if actual_dist != manifest_dist:
     print("Error: extracted frontend/dist files do not match release-manifest.json", file=sys.stderr)
@@ -330,19 +407,7 @@ if actual_dist != manifest_dist:
 PY
 
 EXPECTED_DOKITOOL_SHA256="$(sha256_file "${STAGE_DIR}/dokitool")"
-log "Manifest and per-file SHA-256 verification passed (dokitool=${EXPECTED_DOKITOOL_SHA256})."
-
-# ---------------------------------------------------------------------------
-# Phase 3: Gate 2 — Verify GitHub Build Provenance Attestations
-# ---------------------------------------------------------------------------
-log "Verifying GitHub build provenance attestations (--signer-workflow ${SIGNER_WORKFLOW} --source-ref ${SOURCE_REF})..."
-for asset in dokitool shanghai-resolver frontend-dist.tar.gz release-manifest.json; do
-  "$GH_BIN" attestation verify "${STAGE_DIR}/${asset}" \
-    --repo "$REPO" \
-    --signer-workflow "$SIGNER_WORKFLOW" \
-    --source-ref "$SOURCE_REF" >/dev/null
-done
-log "All 4 release artifacts passed gh attestation verify."
+log "Manifest, archive member safety, and per-file SHA-256 verification passed (dokitool=${EXPECTED_DOKITOOL_SHA256})."
 
 # ---------------------------------------------------------------------------
 # Phase 4: Record Pre-Deploy State for Atomic Rollback
@@ -411,6 +476,7 @@ rollback_to_previous() {
   "$SYSTEMCTL_BIN" daemon-reload || true
   stop_and_drain_service || true
   "$SYSTEMCTL_BIN" start "$SERVICE_NAME" || true
+  rm -rf "$RELEASE_TARGET_DIR"
   log "Rollback to previous release completed."
 }
 

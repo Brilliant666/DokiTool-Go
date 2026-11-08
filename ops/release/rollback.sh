@@ -6,6 +6,7 @@
 # - Accepts ONLY a full 40-character hexadecimal commit SHA already installed on disk.
 # - Reads explicit paths, arguments, and URLs from /etc/dokitool/release.conf (0644, root-owned, no secrets)
 #   with zero fallback defaults in the script.
+# - Acquires an exclusive flock shared with ops/release/deploy.sh to prevent concurrent release operations.
 # - Compares active systemd ExecStart arguments against EXEC_ARGS before making any changes.
 # - Verifies the installed binary SHA-256 against release-manifest.json (or verifies existing systemd drop-in
 #   reference and binary version for pre-Method-B releases) before switching.
@@ -43,6 +44,7 @@ PYTHON_BIN="${DOKITOOL_PYTHON_BIN:-python3}"
 
 STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dokitool-rollback-stage.XXXXXXXX")"
 cleanup_stage() {
+  flock -u 9 2>/dev/null || true
   rm -rf "$STAGE_DIR"
 }
 trap cleanup_stage EXIT INT TERM
@@ -167,6 +169,14 @@ while IFS= read -r line || [ -n "$line" ]; do
     PUBLIC_SITE_URL) PUBLIC_SITE_URL="$val" ;;
   esac
 done < "$RELEASE_CONF"
+
+LOCK_FILE="${DOKITOOL_LOCK_FILE:-${RELEASES_ROOT}/.release.lock}"
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "Error: another deploy or rollback operation is already holding lock ${LOCK_FILE}" >&2
+  exit 1
+fi
 
 RAW_EXEC_START="$("$SYSTEMCTL_BIN" show -p ExecStart "$SERVICE_NAME" 2>/dev/null || true)"
 if [ -z "$RAW_EXEC_START" ]; then

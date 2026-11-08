@@ -50,13 +50,16 @@
 ops/release/deploy.sh <40位完整SHA>
 ```
 
-1. **前置比对与双重校验门禁**：
+1. **前置比对、并发互斥锁与双重校验门禁**：
    - 只接受完整 40 位十六进制 SHA（拒绝分支名、`latest` 或短 SHA）。
+   - `ops/release/deploy.sh` 与 `ops/release/rollback.sh` 通过 `flock` 共享同一把排他锁（`/srv/dokitool-go/releases/.release.lock`），防止两次发布或回滚并发执行。
    - 读取当前 `systemctl show -p ExecStart dokitool-go.service` 的参数部分并与 `EXEC_ARGS` 比对；若不一致则打印差异并立即中止，防止静默改动线上启动参数。
-   - 若目标 SHA 已是当前活动版本（`ExecStart` 或 `FRONTEND_SYMLINK` 当前指向该 SHA），脚本立即拒绝执行，绝不对正在被 Caddy 读取的 `frontend/dist` 执行 `rm -rf`。
-   - 下载对应 `build-<短SHA>` 附件到隔离临时目录后，必须**同时通过**两项校验才允许修改磁盘：
-     - 附件及解压后 `dist/` 逐文件 SHA-256 与 `release-manifest.json` 完全一致，且 `source_sha` 等于目标 SHA；
-     - 全部附件通过 `gh attestation verify <file> --repo Brilliant666/DokiTool-Go --signer-workflow Brilliant666/DokiTool-Go/.github/workflows/release-build.yml --source-ref refs/heads/main`。
+   - 若目标 SHA 已是当前活动版本，或目标目录 `/srv/dokitool-go/releases/<sha>` 已经存在，脚本立即拒绝部署并提示改用 `ops/release/rollback.sh <sha>`，绝不覆盖既有历史版本目录或对正在被 Caddy 读取的 `frontend/dist` 执行 `rm -rf`。
+   - 下载对应 `build-<短SHA>` 附件到隔离临时目录后，严格按**先校验、再解压**的顺序执行：
+     1. 4 个附件全部通过 `gh attestation verify <file> --repo Brilliant666/DokiTool-Go --signer-workflow Brilliant666/DokiTool-Go/.github/workflows/release-build.yml --source-ref refs/heads/main`；
+     2. 核对 `release-manifest.json` 的 `source_sha`、`release_tag` 以及 3 个附件（`dokitool`、`shanghai-resolver`、`frontend-dist.tar.gz`）的 SHA-256 与字节大小完全一致；
+     3. 解压前列出 `frontend-dist.tar.gz` 全部成员，遇到非普通文件/非目录（符号链接、硬链接、设备文件等）、绝对路径或包含 `..` 的路径立即中止；
+     4. 使用 `tar -xzf ... --no-same-owner --no-same-permissions` 解压后，再逐文件核对 `dist/` SHA-256 与 `release-manifest.json` 完全一致。
      任一校验失败立即中止退出，现场不做任何改动。
 2. **同根不可变目录安装（`/srv/dokitool-go/releases/<sha>`）**：
    - 后端与前端统一安装在 `/srv/dokitool-go/releases/<sha>/` 下：`bin/dokitool-go`、`bin/shanghai-resolver`、`release-manifest.json`、`frontend/dist/`，并写入 `.method-b-release` 标记文件。
