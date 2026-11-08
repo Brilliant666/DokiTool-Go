@@ -2,6 +2,57 @@
 
 此文档与 `ops/examples/` 都是通用示例，不包含生产配置、账号或凭据。仓库提交不会触发线上更新。
 
+## 方式 B 发布与回滚（CI 按 SHA 构建产物，服务器指定 SHA 拉取切换）
+
+生产发布采用**方式 B**：由 GitHub Actions（`.github/workflows/release-build.yml`）按确切提交 SHA 构建不可变发布产物并签发来源证明（build provenance attestation），服务器在获得明确 SHA 发布授权后，通过 `ops/release/deploy.sh <40位SHA>` 手动指定完整 40 位 SHA 拉取、校验并切换。
+
+明确禁止以下两种做法：
+
+- **生产机自动跟随 `main`**：`main` 无自动上线授权机制，不允许配置任何定时轮询、webhook 或自动跟随分支更新。
+- **在线上工作区 `git pull` 后原地构建**：线上编译会与生产解析服务争抢 CPU 与内存、在生产机执行依赖脚本，且原地构建会覆盖已打开页面仍在引用的上一版带哈希静态资源（`/assets/*`）。
+
+### 1. CI 构建产物与来源证明（`.github/workflows/release-build.yml`）
+
+- **触发方式**：
+  - `push` 到 `main`；
+  - `workflow_dispatch` 手动指定完整 40 位 `sha`（仅允许 `main` 历史上的提交）。
+- **构建与前置测试**：
+  - 检出确切目标 SHA（`persist-credentials: false`），固定 Go `1.27.3`（`GOTOOLCHAIN=local`）与锁文件 `npm ci`。
+  - 发布前先执行 `go test ./cmd/dokitool` 与前端 `npm test`，任一失败即中止，不发布产物。
+  - 后端编译：`GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-X main.version=<sha>"`，产出 `./cmd/dokitool` 与 `./cmd/shanghai-resolver`。
+  - 前端编译：`VITE_API_MODE=php VITE_API_BASE_URL='' npm run build`，将 `frontend/dist/` 按文件名排序并规范化权限（目录 `0755`、文件 `0644`）与固定时间戳打包为 `frontend-dist.tar.gz`。
+- **Release 附件与来源证明**：
+  - 发布为 GitHub Prerelease，标签为 `build-<短SHA>`，包含 4 个附件：`dokitool`、`shanghai-resolver`、`frontend-dist.tar.gz`、`release-manifest.json`（含源码 SHA 与 tree、Go/Node 版本、各附件 SHA-256 及 `dist/` 逐文件 SHA-256）。
+  - 使用固定 commit SHA 的 `actions/attest-build-provenance` 为全部附件生成来源证明。
+
+### 2. 服务器指定 SHA 发布与自动回滚（`ops/release/deploy.sh`）
+
+脚本只进仓库版本管理，不自动安装到生产机，且绝不读取、打印或写入任何密钥或环境变量文件：
+
+```sh
+ops/release/deploy.sh <40位完整SHA>
+```
+
+1. **参数与双重校验门禁**：只接受完整 40 位十六进制 SHA（拒绝分支名、`latest` 或短 SHA）。下载对应 `build-<短SHA>` 附件到临时目录后，必须**同时通过**两项校验才允许修改磁盘：
+   - 附件及解压后 `dist/` 逐文件 SHA-256 与 `release-manifest.json` 完全一致，且 `source_sha` 等于目标 SHA；
+   - 全部附件通过 `gh attestation verify <file> --repo Brilliant666/DokiTool-Go`。
+   任一校验失败立即中止退出，现场不做任何改动。
+2. **后端与前端不可变目录安装**：
+   - 后端安装到 `/opt/dokitool/releases/<sha>/`，写入仅覆盖 `ExecStart` 的 systemd 配置片段（保留既有配置片段不变），执行 `daemon-reload`，等待在途请求排空停止（最长约 310 秒），确认旧进程退出后启动新进程。
+   - 前端解压到 `/srv/snap/releases/<sha>/`，**自动将上一版 `/assets/*` 带哈希静态文件并入新目录**（不覆盖同名新文件），再原子切换软链，不注销 Service Worker。
+3. **自带冒烟检查与失败自动回滚**：
+   - 核对 `dokitool version`、安装二进制 SHA-256 及 `/api/platforms?schema_version=1.0` 平台数量。
+   - 任一项失败立即自动恢复发布前的 systemd `ExecStart` 配置片段与前端软链并重启服务。
+   - 成功后清理历史版本，仅保留最近 5 个版本。
+
+### 3. 指定已安装版本回滚（`ops/release/rollback.sh`）
+
+```sh
+ops/release/rollback.sh <40位完整SHA>
+```
+
+核对本地 `/opt/dokitool/releases/<sha>/` 与 `/srv/snap/releases/<sha>/` 完整性及 `release-manifest.json` 摘要，将当前版本的带哈希静态资源并入目标版本 `assets/`，重写 `ExecStart` 配置片段并排空重启服务、原子切换前端软链，最后执行相同冒烟检查确认恢复成功。
+
 ## PR #11 发布收尾（2026-10-31，尚未执行）
 
 当前范围和证据以[统一验收收尾](UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout)及[严重事故复盘](incidents/INC-20261031-001-download-delivery.md)为准。生产已有bridge局部修复和诊断前端，PR内探针兼容/自动终态恢复尚未发布。正常生产下载已有用户三次约540 MB完整保存反馈，不再为发布重复测速；不把这些成功算作未发布修复生效。
