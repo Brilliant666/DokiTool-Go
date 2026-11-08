@@ -2,6 +2,86 @@
 
 此文档与 `ops/examples/` 都是通用示例，不包含生产配置、账号或凭据。仓库提交不会触发线上更新。
 
+## 方式 B 发布与回滚（CI 按 SHA 构建产物，服务器指定 SHA 拉取切换）
+
+生产发布采用**方式 B**：由 GitHub Actions（`.github/workflows/release-build.yml`）按确切提交 SHA 构建不可变发布产物并签发来源证明（build provenance attestation），服务器在获得明确 SHA 发布授权后，通过 `ops/release/deploy.sh <40位SHA>` 手动指定完整 40 位 SHA 拉取、校验并切换。
+
+明确禁止以下两种做法：
+
+- **生产机自动跟随 `main`**：`main` 无自动上线授权机制，不允许配置任何定时轮询、webhook 或自动跟随分支更新。
+- **在线上工作区 `git pull` 后原地构建**：线上编译会与生产解析服务争抢 CPU 与内存、在生产机执行依赖脚本，且原地构建会覆盖已打开页面仍在引用的上一版带哈希静态资源（`/assets/*`）。
+
+### 1. CI 构建产物与来源证明（`.github/workflows/release-build.yml`）
+
+- **触发方式**：
+  - `push` 到 `main`；
+  - `workflow_dispatch` 手动指定完整 40 位 `sha`（仅允许 `main` 历史上的提交）。
+- **构建与前置测试**：
+  - 检出确切目标 SHA（`persist-credentials: false`），固定 Go `1.27.3`（`GOTOOLCHAIN=local`）、`actions/setup-node` 显式设 `cache: ''`，并使用锁文件 `npm ci --ignore-scripts`。
+  - 发布前先执行 `go test ./cmd/dokitool` 与前端 `npm test`，任一失败即中止，不发布产物。
+  - 后端编译：`GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-X main.version=<sha>"`，产出 `./cmd/dokitool` 与 `./cmd/shanghai-resolver`。
+  - 前端编译：`VITE_API_MODE=php VITE_API_BASE_URL='' npm run build`，将 `frontend/dist/` 按文件名排序并规范化权限（目录 `0755`、文件 `0644`）与固定时间戳打包为 `frontend-dist.tar.gz`。
+- **Release 附件与来源证明（不可变产物）**：
+  - 发布为 GitHub Prerelease，标签为 `build-<短SHA>`，包含 4 个附件：`dokitool`、`shanghai-resolver`、`frontend-dist.tar.gz`、`release-manifest.json`（含源码 SHA 与 tree、Go/Node 版本、各附件 SHA-256 及 `dist/` 逐文件 SHA-256）。
+  - 若同名 `build-<短SHA>` Release 已存在，工作流直接报错退出，绝不使用 `--clobber` 覆盖既有产物。
+  - 使用固定 commit SHA 的 `actions/attest-build-provenance` 为全部附件生成来源证明。
+
+### 2. 生产机显式配置与 `gh` 最小只读凭据
+
+- **显式发布配置文件（`/etc/dokitool/release.conf`）**：
+  - `ops/release/deploy.sh` 与 `ops/release/rollback.sh` 不内置路径或端口兜底默认值，统一读取 `/etc/dokitool/release.conf`（权限 `0644`、`root:root` 所有，**严禁包含任何密钥或令牌**，示例见 `ops/examples/release.conf.example`）：
+    ```ini
+    RELEASES_ROOT=/srv/dokitool-go/releases
+    FRONTEND_SYMLINK=/srv/dokitool-go/releases/22522d154a43300872c78603af0532ab44ff1d64/frontend/dist
+    EXEC_ARGS=serve -listen 127.0.0.1:19963 -xhs-page-transport chrome131 -client-identity caddy
+    LOCAL_API_URL=http://127.0.0.1:19963
+    PUBLIC_SITE_URL=https://snap.dokitool.com
+    ```
+  - 缺少任一必需键、权限非 `0644` 或包含未知键时，脚本立即报错退出。
+- **生产机 `gh` 最小只读凭据**：
+  - 生产机上用于执行 `gh release download` 与 `gh attestation verify` 的 GitHub CLI（`gh`）仅配置限于本仓库（`Brilliant666/DokiTool-Go`）的细粒度只读令牌（仅授予 `contents:read` 权限，或公开仓库所需的最小只读凭据），不授予任何写权限、Workflow 触发权限或管理权限。
+  - 该只读凭据独立存放在发布脚本与 Git 仓库之外（例如管理员受保护的 `gh` 凭据配置或外部受控环境），脚本绝不读取、打印或写入任何令牌值。
+
+### 3. 服务器指定 SHA 发布与自动回滚（`ops/release/deploy.sh`）
+
+脚本只进仓库版本管理，在合并并获明确授权前不安装到生产机，且绝不读取、打印或写入任何密钥或环境变量文件：
+
+```sh
+ops/release/deploy.sh <40位完整SHA>
+```
+
+1. **前置比对、并发互斥锁与双重校验门禁**：
+   - 只接受完整 40 位十六进制 SHA（拒绝分支名、`latest` 或短 SHA）。
+   - `ops/release/deploy.sh` 与 `ops/release/rollback.sh` 通过 `flock` 共享同一把排他锁（`/srv/dokitool-go/releases/.release.lock`），防止两次发布或回滚并发执行。
+   - 读取当前 `systemctl show -p ExecStart dokitool-go.service` 的参数部分并与 `EXEC_ARGS` 比对；若不一致则打印差异并立即中止，防止静默改动线上启动参数。
+   - 若目标 SHA 已是当前活动版本，或目标目录 `/srv/dokitool-go/releases/<sha>` 已经存在，脚本立即拒绝部署并提示改用 `ops/release/rollback.sh <sha>`，绝不覆盖既有历史版本目录或对正在被 Caddy 读取的 `frontend/dist` 执行 `rm -rf`。
+   - 下载对应 `build-<短SHA>` 附件到隔离临时目录后，严格按**先校验、再解压**的顺序执行：
+     1. 4 个附件全部通过 `gh attestation verify <file> --repo Brilliant666/DokiTool-Go --signer-workflow Brilliant666/DokiTool-Go/.github/workflows/release-build.yml --source-ref refs/heads/main`；
+     2. 核对 `release-manifest.json` 的 `source_sha`、`release_tag` 以及 3 个附件（`dokitool`、`shanghai-resolver`、`frontend-dist.tar.gz`）的 SHA-256 与字节大小完全一致；
+     3. 解压前列出 `frontend-dist.tar.gz` 全部成员，遇到非普通文件/非目录（符号链接、硬链接、设备文件等）、绝对路径或包含 `..` 的路径立即中止；
+     4. 使用 `tar -xzf ... --no-same-owner --no-same-permissions` 解压后，再逐文件核对 `dist/` SHA-256 与 `release-manifest.json` 完全一致。
+     任一校验失败立即中止退出，现场不做任何改动。
+2. **同根不可变目录安装（`/srv/dokitool-go/releases/<sha>`）**：
+   - 后端与前端统一安装在 `/srv/dokitool-go/releases/<sha>/` 下：`bin/dokitool-go`、`bin/shanghai-resolver`、`release-manifest.json`、`frontend/dist/`，并写入 `.method-b-release` 标记文件。
+   - **自动将上一版 `/assets/*` 带哈希静态文件并入新版本 `frontend/dist/assets/`**（不覆盖同名新文件），再写入 `/etc/systemd/system/dokitool-go.service.d/90-release-exec.conf`（仅覆盖 `ExecStart`，保留既有 `28`–`38` 等配置片段不变），执行 `daemon-reload`、排空在途请求重启服务，并原子切换 `FRONTEND_SYMLINK`，不注销 Service Worker。
+3. **自带冒烟检查与失败自动回滚**：
+   - 切换后依次核对：
+     1. 新二进制 `dokitool-go version` 与 SHA-256；
+     2. `dokitool-go.service` 处于 `active`；
+     3. 本地监听 `LOCAL_API_URL` 响应正常，且公开入口 `PUBLIC_SITE_URL/api/platforms?schema_version=1.0` 返回 HTTP 200、`code: "OK"` 且平台数符合预期；
+     4. `PUBLIC_SITE_URL` 首页返回 HTTP 200，且首页引用的全部 `assets/*` 文件均返回 HTTP 200；
+     5. 切换前已存在的至少一个上一版 hashed chunk 经 `PUBLIC_SITE_URL/assets/*` 仍返回 HTTP 200。
+   - 任一项失败立即自动恢复发布前的 `90-release-exec.conf` 与 `FRONTEND_SYMLINK` 并重启服务。
+   - 成功后仅清理带 `.method-b-release` 标记且超过最近 5 个版本的目录；绝不触碰无 `.method-b-release` 标记的历史目录（如 `22522d...`、`f3daced...`、`ca2d7c5...`），且任何仍被 `dokitool-go.service.d/*.conf` 或 `FRONTEND_SYMLINK` 引用的目录一律保留。
+
+### 4. 指定已安装版本回滚（`ops/release/rollback.sh`）
+
+```sh
+ops/release/rollback.sh <40位完整SHA>
+```
+
+读取 `/etc/dokitool/release.conf` 并核对当前 `ExecStart` 参数与 `/srv/dokitool-go/releases/<sha>/` 下 `bin/dokitool-go`、`frontend/dist/index.html` 及 `release-manifest.json`（或既有 drop-in 引用与二进制 `version`），将当前版本的带哈希静态资源并入目标版本 `frontend/dist/assets/`，重写 `90-release-exec.conf` 并排空重启服务、原子切换 `FRONTEND_SYMLINK`，最后执行完整的公开入口与静态资源冒烟检查确认恢复成功。
+
 ## PR #11 发布收尾（2026-10-31，尚未执行）
 
 当前范围和证据以[统一验收收尾](UNIFIED-MEDIA-ACCEPTANCE.md#pr11-closeout)及[严重事故复盘](incidents/INC-20261031-001-download-delivery.md)为准。生产已有bridge局部修复和诊断前端，PR内探针兼容/自动终态恢复尚未发布。正常生产下载已有用户三次约540 MB完整保存反馈，不再为发布重复测速；不把这些成功算作未发布修复生效。

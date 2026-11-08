@@ -10,8 +10,8 @@
 
 | 内容 | 要求 | 验证方式 |
 | --- | --- | --- |
-| PHP 应用 | 已运行的完整发布目录，含入口、平台注册 JSON、库和许可证 | Git SHA、发布 ID、逐文件 SHA-256；不得把可变工作区当发布包 |
-| 前端产物 | 与该发布配套的 `frontend/dist/`，包含 Worker、bridge、task-store、版本化资源、SSG/SEO 文件 | 原构建命令、Node/依赖锁版本及产物哈希；不能仅保留前端源码 |
+| 应用与二进制产物 | 已运行的完整不可变发布目录（Go 方式 B 下为 `/srv/dokitool-go/releases/<sha>/bin/dokitool-go` 及同目录 `release-manifest.json`，历史 PHP 下为独立版本目录），含可执行程序或入口、平台注册 JSON、库和许可证 | 完整 40 位 Git SHA、`release-manifest.json` 逐文件 SHA-256 与 `gh attestation verify ... --signer-workflow Brilliant666/DokiTool-Go/.github/workflows/release-build.yml --source-ref refs/heads/main` 来源证明；严禁在线上可变 Git 工作区直接 `git pull` / 原地构建或把可变工作区当发布包 |
+| 前端产物 | 与该发布配套的 `/srv/dokitool-go/releases/<sha>/frontend/dist/` 解压目录（Caddy 静态软链 `/srv/dokitool-go/releases/22522d154a43300872c78603af0532ab44ff1d64/frontend/dist` 指向该目录），包含 Worker、bridge、task-store、并入的上一版版本化哈希资源（`/assets/*`）、SSG/SEO 文件 | CI 固定构建清单（`release-manifest.json` 中 `frontend_dist_files` 逐文件 SHA-256）与来源证明；不能仅保留前端源码或原地覆盖旧哈希资源 |
 | Caddy 配置 | 该站点实际使用的路由片段及关联配置引用，包含公开 JSON、微博媒体、内部 PHP、静态资源和下载路由 | 用目标版本 Caddy 验证配置；保留合并位置和恢复命令，不覆盖其他站点的总配置 |
 | FPM 配置 | 公共、内部、媒体池及服务启动引用，包含用户、socket、限制和环境变量引用 | PHP/FPM 版本与扩展清单、配置语法检查、服务/socket 恢复验证 |
 | 运行条件 | 目标 OS/架构、PHP/FPM/Caddy 版本、CA/DNS、服务账户、目录权限、出网隔离及服务管理方式 | 在对应验证环境重建并实际启动；仅一份 README 不算已可恢复 |
