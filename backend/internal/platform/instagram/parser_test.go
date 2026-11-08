@@ -210,3 +210,94 @@ func TestInstagramSourceIdentityPreservedAcrossCDNTokenRenewal(t *testing.T) {
 		t.Fatalf("expected Instagram source_id to change when asset path changes")
 	}
 }
+
+func TestParseInstagramReelDimensionlessUnknownMP4PreferredOverSilentDASH(t *testing.T) {
+	const now int64 = 1762300800
+	sourceURL := "https://www.instagram.com/reel/CTApqC8BGWd/"
+
+	// Matches real live CTApqC8BGWd response where top-level Width/Height are nil,
+	// progressive format "1" has no width/height/vcodec/acodec, and 5 DASH video-only
+	// formats have explicit dimensions and ACodec="none".
+	info := &ytengine.Info{
+		ID:        "CTApqC8BGWd",
+		Title:     "Video by mrcigar",
+		Uploader:  "RON GOH",
+		Thumbnail: "https://scontent-nrt1-1.cdninstagram.com/v/t51.71878-15/thumb.jpg",
+		Formats: []ytengine.Format{
+			{
+				FormatID: "dash-high-1",
+				URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    int64Ptr(720),
+				Height:   int64Ptr(1280),
+				VCodec:   "avc1.64001F",
+				ACodec:   "none",
+			},
+			{
+				FormatID: "dash-high-2",
+				URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash480.mp4",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    int64Ptr(480),
+				Height:   int64Ptr(854),
+				VCodec:   "avc1.64001F",
+				ACodec:   "none",
+			},
+			{
+				FormatID: "1",
+				URL:      "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/progressive_default.mp4",
+				Ext:      "mp4",
+				Protocol: "https",
+			},
+			{
+				FormatID: "dash-audio-1",
+				URL:      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/audio.mp4",
+				Ext:      "m4a",
+				Protocol: "https",
+				VCodec:   "none",
+				ACodec:   "mp4a.40.5",
+			},
+		},
+	}
+
+	parser := NewWithSizeProber(&stubExtractor{
+		enabled: true,
+		extract: func(ctx context.Context, rawURL string) (*ytengine.Info, error) {
+			return info, nil
+		},
+	}, func(ctx context.Context, rawURL string) (int64, bool) {
+		if strings.Contains(rawURL, "progressive_default.mp4") {
+			return 3362175, true
+		}
+		return 0, false
+	})
+
+	payload, err := parser.Parse(context.Background(), sourceURL, now)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	for _, debug := range []bool{false, true} {
+		view := unified.PublicView(payload, debug, now)
+		if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("ValidateEnvelopeAt(debug=%v) failed: %v", debug, err)
+		}
+		item := unified.Map(unified.Slice(unified.Map(view["data"])["items"])[0])
+		def := unified.Map(item["default"])
+		if def == nil || !strings.Contains(unified.Str(def["url"]), "progressive_default.mp4") {
+			t.Fatalf("debug=%v: expected progressive_default.mp4 as default over 720p silent DASH, got %+v", debug, def)
+		}
+		variants := unified.Slice(item["variants"])
+		if len(variants) != 4 {
+			t.Fatalf("debug=%v: expected 4 variants (2 silent DASH + 1 unknown MP4 + 1 M4A), got %d", debug, len(variants))
+		}
+		progVariant := unified.Map(variants[2])
+		if _, exists := unified.Map(progVariant["metadata"])["has_audio"]; exists {
+			t.Fatalf("debug=%v: expected unknown-audio progressive MP4 to omit has_audio", debug)
+		}
+		dash720 := unified.Map(variants[0])
+		if unified.Map(dash720["metadata"])["width"] != int64(720) || unified.Map(dash720["metadata"])["height"] != int64(1280) {
+			t.Fatalf("debug=%v: expected 720p silent DASH variant to retain true width/height", debug)
+		}
+	}
+}

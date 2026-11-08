@@ -153,12 +153,28 @@ def audible_video_file(variant):
     return not audio_only_file(variant) and variant.get('metadata', {}).get('has_audio') is True
 
 
+def unknown_audio_mp4_video_file(variant):
+    if audio_only_file(variant):
+        return False
+    meta = variant.get('metadata', {})
+    if 'has_audio' in meta or 'has_audio' in meta.get('field_conflicts', {}):
+        return False
+    mime = (meta.get('mime_type') or '').strip().lower()
+    container = (meta.get('container') or '').strip().lower()
+    ext = (meta.get('extension') or '').strip().lower()
+    return mime == 'video/mp4' and container == 'mp4' and ext == 'mp4'
+
+
 def default_eligible_files(platform, item_type, files):
     if platform not in YTDLP_PLATFORMS or item_type != 'video':
         return files
     audible = [v for v in files if audible_video_file(v)]
     if audible:
         return audible
+    if platform == 'instagram':
+        unknown_mp4 = [v for v in files if unknown_audio_mp4_video_file(v)]
+        if unknown_mp4:
+            return unknown_mp4
     non_audio = [v for v in files if not audio_only_file(v)]
     return non_audio if non_audio else files
 

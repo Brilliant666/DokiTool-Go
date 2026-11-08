@@ -451,6 +451,161 @@ class ContractTests(unittest.TestCase):
             }
             contract.validate(env)
 
+        # 8. Instagram 3-tier default preference: explicit audible > unknown-audio MP4 > explicit silent.
+        ig = deepcopy(yt)
+        ig['data']['platform'] = 'instagram'
+        ig['data']['source_url'] = 'https://www.instagram.com/reel/CTApqC8BGWd/'
+        v_ig_720_silent = {
+            'id': 'v-091f1be2ab5ae766f8148364',
+            'label': '720p (仅视频无声)',
+            'metadata': {
+                'width': 720, 'height': 1280, 'fps': 30, 'has_audio': False, 'hdr_type': 'sdr',
+                'video_bitrate_bps': 2403220, 'video_codec': 'avc1.64001F',
+                'container': 'mp4', 'extension': 'mp4', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-2857907234c796d9a6ef9c64', 'url': 'https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4'}],
+            },
+        }
+        v_ig_480_silent = {
+            'id': 'v-5d40cc431fa2398711e2ff5e',
+            'label': '480p (仅视频无声)',
+            'metadata': {
+                'width': 480, 'height': 854, 'fps': 30, 'has_audio': False, 'hdr_type': 'sdr',
+                'video_bitrate_bps': 352152, 'video_codec': 'avc1.64001F',
+                'container': 'mp4', 'extension': 'mp4', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-480-silent', 'url': 'https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash480.mp4'}],
+            },
+        }
+        v_ig_unknown_mp4 = {
+            'id': 'v-a698ab6367a002b2ccbf3d6c',
+            'label': '默认画质',
+            'metadata': {
+                'container': 'mp4', 'extension': 'mp4', 'hdr_type': 'sdr', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-c91288981d13aec803576095', 'size_bytes': 3362175, 'url': 'https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/progressive.mp4'}],
+            },
+        }
+        v_ig_audio_only = {
+            'id': 'v-32efb98f2fc1b1d67263d113',
+            'label': '仅音频 M4A (39 kbps)',
+            'metadata': {
+                'audio_bitrate_bps': 39105, 'audio_codec': 'mp4a.40.5', 'container': 'mp4', 'extension': 'm4a',
+                'has_audio': True, 'mime_type': 'audio/mp4', 'sample_rate_hz': 44100,
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-39962a259f58567d6c39058d', 'url': 'https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/audio.mp4'}],
+            },
+        }
+
+        # 8a. Real CTApqC8BGWd shape: unknown-audio MP4 accepted; 720p silent DASH or M4A audio-only rejected.
+        item(ig)['variants'] = [v_ig_720_silent, v_ig_480_silent, v_ig_unknown_mp4, v_ig_audio_only]
+        item(ig)['default'] = {
+            'variant_id': 'v-a698ab6367a002b2ccbf3d6c',
+            'source_id': 's-c91288981d13aec803576095',
+            'url': v_ig_unknown_mp4['delivery']['sources'][0]['url'],
+        }
+        contract.validate(ig)
+        for bad_id, bad_src, bad_url in [
+            ('v-091f1be2ab5ae766f8148364', 's-2857907234c796d9a6ef9c64', v_ig_720_silent['delivery']['sources'][0]['url']),
+            ('v-32efb98f2fc1b1d67263d113', 's-39962a259f58567d6c39058d', v_ig_audio_only['delivery']['sources'][0]['url']),
+        ]:
+            ig_bad = deepcopy(ig)
+            item(ig_bad)['default'] = {'variant_id': bad_id, 'source_id': bad_src, 'url': bad_url}
+            with self.assertRaisesRegex(ValueError, 'default does not identify an eligible complete file'):
+                contract.validate(ig_bad)
+
+        # 8b. Only silent video tracks on Instagram -> highest silent passes, lower silent rejected.
+        ig_only_silent = deepcopy(ig)
+        item(ig_only_silent)['variants'] = [v_ig_720_silent, v_ig_480_silent, v_ig_audio_only]
+        item(ig_only_silent)['default'] = {
+            'variant_id': 'v-091f1be2ab5ae766f8148364',
+            'source_id': 's-2857907234c796d9a6ef9c64',
+            'url': v_ig_720_silent['delivery']['sources'][0]['url'],
+        }
+        contract.validate(ig_only_silent)
+        ig_only_silent_low = deepcopy(ig_only_silent)
+        item(ig_only_silent_low)['default'] = {
+            'variant_id': 'v-5d40cc431fa2398711e2ff5e',
+            'source_id': 's-480-silent',
+            'url': v_ig_480_silent['delivery']['sources'][0]['url'],
+        }
+        with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
+            contract.validate(ig_only_silent_low)
+
+        # 8c. Only unknown-audio MP4 tracks on Instagram -> highest unknown-audio MP4 passes, lower rejected.
+        v_ig_unk_720 = deepcopy(v_ig_unknown_mp4)
+        v_ig_unk_720['id'] = 'v-ig-unk-720'
+        v_ig_unk_720['label'] = '720p'
+        v_ig_unk_720['metadata']['width'] = 720
+        v_ig_unk_720['metadata']['height'] = 1280
+        v_ig_unk_480 = deepcopy(v_ig_unknown_mp4)
+        v_ig_unk_480['id'] = 'v-ig-unk-480'
+        v_ig_unk_480['label'] = '480p'
+        v_ig_unk_480['metadata']['width'] = 480
+        v_ig_unk_480['metadata']['height'] = 854
+        v_ig_unk_480['delivery']['sources'][0]['id'] = 's-unk-480'
+        v_ig_unk_480['delivery']['sources'][0]['url'] = 'https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/unk480.mp4'
+        ig_only_unk = deepcopy(ig)
+        item(ig_only_unk)['variants'] = [v_ig_unk_480, v_ig_unk_720]
+        item(ig_only_unk)['default'] = {
+            'variant_id': 'v-ig-unk-720',
+            'source_id': 's-c91288981d13aec803576095',
+            'url': v_ig_unk_720['delivery']['sources'][0]['url'],
+        }
+        contract.validate(ig_only_unk)
+        ig_only_unk_low = deepcopy(ig_only_unk)
+        item(ig_only_unk_low)['default'] = {
+            'variant_id': 'v-ig-unk-480',
+            'source_id': 's-unk-480',
+            'url': v_ig_unk_480['delivery']['sources'][0]['url'],
+        }
+        with self.assertRaisesRegex(ValueError, 'default omits a higher eligible file'):
+            contract.validate(ig_only_unk_low)
+
+        # 8d. Explicit audible + unknown-audio MP4 + silent coexisting on Instagram -> explicit audible wins.
+        v_ig_audible = {
+            'id': 'v-ig-audible-540',
+            'label': '540p (含音频)',
+            'metadata': {
+                'width': 540, 'height': 960, 'has_audio': True,
+                'video_codec': 'avc1.64001F', 'audio_codec': 'mp4a.40.2',
+                'container': 'mp4', 'extension': 'mp4', 'mime_type': 'video/mp4',
+                'evidence': 'upstream',
+            },
+            'delivery': {
+                'kind': 'file',
+                'sources': [{'id': 's-ig-audible-540', 'url': 'https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/audible540.mp4'}],
+            },
+        }
+        ig_coexist = deepcopy(ig)
+        item(ig_coexist)['variants'] = [v_ig_720_silent, v_ig_unk_720, v_ig_audible, v_ig_audio_only]
+        item(ig_coexist)['default'] = {
+            'variant_id': 'v-ig-audible-540',
+            'source_id': 's-ig-audible-540',
+            'url': v_ig_audible['delivery']['sources'][0]['url'],
+        }
+        contract.validate(ig_coexist)
+        ig_coexist_wrong = deepcopy(ig_coexist)
+        item(ig_coexist_wrong)['default'] = {
+            'variant_id': 'v-ig-unk-720',
+            'source_id': 's-c91288981d13aec803576095',
+            'url': v_ig_unk_720['delivery']['sources'][0]['url'],
+        }
+        with self.assertRaisesRegex(ValueError, 'default does not identify an eligible complete file'):
+            contract.validate(ig_coexist_wrong)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

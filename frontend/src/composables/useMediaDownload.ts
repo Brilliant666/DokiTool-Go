@@ -44,19 +44,47 @@ function triggerBrowserDownload(
   url: string,
   filename: string,
   newTab = false,
-): void {
+): boolean {
+  const isolate = newTab || !url.startsWith("blob:");
+  if (isolate) {
+    const activation =
+      typeof navigator !== "undefined" ? navigator.userActivation : undefined;
+    if (activation && !activation.isActive) {
+      return false;
+    }
+    if (
+      typeof window !== "undefined" &&
+      "open" in window &&
+      typeof window.open !== "function"
+    ) {
+      return false;
+    }
+  }
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   // 无 Referer 直连，降低 CDN 防盗链拒绝概率
   anchor.referrerPolicy = "no-referrer";
-  if (newTab) {
+  if (isolate) {
     anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
   }
+  let clickEvent: Event | undefined;
+  let threw = false;
+  const onClick = (event: Event) => {
+    clickEvent = event;
+  };
+  anchor.addEventListener?.("click", onClick);
   document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+  try {
+    anchor.click();
+  } catch {
+    threw = true;
+  } finally {
+    anchor.removeEventListener?.("click", onClick);
+    anchor.remove();
+  }
+  return !threw && !clickEvent?.defaultPrevented;
 }
 
 function isCorsBlockedDirectCdn(rawUrl: string): boolean {
@@ -69,7 +97,9 @@ function isCorsBlockedDirectCdn(rawUrl: string): boolean {
   }
 }
 
-function isVerifiedDirectAttachment(rawUrl: string): boolean {
+// URL parameters only indicate that a direct attachment attempt can be made;
+// they never prove that the actual upstream HTTP response is a verified attachment.
+function canAttemptDirectAttachment(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
     const host = parsed.hostname.toLowerCase();
@@ -346,8 +376,7 @@ export function useMediaDownload({
       task.status === "manual" &&
       typeof task.url === "string" &&
       task.url.length > 0 &&
-      isCorsBlockedDirectCdn(task.url) &&
-      !isVerifiedDirectAttachment(task.url);
+      isCorsBlockedDirectCdn(task.url);
     let duplicate = matchingTasks().some(
       (task) =>
         (active(task.status) && !task.ownerGone) || isCorsBlockedManualTask(task),
@@ -398,12 +427,41 @@ export function useMediaDownload({
         });
         return;
       }
-      if (isVerifiedDirectAttachment(url)) {
+      if (canAttemptDirectAttachment(url)) {
+        if (triggerBrowserDownload(url, filename, true)) {
+          videoStore.updateDownload(downloadId, {
+            deliveryId,
+            transport: "browser_native",
+            status: "handed-off",
+            statusText: "已交给浏览器",
+            abortController: null,
+            percent: 0,
+            loaded: 0,
+            total: 0,
+            speed: 0,
+            elapsed: 0,
+            averageSpeed: 0,
+            transferred: 0,
+            error: null,
+            progressKind: "bytes",
+            nativeAvailable: true,
+            observation: undefined,
+            transferElapsed: undefined,
+            timing: undefined,
+            workerBuild: undefined,
+          });
+          showToast(
+            "已在新标签页尝试浏览器附件下载，请在浏览器下载列表或打开的标签页查看",
+            "info",
+            6000,
+          );
+          return;
+        }
         videoStore.updateDownload(downloadId, {
           deliveryId,
-          transport: "browser_native",
-          status: "handed-off",
-          statusText: "已交给浏览器",
+          transport: undefined,
+          status: "manual",
+          statusText: "打开源链接",
           abortController: null,
           percent: 0,
           loaded: 0,
@@ -420,9 +478,8 @@ export function useMediaDownload({
           timing: undefined,
           workerBuild: undefined,
         });
-        triggerBrowserDownload(url, filename, false);
         showToast(
-          "已交给浏览器直接保存附件，请在浏览器下载列表查看进度",
+          "浏览器限制了新标签页打开，请点击下载卡片中的“打开源链接”继续",
           "info",
           6000,
         );
@@ -1472,6 +1529,24 @@ export function useMediaDownload({
     )
       return;
     task.abortController?.abort();
+    if (!triggerBrowserDownload(task.url, task.filename, true)) {
+      videoStore.updateDownload(id, {
+        status: "manual",
+        statusText: "打开源链接",
+        abortController: null,
+        speed: 0,
+        averageSpeed: 0,
+        percent: 0,
+        error: null,
+        nativeAvailable: true,
+      });
+      showToast(
+        "浏览器限制了新标签页打开，请允许弹窗后再次点击“打开源链接”",
+        "warning",
+        6000,
+      );
+      return;
+    }
     videoStore.updateDownload(id, {
       status: "handed-off",
       statusText: "已交给浏览器",
@@ -1481,7 +1556,6 @@ export function useMediaDownload({
       percent: 0,
       error: null,
     });
-    triggerBrowserDownload(task.url, task.filename, true);
     showToast(
       "请在打开的页面或浏览器下载列表查看进度；本站无法确认下载是否完成",
       "info",

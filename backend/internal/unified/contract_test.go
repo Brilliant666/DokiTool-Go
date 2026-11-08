@@ -401,4 +401,105 @@ func TestPlatformScopedDefaultEligibilityAndUnknownVideoFields(t *testing.T) {
 			t.Fatalf("platform %s envelope failed validation: %v", platform, err)
 		}
 	}
+
+	// 4. Instagram 3-tier default preference: explicit audible > adapter-recognized unknown-audio MP4 > explicit silent.
+	igData := Clone(legacyData)
+	igData["platform"] = "instagram"
+	igData["source_url"] = "https://www.instagram.com/reel/CTApqC8BGWd/"
+	igItem := contractFirstItem(Object{"data": igData})
+	vIG720Silent := makeVariant("v-091f1be2ab5ae766f8148364", "720p (仅视频无声)", Object{
+		"width": 720, "height": 1280, "fps": 30, "has_audio": false, "hdr_type": "sdr",
+		"video_bitrate_bps": 2403220, "video_codec": "avc1.64001F",
+		"container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4")
+	vIG480Silent := makeVariant("v-5d40cc431fa2398711e2ff5e", "480p (仅视频无声)", Object{
+		"width": 480, "height": 854, "fps": 30, "has_audio": false, "hdr_type": "sdr",
+		"video_bitrate_bps": 352152, "video_codec": "avc1.64001F",
+		"container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash480.mp4")
+	vIGUnknownMP4 := makeVariant("v-a698ab6367a002b2ccbf3d6c", "默认画质", Object{
+		"container": "mp4", "extension": "mp4", "hdr_type": "sdr", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/progressive.mp4")
+	vIGAudioOnly := makeVariant("v-32efb98f2fc1b1d67263d113", "仅音频 M4A (39 kbps)", Object{
+		"audio_bitrate_bps": 39105, "audio_codec": "mp4a.40.5", "container": "mp4", "extension": "m4a",
+		"has_audio": true, "mime_type": "audio/mp4", "sample_rate_hz": 44100, "evidence": "upstream",
+	}, "https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/audio.mp4")
+
+	// 4a. Real CTApqC8BGWd shape: unknown-audio MP4 without width/height wins over 720p/480p silent DASH tracks in normal & debug.
+	igItem["variants"] = Array{vIG720Silent, vIG480Silent, vIGUnknownMP4, vIGAudioOnly}
+	finalIG := FinalizeData(igData, now)
+	for _, debug := range []bool{false, true} {
+		view := PublicView(finalIG, debug, now)
+		gotItem := contractFirstItem(view)
+		if got := Str(Map(gotItem["default"])["variant_id"]); got != "v-a698ab6367a002b2ccbf3d6c" {
+			t.Fatalf("instagram (debug=%v) expected unknown-audio MP4 default, got %q", debug, got)
+		}
+		if err := ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("instagram (debug=%v) failed validation: %v", debug, err)
+		}
+		// Unknown audio stays unknown (has_audio omitted) and silent tracks keep true width/height.
+		variantsOut := Slice(gotItem["variants"])
+		if _, exists := Map(Map(variantsOut[2])["metadata"])["has_audio"]; exists {
+			t.Fatalf("instagram (debug=%v) must not forge has_audio on unknown-audio MP4", debug)
+		}
+		if !Equal(Map(Map(variantsOut[0])["metadata"])["width"], 720) || !Equal(Map(Map(variantsOut[0])["metadata"])["height"], 1280) {
+			t.Fatalf("instagram (debug=%v) must preserve real width/height on silent DASH variant", debug)
+		}
+		// Pre-fix counterexample: selecting 720p silent when unknown-audio MP4 is present must be rejected.
+		wrongIG := Clone(view)
+		Map(contractFirstItem(wrongIG)["default"])["variant_id"] = "v-091f1be2ab5ae766f8148364"
+		Map(contractFirstItem(wrongIG)["default"])["source_id"] = "src-v-091f1be2ab5ae766f8148364"
+		Map(contractFirstItem(wrongIG)["default"])["url"] = "https://scontent-nrt1-1.cdninstagram.com/o1/v/t2/f2/m86/dash720.mp4"
+		if err := ValidateEnvelopeAt(wrongIG, now); err == nil {
+			t.Fatalf("instagram (debug=%v) must reject silent DASH default when unknown-audio MP4 is eligible", debug)
+		}
+	}
+
+	// 4b. Selection does not rely on "默认画质" label.
+	vIGUnknownCustomLabel := Clone(vIGUnknownMP4)
+	vIGUnknownCustomLabel["label"] = "Progressive Stream"
+	igItem["variants"] = Array{vIG720Silent, vIGUnknownCustomLabel}
+	if got := Str(Map(contractFirstItem(FinalizeData(igData, now))["default"])["variant_id"]); got != "v-a698ab6367a002b2ccbf3d6c" {
+		t.Fatalf("instagram unknown-audio MP4 selection must not depend on label, got %q", got)
+	}
+
+	// 4c. Only silent video tracks on Instagram -> selects highest-resolution silent track.
+	igItem["variants"] = Array{vIG720Silent, vIG480Silent, vIGAudioOnly}
+	finalIGOnlySilent := FinalizeData(igData, now)
+	if got := Str(Map(contractFirstItem(finalIGOnlySilent)["default"])["variant_id"]); got != "v-091f1be2ab5ae766f8148364" {
+		t.Fatalf("instagram only-silent expected 720p silent default, got %q", got)
+	}
+	if err := ValidateEnvelopeAt(finalIGOnlySilent, now); err != nil {
+		t.Fatalf("instagram only-silent failed validation: %v", err)
+	}
+
+	// 4d. Only unknown-audio MP4 tracks on Instagram -> selects highest-resolution unknown-audio MP4.
+	vIGUnknown720 := makeVariant("v-ig-unk-720", "720p", Object{
+		"width": 720, "height": 1280, "container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/unk720.mp4")
+	vIGUnknown480 := makeVariant("v-ig-unk-480", "480p", Object{
+		"width": 480, "height": 854, "container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/unk480.mp4")
+	igItem["variants"] = Array{vIGUnknown480, vIGUnknown720}
+	finalIGOnlyUnknown := FinalizeData(igData, now)
+	if got := Str(Map(contractFirstItem(finalIGOnlyUnknown)["default"])["variant_id"]); got != "v-ig-unk-720" {
+		t.Fatalf("instagram only-unknown expected v-ig-unk-720 default, got %q", got)
+	}
+	if err := ValidateEnvelopeAt(finalIGOnlyUnknown, now); err != nil {
+		t.Fatalf("instagram only-unknown failed validation: %v", err)
+	}
+
+	// 4e. Explicit audible + unknown-audio MP4 + silent coexisting on Instagram -> explicit audible wins.
+	vIGAudible := makeVariant("v-ig-audible-540", "540p (含音频)", Object{
+		"width": 540, "height": 960, "has_audio": true, "video_codec": "avc1.64001F", "audio_codec": "mp4a.40.2",
+		"container": "mp4", "extension": "mp4", "mime_type": "video/mp4", "evidence": "upstream",
+	}, "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/audible540.mp4")
+	igItem["variants"] = Array{vIG720Silent, vIGUnknown720, vIGAudible, vIGAudioOnly}
+	finalIGCoexist := FinalizeData(igData, now)
+	if got := Str(Map(contractFirstItem(finalIGCoexist)["default"])["variant_id"]); got != "v-ig-audible-540" {
+		t.Fatalf("instagram coexist expected explicit audible v-ig-audible-540 default, got %q", got)
+	}
+	if err := ValidateEnvelopeAt(finalIGCoexist, now); err != nil {
+		t.Fatalf("instagram coexist failed validation: %v", err)
+	}
 }
