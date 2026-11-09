@@ -8,7 +8,9 @@ import type {
   Attachment,
   Source,
   ToastType,
+  YouTubeHelperState,
 } from "../types/media";
+import { downloadViaYouTubeHelper } from "../utils/youtubeHelperCore";
 import { buildMediaFilename } from "../utils/videoFilename";
 import { fetchMediaBlob, linkAbortSignals, acquireBufferedSlot } from "../downloads/buffered";
 import {
@@ -130,6 +132,11 @@ export function useMediaDownload({
   resolveItem,
 }: UseMediaDownloadOptions) {
   const apiContext = { apiOrigin: apiConfig.baseUrl };
+  const currentYouTubeHelper = (): YouTubeHelperState | undefined =>
+    videoStore.resultData?.platform === "youtube"
+      ? ((videoStore.resultData.extra as Record<string, unknown> | undefined)
+          ?.youtube_helper as YouTubeHelperState | undefined)
+      : undefined;
   const freeze = <T>(value: T): T => JSON.parse(JSON.stringify(value));
   const effectiveSelectedUrl = () => selection.currentVideoUrl.value;
   const archiveRetries = new Map<number, () => Promise<void>>();
@@ -427,6 +434,16 @@ export function useMediaDownload({
         });
         return;
       }
+      const ytHelper = currentYouTubeHelper();
+      if (ytHelper && ytHelper.status !== "ready") {
+        videoStore.removeDownload(downloadId);
+        showToast(
+          ytHelper.message || "请先安装并启用 YouTube 下载助手脚本后再下载",
+          "warning",
+          5000,
+        );
+        return;
+      }
       if (canAttemptDirectAttachment(url)) {
         if (triggerBrowserDownload(url, filename, true)) {
           videoStore.updateDownload(downloadId, {
@@ -483,6 +500,86 @@ export function useMediaDownload({
           "info",
           6000,
         );
+        return;
+      }
+      if (ytHelper?.status === "ready") {
+        let lastBytes = 0;
+        let lastSampleAt = startedAt;
+        videoStore.updateDownload(downloadId, {
+          deliveryId,
+          abortController: controller,
+          status: "downloading",
+          statusText: "通过助手保存中（受 2 倍码率限速，预计耗时较长）...",
+          percent: 0,
+          loaded: 0,
+          total: 0,
+          speed: 0,
+          elapsed: 0,
+          averageSpeed: 0,
+          transferred: 0,
+          error: null,
+          progressKind: "bytes",
+          nativeAvailable: false,
+          observation: undefined,
+          transferElapsed: undefined,
+          timing: undefined,
+          workerBuild: undefined,
+        });
+        try {
+          const saved = await downloadViaYouTubeHelper({
+            url,
+            filename,
+            signal: controller.signal,
+            onProgress(detail) {
+              if (!ownsTask(downloadId, controller)) return;
+              const now = Date.now();
+              const elapsed = Math.max(0.001, (now - startedAt) / 1000);
+              const dt = Math.max(0.001, (now - lastSampleAt) / 1000);
+              const speed = Math.max(0, (detail.loaded - lastBytes) / dt);
+              lastBytes = detail.loaded;
+              lastSampleAt = now;
+              videoStore.updateDownload(downloadId, {
+                loaded: detail.loaded,
+                total: detail.total,
+                transferred: detail.loaded,
+                percent: detail.percent,
+                elapsed,
+                speed,
+                averageSpeed: detail.loaded / elapsed,
+                statusText: `通过助手保存中（${detail.percent}% · 受 2 倍码率限速）...`,
+              });
+            },
+          });
+          if (!ownsTask(downloadId, controller)) return;
+          const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
+          videoStore.updateDownload(downloadId, {
+            filename: saved?.filename || filename,
+            status: "completed",
+            statusText: "已完成",
+            percent: 100,
+            speed: 0,
+            elapsed,
+            abortController: null,
+          });
+          showToast(`已通过助手保存：${saved?.filename || filename}`);
+        } catch (error) {
+          if (!ownsTask(downloadId, controller)) return;
+          const cancelled =
+            controller.signal.aborted ||
+            (error instanceof Error && error.name === "AbortError");
+          const message =
+            error instanceof Error ? error.message : "通过助手保存失败";
+          videoStore.updateDownload(downloadId, {
+            status: cancelled ? "cancelled" : "failed",
+            statusText: cancelled ? "已取消" : "下载失败",
+            speed: 0,
+            error: cancelled ? null : message,
+            abortController: null,
+          });
+          if (!cancelled) {
+            showToast(message, "error");
+          }
+        }
         return;
       }
       videoStore.updateDownload(downloadId, {
@@ -1053,6 +1150,17 @@ export function useMediaDownload({
     retryId?: number,
     refresh = false,
   ): Promise<boolean> {
+    if (snapshot.platform === "youtube") {
+      const ytHelper = currentYouTubeHelper();
+      if (ytHelper && ytHelper.status !== "ready") {
+        showToast(
+          ytHelper.message || "请先安装并启用 YouTube 下载助手脚本后再下载",
+          "warning",
+          5000,
+        );
+        return false;
+      }
+    }
     const selected = fileSelectionKey(snapshot);
     if (selectionInFlight(selected, retryId)) {
       selectionBusyNotice();

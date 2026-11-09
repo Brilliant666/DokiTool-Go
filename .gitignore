@@ -197,6 +197,7 @@
 !/frontend/public/dokitool-icon.svg
 !/frontend/public/dokitool.svg
 !/frontend/public/downloads/
+!/frontend/public/helper/
 !/frontend/public/licenses/
 !/frontend/public/robots.txt
 !/frontend/public/sitemap.xml
@@ -246,6 +247,7 @@
 !/frontend/tests/result-layout.test.mjs
 !/frontend/tests/seo-contract.test.mjs
 !/frontend/tests/ui-download-contract.test.mjs
+!/frontend/tests/youtube-helper.test.mjs
 /ops/examples/*
 !/ops/examples/release.conf.example
 !/ops/examples/snap-access.caddy.example
@@ -468,6 +470,8 @@
 !/frontend/public/downloads/task-store.js
 !/frontend/public/downloads/tbvideo.js
 !/frontend/public/downloads/worker.js
+/frontend/public/helper/*
+!/frontend/public/helper/dokitool-youtube.user.js
 /frontend/public/licenses/*
 !/frontend/public/licenses/fontawesome-free-6.7.2.txt
 !/frontend/public/licenses/swiper-11.2.10.txt
@@ -542,6 +546,8 @@
 !/frontend/src/utils/rateLimit.js
 !/frontend/src/utils/segmentDownload.ts
 !/frontend/src/utils/videoFilename.ts
+!/frontend/src/utils/youtubeHelperCore.d.ts
+!/frontend/src/utils/youtubeHelperCore.js
 /frontend/tests/fixtures/*
 !/frontend/tests/fixtures/download/
 /frontend/tests/helpers/*
