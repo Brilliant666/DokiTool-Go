@@ -95,6 +95,28 @@ jobs:
         working-directory: frontend
         run: npm ci --ignore-scripts --registry=https://registry.npmjs.org --replace-registry-host=always
 
+      - name: Install pinned Deno 2.9.8
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/deno"
+          curl --fail --silent --show-error --location \
+            https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip \
+            --output "$RUNNER_TEMP/deno/deno.zip"
+          unzip -q -o "$RUNNER_TEMP/deno/deno.zip" -d "$RUNNER_TEMP/deno"
+          rm -f "$RUNNER_TEMP/deno/deno.zip"
+          echo "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7  $RUNNER_TEMP/deno/deno" | sha256sum --check --strict
+          chmod 0755 "$RUNNER_TEMP/deno/deno"
+          first_line="$("$RUNNER_TEMP/deno/deno" --version | head -n 1)"
+          printf '%s\n' "$first_line"
+          case "$first_line" in
+            "deno 2.9.8"|"deno 2.9.8 "*) ;;
+            *)
+              echo "Error: unexpected deno --version first line: $first_line" >&2
+              exit 1
+              ;;
+          esac
+          echo "DOKITOOL_DENO_BINARY=$RUNNER_TEMP/deno/deno" >> "$GITHUB_ENV"
+
       - name: Run pre-build Go CLI tests
         working-directory: backend
         env:
