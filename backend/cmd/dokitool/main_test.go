@@ -4,10 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/api"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
@@ -168,6 +172,96 @@ func TestYTDLPXConfiguration(t *testing.T) {
 			}
 			if c.Has("x") != tc.wantRegistered || (adapters["x"] != nil) != tc.wantRegistered {
 				t.Fatalf("catalog.Has(x)=%v adapter=%v, wantRegistered=%v", c.Has("x"), adapters["x"] != nil, tc.wantRegistered)
+			}
+		})
+	}
+}
+
+func TestYouTubeHelperConfiguration(t *testing.T) {
+	denoBin := strings.TrimSpace(os.Getenv("DOKITOOL_DENO_BINARY"))
+	if denoBin == "" {
+		if runnerTemp := strings.TrimSpace(os.Getenv("RUNNER_TEMP")); runnerTemp != "" {
+			candidate := filepath.Join(runnerTemp, "dokitool-validation", "bin", "deno")
+			if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+				denoBin = candidate
+			}
+		}
+	}
+	if denoBin == "" {
+		p, err := exec.LookPath("deno")
+		if err != nil || p == "" {
+			t.Fatal("deno v2.9.8 binary not found in DOKITOOL_DENO_BINARY or PATH")
+		}
+		denoBin = p
+	}
+	ejsDir := filepath.Join("..", "..", "internal", "platform", "youtube", "testdata", "ejs")
+
+	tests := []struct {
+		name           string
+		env            map[string]string
+		wantRegistered bool
+		wantErr        bool
+	}{
+		{
+			name:           "default-off",
+			env:            nil,
+			wantRegistered: false,
+			wantErr:        false,
+		},
+		{
+			name:           "explicit-false",
+			env:            map[string]string{"DOKITOOL_YOUTUBE_HELPER": "false"},
+			wantRegistered: false,
+			wantErr:        false,
+		},
+		{
+			name:           "invalid-bool",
+			env:            map[string]string{"DOKITOOL_YOUTUBE_HELPER": "auto"},
+			wantRegistered: false,
+			wantErr:        true,
+		},
+		{
+			name: "enabled-missing-assets-disables-helper-only",
+			env: map[string]string{
+				"DOKITOOL_YOUTUBE_HELPER": "true",
+				"DOKITOOL_DENO_BINARY":    filepath.Join(t.TempDir(), "missing-deno"),
+				"DOKITOOL_EJS_DIR":        ejsDir,
+			},
+			wantRegistered: false,
+			wantErr:        false,
+		},
+		{
+			name: "enabled-verified-assets",
+			env: map[string]string{
+				"DOKITOOL_YOUTUBE_HELPER": "true",
+				"DOKITOOL_DENO_BINARY":    denoBin,
+				"DOKITOOL_EJS_DIR":        ejsDir,
+			},
+			wantRegistered: true,
+			wantErr:        false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := catalog.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			h, err := api.New(c, nil, time.Now, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = configureYouTubeHelper(c, h, fetch.New(), func(k string) string { return tc.env[k] })
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("configureYouTubeHelper err=%v, wantErr=%v", err, tc.wantErr)
+			}
+			// Check whether /api/youtube/context returns 404 (disabled) vs non-404 (enabled, e.g. 409 without schema_version).
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/youtube/context", nil))
+			isEnabled := rec.Code != http.StatusNotFound
+			if isEnabled != tc.wantRegistered {
+				t.Fatalf("helper enabled=%v (status=%d), want %v", isEnabled, rec.Code, tc.wantRegistered)
 			}
 		})
 	}

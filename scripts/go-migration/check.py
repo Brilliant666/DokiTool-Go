@@ -117,6 +117,9 @@ def main():
                            DOKITOOL_GO_BILIBILI_OUTPUT=str(bilibili_outputs),
                            DOKITOOL_GO_XHS_TRANSPORT_OUTPUT=str(xhs_transport_outputs),
                            DOKITOOL_GO_YTDLP_OUTPUT=str(ytdlp_outputs))
+        venv_deno = Path(sys.executable).resolve().parent / "deno"
+        if venv_deno.is_file() and not environment.get("DOKITOOL_DENO_BINARY"):
+            environment["DOKITOOL_DENO_BINARY"] = str(venv_deno)
         environment.update({f"DOKITOOL_GO_{name.upper()}_OUTPUT": str(path) for name, path in platform_outputs.items()})
         command = [args.go, "test", "-json", "-count=1"]
         if args.race:

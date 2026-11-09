@@ -24,6 +24,7 @@ const (
 	legacy
 	telemetry
 	media
+	youtubeHelper
 )
 
 // Match the same exact escaped paths for admission and dispatch.
@@ -31,6 +32,8 @@ func classify(path string) route {
 	switch path {
 	case "/api/parse", "/api/resolve":
 		return parser
+	case "/api/youtube/context", "/api/youtube/finalize":
+		return youtubeHelper
 	case "/api/platforms":
 		return catalogRoute
 	case "/api/short_videos", "/api/douyin", "/api/ksjx", "/api/bilibili", "/api/xhsjx", "/api/toutiao":
@@ -254,7 +257,7 @@ func rejectAdmission(w http.ResponseWriter, r *http.Request, kind route, status,
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(retry))
 	payload := unified.Object{"code": status, "msg": message, "data": nil}
-	if kind == parser || kind == catalogRoute {
+	if kind == parser || kind == catalogRoute || kind == youtubeHelper {
 		payload = unified.ContractError(code, message, status == 429)
 		if status == 429 {
 			unified.Map(payload["error"])["retry_after_seconds"] = retry
