@@ -180,6 +180,13 @@ export interface Attachment {
   author?: Author;
   cover?: Source;
 }
+export interface YouTubeHelperState {
+  status: "ready" | "missing" | "outdated" | "login_required";
+  version?: string | null;
+  min_version?: string;
+  script_url?: string;
+  message?: string;
+}
 export interface UnifiedMedia {
   platform: string;
   content_id?: string;

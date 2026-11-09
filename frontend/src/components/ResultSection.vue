@@ -56,8 +56,30 @@ const context = { apiOrigin: apiConfig.baseUrl };
 const urlOf = (source) => (source ? sourceUrl(source, context) : "");
 const currentItem = computed(() => props.selection?.currentVideo.value || null);
 const target = computed(() => props.selection?.currentTarget.value || null);
+const youtubeHelper = computed(() =>
+  props.resultData?.platform === "youtube"
+    ? props.resultData?.extra?.youtube_helper || null
+    : null,
+);
+const isYouTubeHelperBlocked = computed(
+  () =>
+    !!youtubeHelper.value &&
+    ["missing", "outdated", "login_required"].includes(
+      youtubeHelper.value.status,
+    ),
+);
+const isYouTubeHelperReady = computed(
+  () => youtubeHelper.value?.status === "ready",
+);
+const youtubeHelperScriptUrl = computed(
+  () => youtubeHelper.value?.script_url || "/helper/dokitool-youtube.user.js",
+);
 const activeVideoUrl = computed(() =>
-  target.value?.kind === "file" ? target.value.url : "",
+  isYouTubeHelperBlocked.value
+    ? ""
+    : target.value?.kind === "file"
+      ? target.value.url
+      : "",
 );
 const activeVariant = computed(() =>
   target.value && "variant" in target.value
@@ -205,15 +227,18 @@ const liveUrl = (item, role) => {
   return resource ? urlOf(resourceSource(resource)) : "";
 };
 const attachmentUrl = (attachment) =>
-  attachment.resource.delivery.kind === "file"
+  !isYouTubeHelperBlocked.value && attachment.resource.delivery.kind === "file"
     ? urlOf(resourceSource(attachment.resource))
     : "";
 const targetMessage = computed(() =>
-  target.value && "message" in target.value
-    ? target.value.message
-    : target.value?.kind === "file"
-      ? ""
-      : "该版本需要处理后下载，暂不能在播放器直接播放",
+  isYouTubeHelperBlocked.value
+    ? youtubeHelper.value?.message ||
+      "请先按说明安装并启用 YouTube 助手脚本后下载"
+    : target.value && "message" in target.value
+      ? target.value.message
+      : target.value?.kind === "file"
+        ? ""
+        : "该版本需要处理后下载，暂不能在播放器直接播放",
 );
 const sourceHint = computed(() =>
   t(
@@ -830,6 +855,83 @@ onUnmounted(() => {
       >
     </div>
     <div
+      v-if="youtubeHelper?.status === 'login_required'"
+      class="rs-yt-helper-alert"
+      role="alert"
+    >
+      <div class="rs-yt-helper-alert-title">
+        <AppIcon class="fas fa-exclamation-triangle" />
+        <span>当前网络出口被 YouTube 要求验证，请更换节点后重试</span>
+      </div>
+      <p class="rs-yt-helper-alert-desc">
+        本站与助手脚本均采用无 Cookie 匿名请求，不提供也不要求登录 YouTube 账号或导入 Cookie。请切换至未被风控的网络出口节点后重新点击解析。
+      </p>
+    </div>
+    <div
+      v-else-if="
+        youtubeHelper?.status === 'missing' ||
+        youtubeHelper?.status === 'outdated'
+      "
+      class="rs-yt-helper-card"
+      role="region"
+      aria-label="YouTube 下载助手安装说明"
+    >
+      <div class="rs-yt-helper-card-hd">
+        <AppIcon class="fas fa-download" />
+        <span>{{
+          youtubeHelper.status === "outdated"
+            ? `YouTube 下载助手脚本需要更新（当前 v${youtubeHelper.version || "未知"}，要求 v${youtubeHelper.min_version || "1.0.0"}+）`
+            : "需要安装 YouTube 下载助手脚本"
+        }}</span>
+      </div>
+      <p class="rs-yt-helper-card-intro">
+        YouTube 媒体直链绑定请求方网络出口 IP，本站不再提供绑定服务器 IP 的下载链接。请按以下步骤在浏览器中安装并启用用户脚本：
+      </p>
+      <ol class="rs-yt-helper-steps">
+        <li>
+          <strong>安装脚本管理器扩展：</strong>Chrome / Edge 请安装
+          <strong>Tampermonkey（篡改猴）</strong>，Firefox 请安装
+          <strong>Violentmonkey（暴力猴）</strong>。
+        </li>
+        <li>
+          <strong>在 Chrome 中打开「允许用户脚本」：</strong>在 Chrome / Edge
+          地址栏打开 <code>chrome://extensions</code>，点击 Tampermonkey 的「详情」，开启<strong>「允许用户脚本」</strong>（Allow User Scripts）开关（或开启右上角开发者模式）。
+        </li>
+        <li>
+          <strong>{{
+            youtubeHelper.status === "outdated"
+              ? "更新本站助手脚本："
+              : "安装本站助手脚本："
+          }}</strong>点击下方按钮打开脚本地址完成安装或更新，随后刷新本页并重新点击「开始解析」。
+        </li>
+      </ol>
+      <div class="rs-yt-helper-actions">
+        <a
+          :href="youtubeHelperScriptUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="rs-btn rs-btn--primary rs-yt-helper-install-link"
+        >
+          <AppIcon class="fas fa-download" />
+          <span>{{
+            youtubeHelper.status === "outdated"
+              ? "更新 YouTube 助手脚本 (/helper/dokitool-youtube.user.js)"
+              : "安装 YouTube 助手脚本 (/helper/dokitool-youtube.user.js)"
+          }}</span>
+        </a>
+      </div>
+    </div>
+    <div
+      v-else-if="isYouTubeHelperReady"
+      class="rs-yt-helper-notice"
+      role="status"
+    >
+      <AppIcon class="fas fa-info-circle" />
+      <span>
+        YouTube 助手已就绪（v{{ youtubeHelper.version }}）：360p 音画合一由浏览器原生附件直下；仅视频轨（如 1080p）和 M4A 音频由助手保存，受 2 倍码率限速，预计耗时较长。
+      </span>
+    </div>
+    <div
       class="rs-main"
       :class="{ 'rs-main--align-details': hasDetailsBaseline }"
       :style="detailsLayoutStyle"
@@ -852,6 +954,7 @@ onUnmounted(() => {
               :key="playerKey"
               :data-playback-key="playerKey"
               :src="activeVideoUrl"
+              :preload="resultData?.platform === 'youtube' ? 'none' : undefined"
               controls
               class="rs-music-player"
               @error="updatePlaybackStatus($event, true)"
@@ -863,6 +966,7 @@ onUnmounted(() => {
               ref="videoEl"
               :data-playback-key="playerKey"
               :src="activeVideoUrl || undefined"
+              :preload="resultData?.platform === 'youtube' ? 'none' : undefined"
               controls
               referrerpolicy="no-referrer"
               class="rs-video"
@@ -893,6 +997,7 @@ onUnmounted(() => {
               @click="emit('download-main')"
               class="rs-btn rs-btn--primary"
               :disabled="
+                isYouTubeHelperBlocked ||
                 isResolving ||
                 target?.kind === 'unsupported' ||
                 target?.kind === 'unavailable' ||
@@ -1394,6 +1499,7 @@ onUnmounted(() => {
               <button
                 @click="emit('download-music', attachment)"
                 class="rs-btn rs-btn--primary rs-btn--sm rs-btn--block"
+                :disabled="isYouTubeHelperBlocked"
               >
                 <AppIcon class="fas fa-download" />{{
                   locale === "en" ? "Download" : "下载附件"
@@ -3131,4 +3237,78 @@ onUnmounted(() => {
 }
 
 /* Dark Mode：复制 Toast 随 .rs 内 token 自动翻转，无需单独覆盖 */
+.rs-yt-helper-card,
+.rs-yt-helper-alert,
+.rs-yt-helper-notice {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--r-xl);
+  background: var(--c-bg-elevated);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--sh-sm);
+}
+.rs-yt-helper-alert {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.06);
+}
+.rs-yt-helper-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: var(--c-danger);
+  margin-bottom: 0.375rem;
+}
+.rs-yt-helper-alert-desc {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--c-fg-2);
+  line-height: 1.6;
+}
+.rs-yt-helper-card-hd {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--c-fg);
+  margin-bottom: 0.5rem;
+}
+.rs-yt-helper-card-intro {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--c-fg-2);
+  line-height: 1.6;
+}
+.rs-yt-helper-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: var(--c-fg-2);
+  line-height: 1.75;
+}
+.rs-yt-helper-steps code {
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--r-sm);
+  background: var(--c-bg-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+.rs-yt-helper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.rs-yt-helper-install-link {
+  text-decoration: none;
+}
+.rs-yt-helper-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  color: var(--c-fg-2);
+  border-color: rgba(108, 92, 231, 0.25);
+  background: rgba(108, 92, 231, 0.05);
+}
 </style>
