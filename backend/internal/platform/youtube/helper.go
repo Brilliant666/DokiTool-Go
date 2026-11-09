@@ -24,7 +24,7 @@ const (
 	// TVHTML5ClientName and TVHTML5ClientVersion are the only allowed Innertube
 	// client parameters exposed by /api/youtube/context in Phase 1.
 	TVHTML5ClientName    = "TVHTML5"
-	TVHTML5ClientVersion = "7.20260707.07.00"
+	TVHTML5ClientVersion = "5.20260707"
 
 	// MaxFinalizeBodyBytes caps POST /api/youtube/finalize request bodies at 512 KiB.
 	MaxFinalizeBodyBytes = 512 << 10
