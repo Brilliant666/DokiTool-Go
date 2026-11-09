@@ -151,6 +151,9 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := configureYouTubeHelper(c, handler, executor, os.Getenv); err != nil {
+		return err
+	}
 	// The route is present even without a configured key, where it returns the
 	// PHP-compatible legacy 503 media envelope without issuing network calls.
 	handler.SetWeiboRelay(weibo.NewMediaRelay(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
@@ -315,5 +318,38 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 		igEngine := baseEngine.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)
 		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, ytengine.NewSizeProber(executor, instagram.AllowedMediaURL)).WithFetcher(executor)
 	}
+	return nil
+}
+
+// configureYouTubeHelper optionally enables /api/youtube/context and
+// /api/youtube/finalize when DOKITOOL_YOUTUBE_HELPER is true and the pinned
+// Deno + yt-dlp/ejs runtime assets pass SHA-256 verification.
+// Verification failure disables only the YouTube helper without affecting other platforms.
+func configureYouTubeHelper(c *catalog.Catalog, handler *api.Handler, executor fetch.Executor, getenv func(string) string) error {
+	raw := getenv("DOKITOOL_YOUTUBE_HELPER")
+	if raw == "" {
+		return nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return fmt.Errorf("DOKITOOL_YOUTUBE_HELPER must be a boolean")
+	}
+	if !enabled {
+		return nil
+	}
+	helper, err := youtube.NewHelperFromEnv(executor, getenv, time.Now)
+	if err != nil {
+		log.Printf("dokitool: youtube helper runtime preflight failed (youtube helper disabled): %v", err)
+		return nil
+	}
+	if c != nil && !c.Has("youtube") {
+		if err := c.Register(catalog.YouTubePlatform()); err != nil {
+			return err
+		}
+	}
+	sb := helper.Sandbox()
+	log.Printf("dokitool: youtube helper runtime verified (deno_version=%s, deno_asset=%s, deno_sha256=%s, ejs_version=%s, lib_sha256=%s, core_sha256=%s)",
+		youtube.PinnedDenoVersion, sb.DenoAsset(), sb.DenoSHA256(), youtube.PinnedEJSVersion, sb.LibSHA256(), sb.CoreSHA256())
+	handler.SetYouTubeHelper(helper)
 	return nil
 }

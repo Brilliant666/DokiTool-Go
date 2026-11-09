@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -29,12 +30,20 @@ func (f AdapterFunc) Parse(ctx context.Context, source string, now int64) (unifi
 // filtering. A future Weibo registration must provide this boundary as well.
 type PublicMedia func(context.Context, string, unified.Object, int64) (unified.Object, error)
 
+// YouTubeHelper serves /api/youtube/context and /api/youtube/finalize when
+// DOKITOOL_YOUTUBE_HELPER is enabled and runtime verification succeeds.
+type YouTubeHelper interface {
+	Context(context.Context) (unified.Object, int)
+	Finalize(ctx context.Context, body []byte, debug bool) (unified.Object, int)
+}
+
 type Handler struct {
-	catalog     *catalog.Catalog
-	adapters    map[string]Adapter
-	now         func() time.Time
-	publicMedia PublicMedia
-	weiboRelay  http.Handler
+	catalog       *catalog.Catalog
+	adapters      map[string]Adapter
+	now           func() time.Time
+	publicMedia   PublicMedia
+	weiboRelay    http.Handler
+	youtubeHelper YouTubeHelper
 }
 
 func New(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, media PublicMedia) (*Handler, error) {
@@ -60,6 +69,10 @@ func New(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, 
 // SetWeiboRelay registers a binary-only handler before server startup.
 // Its response is never passed through the unified JSON encoder.
 func (h *Handler) SetWeiboRelay(relay http.Handler) { h.weiboRelay = relay }
+
+// SetYouTubeHelper registers the browser-assisted YouTube context/finalize handler.
+// When unset, /api/youtube/context and /api/youtube/finalize return 404.
+func (h *Handler) SetYouTubeHelper(helper YouTubeHelper) { h.youtubeHelper = helper }
 
 var shareURL = regexp.MustCompile(`(?i)https?://[^\s"'<>]+`)
 
@@ -189,6 +202,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		sendError(w, 503, "微博播放服务尚未配置，请联系站点维护者")
 		return
+	case youtubeHelper:
+		h.serveYouTubeHelper(w, r)
+		return
 	case parser, catalogRoute:
 	default:
 		sendError(w, 404, "接口不存在")
@@ -304,4 +320,62 @@ func queryPresent(raw, name string) bool {
 		}
 	}
 	return false
+}
+
+const maxYouTubeFinalizeBodyBytes = 512 << 10
+
+func (h *Handler) serveYouTubeHelper(w http.ResponseWriter, r *http.Request) {
+	if h.youtubeHelper == nil {
+		sendError(w, 404, "接口不存在")
+		return
+	}
+	switch r.URL.EscapedPath() {
+	case "/api/youtube/context":
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			sendError(w, 405, "仅支持 GET 请求")
+			return
+		}
+		version, scalar := queryValue(r.URL.RawQuery, "schema_version")
+		if !scalar || version != unified.SchemaVersion {
+			sendError(w, 409, "接口版本已更新，请等待当前下载结束后刷新页面")
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		payload, status := h.youtubeHelper.Context(ctx)
+		send(w, status, payload)
+	case "/api/youtube/finalize":
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			sendError(w, 405, "仅支持 POST 请求")
+			return
+		}
+		version, scalar := queryValue(r.URL.RawQuery, "schema_version")
+		if !scalar || version != unified.SchemaVersion {
+			sendError(w, 409, "接口版本已更新，请等待当前下载结束后刷新页面")
+			return
+		}
+		if r.Body == nil {
+			sendError(w, 400, "请求体不能为空")
+			return
+		}
+		defer r.Body.Close()
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxYouTubeFinalizeBodyBytes+1))
+		if err != nil {
+			sendError(w, 400, "读取请求体失败")
+			return
+		}
+		if len(body) > maxYouTubeFinalizeBodyBytes {
+			sendError(w, 400, "请求体超出 512 KiB 限制")
+			return
+		}
+		debug, _ := queryValue(r.URL.RawQuery, "debug")
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		payload, status := h.youtubeHelper.Finalize(ctx, body, debug == "1")
+		send(w, status, payload)
+	default:
+		sendError(w, 404, "接口不存在")
+	}
 }

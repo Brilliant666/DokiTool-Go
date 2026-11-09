@@ -345,6 +345,7 @@
 !/backend/internal/api/weibo_test.go
 !/backend/internal/api/x_http_test.go
 !/backend/internal/api/xiaohongshu_test.go
+!/backend/internal/api/youtube_helper_test.go
 !/backend/internal/api/zuiyou_http_test.go
 /backend/internal/catalog/*
 !/backend/internal/catalog/catalog.go
@@ -662,8 +663,12 @@
 !/backend/internal/platform/xiaohongshu/wire.go
 !/backend/internal/platform/xiaohongshu/wire_test.go
 /backend/internal/platform/youtube/*
+!/backend/internal/platform/youtube/ejs_sandbox.go
+!/backend/internal/platform/youtube/helper.go
+!/backend/internal/platform/youtube/helper_test.go
 !/backend/internal/platform/youtube/parser.go
 !/backend/internal/platform/youtube/parser_test.go
+!/backend/internal/platform/youtube/testdata/
 /backend/internal/platform/ytgeneric/*
 !/backend/internal/platform/ytgeneric/parser.go
 !/backend/internal/platform/ytgeneric/parser_test.go
@@ -784,8 +789,15 @@
 !/backend/internal/platform/xiaohongshu/testdata/manifest.json
 !/backend/internal/platform/xiaohongshu/testdata/php-baseline.json
 !/backend/internal/platform/xiaohongshu/testdata/php-wire-baseline.json
+/backend/internal/platform/youtube/testdata/*
+!/backend/internal/platform/youtube/testdata/ejs/
+!/backend/internal/platform/youtube/testdata/finalize_sample_46.json
+!/backend/internal/platform/youtube/testdata/player_base_fixture.js
 /backend/internal/platform/zuiyou/testdata/*
 !/backend/internal/platform/zuiyou/testdata/README.md
 !/backend/internal/platform/zuiyou/testdata/inputs.json
 !/backend/internal/platform/zuiyou/testdata/manifest.json
 !/backend/internal/platform/zuiyou/testdata/php-baseline.json
+/backend/internal/platform/youtube/testdata/ejs/*
+!/backend/internal/platform/youtube/testdata/ejs/yt.solver.core.min.js
+!/backend/internal/platform/youtube/testdata/ejs/yt.solver.lib.min.js
