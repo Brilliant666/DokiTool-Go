@@ -93,7 +93,7 @@ jobs:
 
       - name: Install locked frontend dependencies
         working-directory: frontend
-        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org --replace-registry-host=always
 
       - name: Run pre-build Go CLI tests
         working-directory: backend

@@ -271,7 +271,7 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/dokitool-validation"
           "$RUNNER_TEMP/dokitool-validation/bin/python" -m pip install -r scripts/requirements-validation.txt
-          npm ci --prefix frontend --ignore-scripts --registry=https://registry.npmjs.org
+          npm ci --prefix frontend --ignore-scripts --registry=https://registry.npmjs.org --replace-registry-host=always
 
       - name: Verify reviewed source inventory
         run: python3 -B scripts/check-public-files.py --staged
