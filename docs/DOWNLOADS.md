@@ -810,3 +810,14 @@ HTTP 升级不是可用性证明：实际浏览器仍须通过 TLS、CORS、完�
 后续获准发布只更新日本 Go；应复用现有生产响应，一次核对同一所选实况
 的视频、封面、ZIP 完整保存/解码、CRC/配对及同源成员一致性。未取得
 该证据前保持“修复候选”，不重新运行大文件下载或 CDN 排名。
+
+### YouTube 第一阶段：用户脚本 `GM_download` 下载模式与内存边界
+
+YouTube 第一阶段不走服务器媒体中转或页面 Service Worker 流式下载：
+- `360p (含音频, itag=18)` 通过浏览器原生标签页打开包含 `&title=<标题>_360p` 的直连地址交由浏览器直接保存；
+- 仅视频轨（如 `1080p`、`4K` MP4）与 `M4A` 音轨（`itag=140`）由同源页面通过 `CustomEvent` 委托 `dokitool-youtube.user.js` 调用 Tampermonkey `GM_download` 从 `*.googlevideo.com` 直接下载。
+
+Tampermonkey 下载模式与内存边界（同一条 `tO01J-M3g0U` `1440p60` `itag=700` 仅视频轨，`267,476,589` 字节 ≈ 255.09 MiB，有界面 Chrome 147 + Tampermonkey 5.5.1 实测对比）：
+- **Tampermonkey「默认」（`default`）下载模式**：`GM_download` 会在扩展后台通过 XHR 将完整响应读入内存（`responseType: "blob"`）后再触发保存。实测耗时 `83.84s`，保存期间 Chrome 进程总 RSS 从基线 `1106.39 MiB` 升至峰值 `1808.09 MiB`（峰值增量 `+701.70 MiB`，页面 JS Heap 峰值 `13.17 MiB`）；超大体积（如数 GiB 的 4K 60fps 长视频）在该模式下受扩展单进程 Blob 内存上限约束。
+- **Tampermonkey「浏览器 API」（`chrome`）下载模式**：对 `.mp4` 仅视频轨直接调用 `chrome.downloads.download` 流式落盘，无需在扩展内存中缓冲整段视频。实测耗时 `83.92s`，保存期间 Chrome 进程总 RSS 从基线 `1280.42 MiB` 到峰值 `1312.44 MiB`（峰值增量仅 `+32.02 MiB`，下载完成后 `1234.42 MiB`，页面 JS Heap 峰值 `7.67 MiB`）。
+- **`.m4a` 扩展名保留与 `mode: "native"`**：Chromium 的 `chrome.downloads.download` 会根据上游 `Content-Type: audio/mp4` 将 `.m4a` 文件名改写为 `.mp4`。因此用户脚本对 `.m4a` 音轨显式传入 `mode: "native"`，由扩展走 Blob 锚点保存以保留 `<标题>_audio.m4a` 后缀；音轨体积通常较小（数 MiB 至数十 MiB），在内存边界之内。

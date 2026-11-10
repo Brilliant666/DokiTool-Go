@@ -9,7 +9,7 @@ export const YOUTUBE_HELPER_PROGRESS_EVENT: string;
 export const YOUTUBE_SW_DATA_URL: string;
 export const YOUTUBE_PLAYER_API_URL: string;
 export const VISITOR_DATA_TTL_MS: number;
-export const VISITOR_DATA_STORAGE_KEY: string;
+export const MAX_HELPER_TITLE_CHARS: number;
 
 export interface YouTubeHelperClientInfo {
   name: string;
@@ -35,6 +35,13 @@ export interface YouTubeHelperPlayerPayload {
   client: YouTubeHelperClientInfo;
 }
 
+export interface YouTubeHelperVideoDetails {
+  title?: string;
+  author?: string;
+  lengthSeconds?: number;
+  thumbnail?: string;
+}
+
 export interface YouTubeHelperPlayerResult {
   playabilityStatus: {
     status: string;
@@ -44,6 +51,7 @@ export interface YouTubeHelperPlayerResult {
     formats: Record<string, unknown>[];
     adaptiveFormats: Record<string, unknown>[];
   } | null;
+  videoDetails?: YouTubeHelperVideoDetails;
 }
 
 export interface YouTubeHelperProgressDetail {
@@ -77,7 +85,13 @@ export function isHelperVersionSupported(
   version: string,
   minVersion?: string,
 ): boolean;
+export function isValidVisitorDataToken(token: unknown): token is string;
 export function extractVisitorDataFromSwResponse(rawText: string): string;
+export function sanitizeHelperText(raw: unknown, maxChars?: number): string;
+export function isValidYouTubeThumbnailUrl(rawUrl: unknown): rawUrl is string;
+export function sanitizeVideoDetails(
+  rawDetails: unknown,
+): YouTubeHelperVideoDetails | null;
 export function buildTVHTML5PlayerPayload(params: {
   video_id: string;
   signature_timestamp: number;

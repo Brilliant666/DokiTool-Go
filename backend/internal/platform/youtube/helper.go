@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
@@ -32,8 +34,15 @@ const (
 	// MaxFinalizeFormatEntries caps combined formats[] + adaptiveFormats[] entries at 64.
 	MaxFinalizeFormatEntries = 64
 
+	// MaxFinalizeTitleRunes caps sanitized finalize title/author strings at 200 runes.
+	MaxFinalizeTitleRunes = 200
+
 	// DefaultPlayerCacheTTL is the default lifetime of a cached player_id entry.
 	DefaultPlayerCacheTTL = 6 * time.Hour
+
+	// StalePlayerFallbackWindow is the maximum age past ExpiresAt during which a
+	// cached player entry can still be served if refreshing the player fails.
+	StalePlayerFallbackWindow = time.Hour
 
 	maxCachedPlayers = 8
 )
@@ -98,6 +107,13 @@ type playerCacheEntry struct {
 	PreprocessedPlayerJS string
 	FetchedAt            time.Time
 	ExpiresAt            time.Time
+	StaleUntil           time.Time
+}
+
+type playerRefreshCall struct {
+	done  chan struct{}
+	entry *playerCacheEntry
+	err   error
 }
 
 // Helper serves /api/youtube/context and /api/youtube/finalize using internal/fetch
@@ -108,10 +124,11 @@ type Helper struct {
 	now      func() time.Time
 	cacheTTL time.Duration
 
-	mu       sync.Mutex
-	activeID string
-	cache    map[string]*playerCacheEntry
-	order    []string
+	mu          sync.Mutex
+	activeID    string
+	cache       map[string]*playerCacheEntry
+	order       []string
+	refreshCall *playerRefreshCall
 }
 
 // NewHelper creates a YouTube Helper backed by the given fetch.Executor and verified EJSSandbox.
@@ -194,14 +211,61 @@ func (h *Helper) ensureActivePlayer(ctx context.Context) (*playerCacheEntry, err
 			return existing, nil
 		}
 	}
+	if h.refreshCall != nil {
+		call := h.refreshCall
+		h.mu.Unlock()
+		select {
+		case <-call.done:
+			return call.entry, call.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	call := &playerRefreshCall{done: make(chan struct{})}
+	h.refreshCall = call
 	h.mu.Unlock()
 
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 35*time.Second)
+	defer cancel()
+
+	entry, err := h.refreshActivePlayer(refreshCtx)
+	h.mu.Lock()
+	if err != nil {
+		now = h.now()
+		if h.activeID != "" {
+			if stale, ok := h.cache[h.activeID]; ok && !now.After(stale.StaleUntil) {
+				graceExpiry := now.Add(5 * time.Minute)
+				if graceExpiry.After(stale.StaleUntil) {
+					graceExpiry = stale.StaleUntil
+				}
+				if graceExpiry.After(stale.ExpiresAt) {
+					stale.ExpiresAt = graceExpiry
+				}
+				log.Printf("WARN: youtube player refresh failed (%v); continuing with stale player %s", err, stale.PlayerID)
+				entry = stale
+				err = nil
+			}
+		}
+	}
+	call.entry = entry
+	call.err = err
+	h.refreshCall = nil
+	close(call.done)
+	h.mu.Unlock()
+
+	if err := ctx.Err(); err != nil && call.entry == nil {
+		return nil, err
+	}
+	return call.entry, call.err
+}
+
+func (h *Helper) refreshActivePlayer(ctx context.Context) (*playerCacheEntry, error) {
 	playerID, err := h.fetchCurrentPlayerID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	now = h.now()
+	now := h.now()
 	h.mu.Lock()
 	if existing, ok := h.cache[playerID]; ok && now.Before(existing.ExpiresAt) {
 		h.activeID = playerID
@@ -222,13 +286,15 @@ func (h *Helper) ensureActivePlayer(ctx context.Context) (*playerCacheEntry, err
 	now = h.now()
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	expiresAt := now.Add(h.cacheTTL)
 	entry := &playerCacheEntry{
 		PlayerID:             playerID,
 		SignatureTimestamp:   sts,
 		RawPlayerJS:          rawJS,
 		PreprocessedPlayerJS: preprocessed,
 		FetchedAt:            now,
-		ExpiresAt:            now.Add(h.cacheTTL),
+		ExpiresAt:            expiresAt,
+		StaleUntil:           expiresAt.Add(StalePlayerFallbackWindow),
 	}
 	h.storeCacheEntryLocked(entry)
 	h.activeID = playerID
@@ -331,8 +397,55 @@ func (h *Helper) fetchPlayerJS(ctx context.Context, playerID string) (string, in
 type finalizeRequest struct {
 	VideoID         string                `json:"video_id"`
 	PlayerID        string                `json:"player_id"`
+	Title           *string               `json:"title"`
+	Author          *string               `json:"author"`
+	DurationSeconds *int64                `json:"duration_seconds"`
+	Thumbnail       *string               `json:"thumbnail"`
 	Formats         []finalizeFormatInput `json:"formats"`
 	AdaptiveFormats []finalizeFormatInput `json:"adaptiveFormats"`
+}
+
+func sanitizeFinalizeText(raw string, maxRunes int) string {
+	var b strings.Builder
+	b.Grow(len(raw))
+	for _, r := range raw {
+		if unicode.IsControl(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	trimmed := strings.TrimSpace(b.String())
+	if trimmed == "" || maxRunes <= 0 {
+		return trimmed
+	}
+	runes := []rune(trimmed)
+	if len(runes) > maxRunes {
+		trimmed = strings.TrimSpace(string(runes[:maxRunes]))
+	}
+	return trimmed
+}
+
+// AllowYouTubeThumbnailURL restricts finalize thumbnail URLs to AllowedMediaURL-permitted
+// YouTube thumbnail hosts (such as i.ytimg.com).
+func AllowYouTubeThumbnailURL(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || len(trimmed) > 2048 || strings.Contains(trimmed, "#") {
+		return false
+	}
+	for _, r := range trimmed {
+		if r <= 0x20 || r >= 0x7f || r == '\\' {
+			return false
+		}
+	}
+	if !AllowedMediaURL(trimmed) {
+		return false
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	return host == "i.ytimg.com" || strings.HasSuffix(host, ".ytimg.com") || host == "img.youtube.com"
 }
 
 // finalizeFormatInput retains only the 12 allowed format fields and discards all others.
@@ -457,6 +570,38 @@ func (h *Helper) Finalize(ctx context.Context, body []byte, debug bool) (unified
 	videoID := strings.TrimSpace(req.VideoID)
 	if !youtubeIDPattern.MatchString(videoID) {
 		return unified.ContractError("INVALID_INPUT", "无效的 YouTube video_id", false), http.StatusBadRequest
+	}
+
+	resolvedTitle := videoID
+	if req.Title != nil {
+		if cleaned := sanitizeFinalizeText(*req.Title, MaxFinalizeTitleRunes); cleaned != "" {
+			resolvedTitle = cleaned
+		}
+	}
+
+	resolvedAuthor := ""
+	if req.Author != nil {
+		resolvedAuthor = sanitizeFinalizeText(*req.Author, MaxFinalizeTitleRunes)
+	}
+
+	var resolvedDuration *float64
+	if req.DurationSeconds != nil {
+		if *req.DurationSeconds <= 0 || *req.DurationSeconds > 86400*365 {
+			return unified.ContractError("INVALID_INPUT", "无效的 duration_seconds 参数", false), http.StatusBadRequest
+		}
+		dur := float64(*req.DurationSeconds)
+		resolvedDuration = &dur
+	}
+
+	resolvedThumbnail := ""
+	if req.Thumbnail != nil {
+		thumb := strings.TrimSpace(*req.Thumbnail)
+		if thumb != "" {
+			if !AllowYouTubeThumbnailURL(thumb) {
+				return unified.ContractError("INVALID_INPUT", "缩略图地址不在允许的白名单内", false), http.StatusBadRequest
+			}
+			resolvedThumbnail = thumb
+		}
 	}
 
 	nowTime := h.now()
@@ -617,7 +762,10 @@ func (h *Helper) Finalize(ctx context.Context, body []byte, debug bool) (unified
 	canonicalWatchURL := "https://www.youtube.com/watch?v=" + videoID
 	info := &ytengine.Info{
 		ID:         videoID,
-		Title:      videoID,
+		Title:      resolvedTitle,
+		Uploader:   resolvedAuthor,
+		Duration:   resolvedDuration,
+		Thumbnail:  resolvedThumbnail,
 		WebpageURL: canonicalWatchURL,
 		Formats:    ytFormats,
 	}

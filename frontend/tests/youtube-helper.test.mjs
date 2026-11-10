@@ -1,6 +1,7 @@
 import test, { after, before, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import vm from "node:vm";
 import { createServer } from "vite";
 import { createSSRApp, h, reactive, ref } from "vue";
 import { renderToString } from "vue/server-renderer";
@@ -21,6 +22,7 @@ import {
   pingYouTubeHelper,
   sanitizeHelperFilename,
   sanitizePlayerApiResponse,
+  sanitizeVideoDetails,
   sendHelperRequest,
 } from "../src/utils/youtubeHelperCore.js";
 
@@ -54,7 +56,9 @@ describe("YouTube helper userscript static header & validation contract", () => 
     ].map((m) => m[1]);
     assert.deepEqual(grants.sort(), ["GM_download", "GM_xmlhttpRequest"]);
     assert.match(headerBlock, /^\/\/ @noframes$/m);
-    assert.match(headerBlock, /^\/\/ @version\s+1\.0\.0$/m);
+    assert.match(headerBlock, /^\/\/ @version\s+1\.1\.0$/m);
+    assert.equal(YOUTUBE_HELPER_VERSION, "1.1.0");
+    assert.equal(MIN_YOUTUBE_HELPER_VERSION, "1.1.0");
     assert.match(
       headerBlock,
       /^\/\/ @updateURL\s+https:\/\/snap\.dokitool\.com\/helper\/dokitool-youtube\.user\.js$/m,
@@ -172,11 +176,11 @@ describe("YouTube helper userscript static header & validation contract", () => 
     }
   });
 
-  test("userscript controller enforces strict action allowlist, anonymous requests, and field stripping", async () => {
+  test("userscript controller enforces strict action allowlist, anonymous requests, memory-only visitorData cache, and field stripping", async () => {
     const gmRequests = [];
     const gmDownloads = [];
     const controller = createUserscriptController({
-      version: "1.0.0",
+      version: "1.1.0",
       gmXmlhttpRequest(details) {
         gmRequests.push(details);
         if (details.url === "https://www.youtube.com/sw.js_data") {
@@ -199,7 +203,18 @@ describe("YouTube helper userscript static header & validation contract", () => 
                 reason: "ok",
                 extraSecretField: "dropped",
               },
-              videoDetails: { title: "secret-dropped" },
+              videoDetails: {
+                title: "  Me at\u0000 the zoo  ",
+                author: "jawed",
+                lengthSeconds: "19",
+                thumbnail: {
+                  thumbnails: [
+                    { url: "https://evil.example.com/thumb.jpg" },
+                    { url: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg" },
+                  ],
+                },
+                secretToken: "dropped",
+              },
               streamingData: {
                 expiresInSeconds: "21540",
                 formats: [
@@ -266,7 +281,12 @@ describe("YouTube helper userscript static header & validation contract", () => 
       gmRequests[1].headers["X-Goog-Visitor-Id"],
       "Cgt0ZXN0VmlzaXRvckRhdGFTdHJpbmc%3D",
     );
-    assert.equal(okPlayerResp.data.videoDetails, undefined);
+    assert.deepEqual(okPlayerResp.data.videoDetails, {
+      title: "Me at the zoo",
+      author: "jawed",
+      lengthSeconds: 19,
+      thumbnail: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
+    });
     assert.equal(
       okPlayerResp.data.playabilityStatus.extraSecretField,
       undefined,
@@ -274,6 +294,23 @@ describe("YouTube helper userscript static header & validation contract", () => 
     assert.equal(
       okPlayerResp.data.streamingData.formats[0].unexpectedField,
       undefined,
+    );
+
+    // Second player request reuses in-memory visitorData without calling sw.js_data again
+    const okPlayerResp2 = await controller.handleRequestObject({
+      requestId: "req-ok-player-2",
+      action: "player",
+      payload: {
+        video_id: "I9JvDaciaFk",
+        signature_timestamp: 20760,
+        client: { name: "TVHTML5", version: "7.20260728.13.00" },
+      },
+    });
+    assert.equal(okPlayerResp2.ok, true);
+    assert.equal(gmRequests.length, 3);
+    assert.equal(
+      gmRequests[2].url,
+      "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
     );
 
     // Reject download of non-googlevideo URL or disallowed suffix
@@ -298,7 +335,7 @@ describe("YouTube helper userscript static header & validation contract", () => 
     assert.equal(badDlExt.ok, false);
     assert.equal(gmDownloads.length, 0);
 
-    // Valid download
+    // Valid MP4 download (does not force mode: "native")
     const okDl = await controller.handleRequestObject({
       requestId: "req-ok-dl",
       action: "download",
@@ -310,6 +347,283 @@ describe("YouTube helper userscript static header & validation contract", () => 
     assert.equal(okDl.ok, true);
     assert.equal(okDl.data.filename, "Sample_1080p.mp4");
     assert.equal(gmDownloads.length, 1);
+    assert.equal(gmDownloads[0].mode, undefined);
+
+    // Valid M4A download (forces mode: "native" so Chrome preserves .m4a extension)
+    const okM4aDl = await controller.handleRequestObject({
+      requestId: "req-ok-m4a-dl",
+      action: "download",
+      payload: {
+        url: "https://rr1---sn-test.googlevideo.com/videoplayback?itag=140",
+        filename: "Sample_audio.m4a",
+      },
+    });
+    assert.equal(okM4aDl.ok, true);
+    assert.equal(okM4aDl.data.filename, "Sample_audio.m4a");
+    assert.equal(gmDownloads.length, 2);
+    assert.equal(gmDownloads[1].mode, "native");
+  });
+
+  test("published frontend/public/helper/dokitool-youtube.user.js executes in node:vm and passes rejection and happy-path cases", async () => {
+    const scriptPath = new URL(
+      "../public/helper/dokitool-youtube.user.js",
+      import.meta.url,
+    );
+    const scriptText = await readFile(scriptPath, "utf8");
+    const bus = new EventTarget();
+    const gmRequests = [];
+    const gmDownloads = [];
+    let localStorageAccessed = false;
+
+    const fakeWindow = {
+      addEventListener: bus.addEventListener.bind(bus),
+      removeEventListener: bus.removeEventListener.bind(bus),
+      dispatchEvent: bus.dispatchEvent.bind(bus),
+      CustomEvent: globalThis.CustomEvent,
+      get localStorage() {
+        localStorageAccessed = true;
+        throw new Error("userscript must not access window.localStorage");
+      },
+    };
+
+    const sandbox = {
+      window: fakeWindow,
+      CustomEvent: globalThis.CustomEvent,
+      URL: globalThis.URL,
+      JSON: globalThis.JSON,
+      Date: globalThis.Date,
+      Math: globalThis.Math,
+      Number: globalThis.Number,
+      String: globalThis.String,
+      Object: globalThis.Object,
+      Array: globalThis.Array,
+      Promise: globalThis.Promise,
+      RegExp: globalThis.RegExp,
+      Error: globalThis.Error,
+      GM_xmlhttpRequest(details) {
+        gmRequests.push(details);
+        if (details.url === "https://www.youtube.com/sw.js_data") {
+          details.onload({
+            status: 200,
+            responseText:
+              ')]}\'\n[["yt.sw.adr",null,[[["en","US",null,"198.51.100.7",null,null,null,null,null,null,null,null,null,"Cgt2bVRlc3RWaXNpdG9yRGF0YVRva2Vu"]]]]]',
+          });
+          return;
+        }
+        if (
+          details.url ===
+          "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+        ) {
+          details.onload({
+            status: 200,
+            responseText: JSON.stringify({
+              playabilityStatus: { status: "OK", extra: "stripped" },
+              videoDetails: {
+                title: "VM\u0007 Test Title",
+                author: "VM Author",
+                lengthSeconds: "42",
+                thumbnail: {
+                  thumbnails: [
+                    { url: "https://i.ytimg.com/vi/I9JvDaciaFk/hqdefault.jpg" },
+                  ],
+                },
+              },
+              streamingData: {
+                expiresInSeconds: "21540",
+                formats: [
+                  {
+                    itag: 18,
+                    url: "https://rr2---sn-vm.googlevideo.com/videoplayback?itag=18",
+                    mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+                    width: 640,
+                    height: 360,
+                    contentLength: "144433",
+                  },
+                ],
+                adaptiveFormats: [
+                  {
+                    itag: 140,
+                    url: "https://rr2---sn-vm.googlevideo.com/videoplayback?itag=140",
+                    mimeType: 'audio/mp4; codecs="mp4a.40.2"',
+                    contentLength: "82734",
+                  },
+                ],
+              },
+            }),
+          });
+          return;
+        }
+        details.onerror();
+      },
+      GM_download(details) {
+        gmDownloads.push(details);
+        details.onprogress?.({ loaded: 41367, total: 82734 });
+        details.onload();
+      },
+    };
+
+    vm.runInNewContext(scriptText, sandbox, {
+      filename: "dokitool-youtube.user.js",
+    });
+
+    // 1. Ping published script -> version 1.1.0, supported: true
+    const pingRes = await pingYouTubeHelper({
+      eventTarget: fakeWindow,
+      timeoutMs: 100,
+    });
+    assert.deepEqual(pingRes, {
+      installed: true,
+      version: "1.1.0",
+      supported: true,
+    });
+
+    // 2. Rejection cases against published script
+    await assert.rejects(
+      () =>
+        sendHelperRequest("unknown_action", {}, { eventTarget: fakeWindow }),
+      (err) =>
+        err.code === "UNSUPPORTED_ACTION" &&
+        err.message.includes("不支持的助手操作"),
+    );
+    await assert.rejects(
+      () =>
+        sendHelperRequest(
+          "player",
+          {
+            video_id: "bad/id",
+            signature_timestamp: 20760,
+            client: { name: "TVHTML5", version: "7.20260728.13.00" },
+          },
+          { eventTarget: fakeWindow },
+        ),
+      (err) =>
+        err.code === "HELPER_REJECTED" &&
+        err.message.includes("非法的 video_id"),
+    );
+    await assert.rejects(
+      () =>
+        sendHelperRequest(
+          "player",
+          {
+            video_id: "I9JvDaciaFk",
+            signature_timestamp: -5,
+            client: { name: "TVHTML5", version: "7.20260728.13.00" },
+          },
+          { eventTarget: fakeWindow },
+        ),
+      (err) =>
+        err.code === "HELPER_REJECTED" &&
+        err.message.includes("非法的 signature_timestamp"),
+    );
+    await assert.rejects(
+      () =>
+        sendHelperRequest(
+          "player",
+          {
+            video_id: "I9JvDaciaFk",
+            signature_timestamp: 20760,
+            client: { name: "WEB", version: "2.20260728.00.00" },
+          },
+          { eventTarget: fakeWindow },
+        ),
+      (err) =>
+        err.code === "HELPER_REJECTED" &&
+        err.message.includes("仅允许 TVHTML5"),
+    );
+    await assert.rejects(
+      () =>
+        sendHelperRequest(
+          "download",
+          {
+            url: "https://evil.example.com/videoplayback?itag=18",
+            filename: "test.mp4",
+          },
+          { eventTarget: fakeWindow },
+        ),
+      (err) =>
+        err.code === "HELPER_REJECTED" &&
+        err.message.includes("googlevideo.com/videoplayback"),
+    );
+    await assert.rejects(
+      () =>
+        sendHelperRequest(
+          "download",
+          {
+            url: "https://rr2---sn-vm.googlevideo.com/videoplayback?itag=18",
+            filename: "test.webm",
+          },
+          { eventTarget: fakeWindow },
+        ),
+      (err) =>
+        err.code === "HELPER_REJECTED" &&
+        err.message.includes(".mp4 或 .m4a"),
+    );
+
+    // 3. Happy-path player call on published script
+    const playerData = await sendHelperRequest(
+      "player",
+      {
+        video_id: "I9JvDaciaFk",
+        signature_timestamp: 20760,
+        client: { name: "TVHTML5", version: "7.20260728.13.00" },
+      },
+      { eventTarget: fakeWindow },
+    );
+    assert.equal(localStorageAccessed, false);
+    assert.equal(gmRequests.length, 2);
+    assert.equal(gmRequests[0].anonymous, true);
+    assert.equal(gmRequests[1].anonymous, true);
+    assert.deepEqual(playerData.videoDetails, {
+      title: "VM Test Title",
+      author: "VM Author",
+      lengthSeconds: 42,
+      thumbnail: "https://i.ytimg.com/vi/I9JvDaciaFk/hqdefault.jpg",
+    });
+
+    // Second player call reuses in-memory visitorData
+    await sendHelperRequest(
+      "player",
+      {
+        video_id: "I9JvDaciaFk",
+        signature_timestamp: 20760,
+        client: { name: "TVHTML5", version: "7.20260728.13.00" },
+      },
+      { eventTarget: fakeWindow },
+    );
+    assert.equal(gmRequests.length, 3);
+
+    // 4. Happy-path MP4 and M4A download on published script
+    const mp4Dl = await sendHelperRequest(
+      "download",
+      {
+        url: "https://rr2---sn-vm.googlevideo.com/videoplayback?itag=299",
+        filename: "VM Test Title_1080p.mp4",
+      },
+      { eventTarget: fakeWindow },
+    );
+    assert.equal(mp4Dl.filename, "VM_Test_Title_1080p.mp4");
+    assert.equal(gmDownloads.length, 1);
+    assert.equal(gmDownloads[0].mode, undefined);
+
+    const progressEvents = [];
+    const m4aDl = await sendHelperRequest(
+      "download",
+      {
+        url: "https://rr2---sn-vm.googlevideo.com/videoplayback?itag=140",
+        filename: "VM Test Title_audio.m4a",
+      },
+      {
+        eventTarget: fakeWindow,
+        onProgress(detail) {
+          progressEvents.push(detail);
+        },
+      },
+    );
+    assert.equal(m4aDl.filename, "VM_Test_Title_audio.m4a");
+    assert.equal(gmDownloads.length, 2);
+    assert.equal(gmDownloads[1].mode, "native");
+    assert.equal(progressEvents.length, 1);
+    assert.equal(progressEvents[0].loaded, 41367);
   });
 
   test("CustomEvent handshake and semver version check", async () => {
@@ -366,7 +680,7 @@ describe("YouTube helper userscript static header & validation contract", () => 
 });
 
 describe("YouTube frontend parser, ResultSection UI states, and download flows", () => {
-  let vite, parser, selectionMod, downloadMod, ResultSection;
+  let vite, parser, selectionMod, downloadMod, videoFilenameMod, ResultSection;
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
   const originalDocument = globalThis.document;
@@ -497,6 +811,9 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     );
     downloadMod = await vite.ssrLoadModule(
       "/src/composables/useMediaDownload.ts",
+    );
+    videoFilenameMod = await vite.ssrLoadModule(
+      "/src/utils/videoFilename.ts",
     );
     ResultSection = (
       await vite.ssrLoadModule("/src/components/ResultSection.vue")
@@ -690,10 +1007,10 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       "must never show 已交给浏览器 when helper is missing",
     );
 
-    // Outdated helper version (0.9.0 < 1.0.0) -> status: 'outdated', prompts user to update
+    // Outdated helper version (1.0.0 < 1.1.0) -> status: 'outdated', prompts user to update
     const unmountOld = createUserscriptController({
       eventTarget: env.bus,
-      version: "0.9.0",
+      version: "1.0.0",
     }).mount();
     try {
       env.parserInstance.inputUrl.value =
@@ -713,7 +1030,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     const env = setupEnvironment();
     const unmount = createUserscriptController({
       eventTarget: env.bus,
-      version: "1.0.0",
+      version: "1.1.0",
       gmXmlhttpRequest(details) {
         if (details.url.includes("sw.js_data")) {
           details.onload({
@@ -775,12 +1092,12 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     }
   });
 
-  test("with helper ready: fetches context -> helper player -> finalize, shows 2x bitrate notice, uses _blank for itag=18 and GM_download for 1080p video-only and M4A", async () => {
+  test("with helper ready: fetches context -> helper player -> finalize (with videoDetails), shows 2x bitrate notice, uses _blank for itag=18 and GM_download for 1080p video-only and M4A", async () => {
     const env = setupEnvironment();
     const gmSaved = [];
     const unmount = createUserscriptController({
       eventTarget: env.bus,
-      version: "1.0.0",
+      version: "1.1.0",
       gmXmlhttpRequest(details) {
         if (details.url.includes("sw.js_data")) {
           details.onload({
@@ -793,6 +1110,16 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
           status: 200,
           responseText: JSON.stringify({
             playabilityStatus: { status: "OK" },
+            videoDetails: {
+              title: "Sample YouTube Video",
+              author: "Sample Channel",
+              lengthSeconds: "19",
+              thumbnail: {
+                thumbnails: [
+                  { url: "https://i.ytimg.com/vi/I9JvDaciaFk/hqdefault.jpg" },
+                ],
+              },
+            },
             streamingData: {
               formats: [
                 {
@@ -826,7 +1153,11 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
         });
       },
       gmDownload(details) {
-        gmSaved.push({ url: details.url, name: details.name });
+        gmSaved.push({
+          url: details.url,
+          name: details.name,
+          mode: details.mode,
+        });
         details.onprogress?.({ loaded: 50000, total: 100000 });
         details.onload();
       },
@@ -853,6 +1184,13 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
           const body = JSON.parse(init.body);
           assert.equal(body.video_id, "I9JvDaciaFk");
           assert.equal(body.player_id, "22f02d3d");
+          assert.equal(body.title, "Sample YouTube Video");
+          assert.equal(body.author, "Sample Channel");
+          assert.equal(body.duration_seconds, 19);
+          assert.equal(
+            body.thumbnail,
+            "https://i.ytimg.com/vi/I9JvDaciaFk/hqdefault.jpg",
+          );
           assert.equal(body.formats.length, 1);
           assert.equal(body.adaptiveFormats.length, 2);
           return Response.json({
@@ -877,17 +1215,21 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       const html = await renderResultHtml(env.store, env.selection);
       assert.ok(html.includes("受 2 倍码率限速，预计耗时较长"));
 
-      // 1. Default 360p (itag=18) -> uses _blank browser native handoff
+      // 1. Default 360p (itag=18) -> uses _blank browser native handoff, filename has _360p.mp4 and no _P1
       await env.downloader.downloadMainVideo();
       assert.equal(env.store.downloads.length, 1);
       assert.equal(env.store.downloads[0].status, "handed-off");
       assert.equal(env.store.downloads[0].transport, "browser_native");
+      assert.equal(
+        env.store.downloads[0].filename,
+        "Sample YouTube Video_360p.mp4",
+      );
       assert.equal(env.clickedAnchors.length, 1);
       assert.equal(env.clickedAnchors[0].href, itag18Url);
       assert.equal(env.clickedAnchors[0].target, "_blank");
       assert.equal(gmSaved.length, 0);
 
-      // 2. 1080p video-only (itag=299) -> uses userscript GM_download
+      // 2. 1080p video-only (itag=299) -> uses userscript GM_download with <title>_1080p.mp4
       env.selection.choose({ variant_id: "v-299", source_id: "s-299" });
       await env.downloader.downloadMainVideo();
       await new Promise((r) => setTimeout(r, 20));
@@ -895,18 +1237,99 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       assert.equal(env.store.downloads[1].status, "completed");
       assert.equal(gmSaved.length, 1);
       assert.equal(gmSaved[0].url, itag299Url);
-      assert.match(gmSaved[0].name, /\.mp4$/);
+      assert.equal(gmSaved[0].name, "Sample_YouTube_Video_1080p.mp4");
+      assert.equal(gmSaved[0].mode, undefined);
 
-      // 3. M4A audio attachment (itag=140) -> uses userscript GM_download
+      // 3. M4A audio attachment (itag=140) -> uses userscript GM_download with <title>_audio.m4a and mode: "native"
       env.downloader.downloadMusic(env.store.resultData.attachments[0]);
       await new Promise((r) => setTimeout(r, 20));
       assert.equal(env.store.downloads.length, 3);
       assert.equal(env.store.downloads[2].status, "completed");
       assert.equal(gmSaved.length, 2);
       assert.equal(gmSaved[1].url, itag140Url);
-      assert.match(gmSaved[1].name, /\.m4a$/);
+      assert.equal(gmSaved[1].name, "Sample_YouTube_Video_audio.m4a");
+      assert.equal(gmSaved[1].mode, "native");
     } finally {
       unmount();
     }
+  });
+
+  test("buildMediaFilename omits _P1 for single-item works and keeps _P1/_P2 for multi-item works", () => {
+    const { buildMediaFilename } = videoFilenameMod;
+
+    // Single item (total omitted or total === 1): no _P1 suffix
+    assert.equal(
+      buildMediaFilename({
+        title: "Single Work",
+        index: 1,
+        fallback: "single-1",
+        extension: "mp4",
+      }),
+      "Single Work.mp4",
+    );
+    assert.equal(
+      buildMediaFilename({
+        title: "Single Work",
+        index: 1,
+        total: 1,
+        fallback: "single-1",
+        extension: "mp4",
+      }),
+      "Single Work.mp4",
+    );
+    assert.equal(
+      buildMediaFilename({
+        title: "Me at the zoo",
+        index: 1,
+        total: 1,
+        suffix: "1080p",
+        fallback: "jNQXAC9IVRw",
+        extension: "mp4",
+      }),
+      "Me at the zoo_1080p.mp4",
+    );
+    assert.equal(
+      buildMediaFilename({
+        title: "Me at the zoo",
+        index: 1,
+        total: 1,
+        suffix: "audio",
+        fallback: "jNQXAC9IVRw",
+        extension: "m4a",
+      }),
+      "Me at the zoo_audio.m4a",
+    );
+
+    // Multi-item (total > 1): keeps _P1, _P2, _P3
+    assert.equal(
+      buildMediaFilename({
+        title: "Album Work",
+        index: 1,
+        total: 3,
+        fallback: "album-1",
+        extension: "jpg",
+      }),
+      "Album Work_P1.jpg",
+    );
+    assert.equal(
+      buildMediaFilename({
+        title: "Album Work",
+        index: 2,
+        total: 3,
+        fallback: "album-2",
+        extension: "jpg",
+      }),
+      "Album Work_P2.jpg",
+    );
+    assert.equal(
+      buildMediaFilename({
+        title: "Album Work",
+        index: 3,
+        total: 3,
+        fallback: "album-3",
+        extension: "mp4",
+      }),
+      "Album Work_P3.mp4",
+    );
   });
 });

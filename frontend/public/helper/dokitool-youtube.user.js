@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DokiTool YouTube Helper
 // @namespace    https://snap.dokitool.com/
-// @version      1.0.0
+// @version      1.1.0
 // @description  DokiTool YouTube 用户侧取址与原生下载助手（无 Cookie、不碰账号、仅连接 www.youtube.com）
 // @author       DokiTool
 // @match        https://snap.dokitool.com/*
@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const YOUTUBE_HELPER_VERSION = "1.0.0";
+  const YOUTUBE_HELPER_VERSION = "1.1.0";
   const YOUTUBE_HELPER_REQUEST_EVENT = "dokitool:youtube-helper:request";
   const YOUTUBE_HELPER_RESPONSE_EVENT = "dokitool:youtube-helper:response";
   const YOUTUBE_HELPER_PROGRESS_EVENT = "dokitool:youtube-helper:progress";
@@ -26,13 +26,15 @@
   const YOUTUBE_PLAYER_API_URL =
     "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
   const VISITOR_DATA_TTL_MS = 30 * 60 * 1000;
-  const VISITOR_DATA_STORAGE_KEY = "dokitool_yt_visitor_data_v1";
+  const MAX_HELPER_TITLE_CHARS = 200;
 
   const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
   const TVHTML5_VERSION_RE = /^(?:7\.[0-9]{8}\.[0-9]{2}\.[0-9]{2}|5\.[0-9]{8})$/;
   const GOOGLEVIDEO_HOST_RE =
     /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.googlevideo\.com$/;
+  const YTIMG_HOST_RE = /^(?:i|img|[a-z0-9-]+)\.ytimg\.com$/;
   const VISITOR_DATA_TOKEN_RE = /Cg[A-Za-z0-9_-]{8,1024}(?:%3D|=)*/;
+  const VISITOR_DATA_EXACT_RE = /^Cg[A-Za-z0-9_-]{8,1024}(?:%3D|=)*$/;
 
   const ALLOWED_FORMAT_KEYS = [
     "itag",
@@ -132,6 +134,12 @@
     return { ok: true, filename: `${safeStem}${ext}` };
   }
 
+  function isValidVisitorDataToken(token) {
+    return (
+      typeof token === "string" && VISITOR_DATA_EXACT_RE.test(token.trim())
+    );
+  }
+
   function extractVisitorDataFromSwResponse(rawText) {
     if (typeof rawText !== "string" || !rawText) return "";
     const stripped = rawText.replace(/^\)\]\}'\s*/, "");
@@ -141,15 +149,103 @@
         parsed?.[0]?.[2]?.[6] || parsed?.[0]?.[2]?.[0]?.[0]?.[13] || "";
       if (
         typeof candidate === "string" &&
-        VISITOR_DATA_TOKEN_RE.test(candidate)
+        isValidVisitorDataToken(candidate)
       ) {
-        return candidate;
+        return candidate.trim();
       }
     } catch {
       // Fall back to regex extraction
     }
     const match = VISITOR_DATA_TOKEN_RE.exec(rawText);
-    return match ? match[0] : "";
+    return match && isValidVisitorDataToken(match[0]) ? match[0] : "";
+  }
+
+  function sanitizeHelperText(raw, maxChars = MAX_HELPER_TITLE_CHARS) {
+    if (typeof raw !== "string") return "";
+    const stripped = raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim();
+    if (!stripped || maxChars <= 0) return stripped;
+    const chars = Array.from(stripped);
+    if (chars.length > maxChars) {
+      return chars.slice(0, maxChars).join("").trim();
+    }
+    return stripped;
+  }
+
+  function isValidYouTubeThumbnailUrl(rawUrl) {
+    if (
+      typeof rawUrl !== "string" ||
+      !rawUrl.trim() ||
+      rawUrl.length > 2048 ||
+      rawUrl.includes("#")
+    ) {
+      return false;
+    }
+    for (let i = 0; i < rawUrl.length; i++) {
+      const code = rawUrl.charCodeAt(i);
+      if (code <= 0x20 || code >= 0x7f || code === 0x5c) {
+        return false;
+      }
+    }
+    let parsed;
+    try {
+      parsed = new URL(rawUrl.trim());
+    } catch {
+      return false;
+    }
+    if (parsed.protocol !== "https:") return false;
+    if (parsed.username || parsed.password) return false;
+    if (parsed.port && parsed.port !== "443") return false;
+    const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+    return YTIMG_HOST_RE.test(host) || host === "img.youtube.com";
+  }
+
+  function sanitizeVideoDetails(rawDetails) {
+    if (!rawDetails || typeof rawDetails !== "object") return null;
+    const out = {};
+    const title = sanitizeHelperText(rawDetails.title, MAX_HELPER_TITLE_CHARS);
+    if (title) {
+      out.title = title;
+    }
+    const author = sanitizeHelperText(
+      rawDetails.author,
+      MAX_HELPER_TITLE_CHARS,
+    );
+    if (author) {
+      out.author = author;
+    }
+    const rawLen = rawDetails.lengthSeconds;
+    if (typeof rawLen === "number" || typeof rawLen === "string") {
+      const parsedLen = Number.parseInt(String(rawLen).trim(), 10);
+      if (
+        Number.isInteger(parsedLen) &&
+        parsedLen > 0 &&
+        parsedLen <= 86400 * 365
+      ) {
+        out.lengthSeconds = parsedLen;
+      }
+    }
+    const thumbs = rawDetails.thumbnail?.thumbnails;
+    if (Array.isArray(thumbs)) {
+      let bestUrl = "";
+      let bestScore = -1;
+      for (const item of thumbs) {
+        if (!item || typeof item !== "object") continue;
+        const candidateUrl =
+          typeof item.url === "string" ? item.url.trim() : "";
+        if (!isValidYouTubeThumbnailUrl(candidateUrl)) continue;
+        const w = Number(item.width) > 0 ? Number(item.width) : 0;
+        const h = Number(item.height) > 0 ? Number(item.height) : 0;
+        const score = w * h;
+        if (score >= bestScore) {
+          bestScore = score;
+          bestUrl = candidateUrl;
+        }
+      }
+      if (bestUrl) {
+        out.thumbnail = bestUrl;
+      }
+    }
+    return Object.keys(out).length > 0 ? out : null;
   }
 
   function buildTVHTML5PlayerPayload(params) {
@@ -245,7 +341,13 @@
           }
         : null;
 
-    return { playabilityStatus, streamingData };
+    const videoDetails = sanitizeVideoDetails(raw.videoDetails);
+
+    return {
+      playabilityStatus,
+      streamingData,
+      ...(videoDetails ? { videoDetails } : {}),
+    };
   }
 
   function parseDetail(rawDetail) {
@@ -277,7 +379,6 @@
       gmXmlhttpRequest,
       gmDownload,
       eventTarget = typeof window !== "undefined" ? window : globalThis,
-      storage = typeof localStorage !== "undefined" ? localStorage : null,
       now = () => Date.now(),
       version = YOUTUBE_HELPER_VERSION,
     } = options || {};
@@ -287,46 +388,24 @@
 
     function readCachedVisitorData() {
       const current = now();
-      if (memoryVisitorCache && current < memoryVisitorCache.expiresAt) {
-        return memoryVisitorCache.value;
+      if (
+        memoryVisitorCache &&
+        typeof memoryVisitorCache.expiresAt === "number" &&
+        current < memoryVisitorCache.expiresAt &&
+        isValidVisitorDataToken(memoryVisitorCache.value)
+      ) {
+        return memoryVisitorCache.value.trim();
       }
-      if (storage && typeof storage.getItem === "function") {
-        try {
-          const raw = storage.getItem(VISITOR_DATA_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (
-              parsed &&
-              typeof parsed.value === "string" &&
-              parsed.value &&
-              typeof parsed.expiresAt === "number" &&
-              current < parsed.expiresAt
-            ) {
-              memoryVisitorCache = parsed;
-              return parsed.value;
-            }
-          }
-        } catch {
-          // Ignore storage read errors
-        }
-      }
+      memoryVisitorCache = null;
       return "";
     }
 
     function writeCachedVisitorData(value) {
-      if (!value) return;
-      const entry = {
-        value,
+      if (!isValidVisitorDataToken(value)) return;
+      memoryVisitorCache = {
+        value: value.trim(),
         expiresAt: now() + VISITOR_DATA_TTL_MS,
       };
-      memoryVisitorCache = entry;
-      if (storage && typeof storage.setItem === "function") {
-        try {
-          storage.setItem(VISITOR_DATA_STORAGE_KEY, JSON.stringify(entry));
-        } catch {
-          // Ignore storage quota errors
-        }
-      }
     }
 
     function gmRequest(reqConfig) {
@@ -432,6 +511,57 @@
       } catch {
         throw new Error("YouTube 播放器接口返回非 JSON 数据");
       }
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        parsed.playabilityStatus?.status === "OK" &&
+        (!parsed.videoDetails ||
+          typeof parsed.videoDetails.title !== "string" ||
+          !parsed.videoDetails.title.trim())
+      ) {
+        try {
+          const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${video_id.trim()}`)}&format=json`;
+          const oembedResp = await gmRequest({
+            method: "GET",
+            url: oembedUrl,
+            timeout: 8000,
+            headers: {
+              Accept: "application/json",
+              "Accept-Language": "en-US,en;q=0.9",
+            },
+          });
+          if (
+            oembedResp &&
+            oembedResp.status >= 200 &&
+            oembedResp.status < 300 &&
+            oembedResp.responseText
+          ) {
+            const oembed = JSON.parse(oembedResp.responseText);
+            if (oembed && typeof oembed === "object") {
+              const vd =
+                parsed.videoDetails && typeof parsed.videoDetails === "object"
+                  ? { ...parsed.videoDetails }
+                  : {};
+              if (!vd.title && typeof oembed.title === "string") {
+                vd.title = oembed.title;
+              }
+              if (!vd.author && typeof oembed.author_name === "string") {
+                vd.author = oembed.author_name;
+              }
+              if (
+                !vd.thumbnail &&
+                typeof oembed.thumbnail_url === "string" &&
+                oembed.thumbnail_url.trim()
+              ) {
+                vd.thumbnail = { thumbnails: [{ url: oembed.thumbnail_url }] };
+              }
+              parsed.videoDetails = vd;
+            }
+          }
+        } catch {
+          // Best-effort oEmbed metadata enrichment on www.youtube.com
+        }
+      }
       return sanitizePlayerApiResponse(parsed);
     }
 
@@ -460,11 +590,13 @@
           return;
         }
 
+        const isM4a = cleanName.filename.toLowerCase().endsWith(".m4a");
         const handle = gmDownload({
           url: url.trim(),
           name: cleanName.filename,
           saveAs: false,
           anonymous: true,
+          ...(isM4a ? { mode: "native" } : {}),
           onprogress(progress) {
             const loaded = Number(progress?.loaded ?? progress?.done ?? 0);
             const total = Number(progress?.total ?? progress?.totalSize ?? 0);
