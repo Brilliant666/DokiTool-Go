@@ -3,7 +3,7 @@
  * 用于浏览器 `download` 属性与 JSZip 归档文件名，规避 Windows 非法字符。
  */
 
-const ILLEGAL_CHARS = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
+const ILLEGAL_CHARS = /[\\/:*?"<>|\u0000-\u001f\u007f\p{Cf}]/gu;
 /** 保留扩展名情况下 base 部分的上限字符数 */
 const MAX_BASE_LENGTH = 64;
 /** 扩展名长度上限 */

@@ -74,6 +74,18 @@ func (h *Handler) SetWeiboRelay(relay http.Handler) { h.weiboRelay = relay }
 // When unset, /api/youtube/context and /api/youtube/finalize return 404.
 func (h *Handler) SetYouTubeHelper(helper YouTubeHelper) { h.youtubeHelper = helper }
 
+// HasCachedYouTubeContext reports whether the configured YouTube helper currently
+// holds a fresh in-memory player context that can be served without upstream/Deno work.
+func (h *Handler) HasCachedYouTubeContext() bool {
+	if h == nil || h.youtubeHelper == nil {
+		return false
+	}
+	if checker, ok := h.youtubeHelper.(interface{ HasCachedContext() bool }); ok {
+		return checker.HasCachedContext()
+	}
+	return false
+}
+
 var shareURL = regexp.MustCompile(`(?i)https?://[^\s"'<>]+`)
 
 func InputURL(input string) string {

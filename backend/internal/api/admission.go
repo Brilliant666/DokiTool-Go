@@ -119,7 +119,7 @@ func (a *admission) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		budget = a.relay
 	} else if kind == telemetry {
 		budget = a.reports
-	} else if kind == catalogRoute {
+	} else if kind == catalogRoute || (kind == youtubeHelper && r.Method == http.MethodGet && path == "/api/youtube/context" && a.hasCachedYouTubeContext()) {
 		budget = a.catalog
 	}
 	release, retry := budget.acquire(client, a.now())
@@ -129,6 +129,11 @@ func (a *admission) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 	a.next.ServeHTTP(w, r)
+}
+
+func (a *admission) hasCachedYouTubeContext() bool {
+	checker, ok := a.next.(interface{ HasCachedYouTubeContext() bool })
+	return ok && checker.HasCachedYouTubeContext()
 }
 
 func (a *admission) client(r *http.Request) netip.Addr {

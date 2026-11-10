@@ -130,6 +130,7 @@ type mockYouTubeFetchExecutor struct {
 	playerBaseJS  []byte
 	fetchDelay    time.Duration
 	failRefresh   atomic.Bool
+	panicRefresh  atomic.Bool
 	iframeHits    atomic.Int32
 	playerJSHits  atomic.Int32
 	forbiddenHits atomic.Int32
@@ -153,6 +154,9 @@ func (m *mockYouTubeFetchExecutor) Do(_ context.Context, req fetch.Request) (fet
 	switch req.URL {
 	case "https://www.youtube.com/iframe_api":
 		m.iframeHits.Add(1)
+		if m.panicRefresh.Load() {
+			panic("simulated iframe_api panic during refreshActivePlayer")
+		}
 		if m.failRefresh.Load() {
 			return fetch.Response{StatusCode: http.StatusBadGateway}, nil
 		}
@@ -589,30 +593,35 @@ func TestYouTubeHelperFinalizeMetadataFields(t *testing.T) {
 		t.Fatalf("itag 18 title query = %q, want Me_at_the_zoo_360p", got)
 	}
 
-	// 2. Title with control characters and Title with only control chars/whitespace.
+	// 2. Title with control characters / Unicode format characters (Cf, e.g. U+202E) and empty fallback.
 	ctrlBody, _ := json.Marshal(map[string]any{
 		"video_id":  "I9JvDaciaFk",
 		"player_id": "a5c2aafe",
-		"title":     " \x00\x07Hello\n\tWorld\x1f\x7f ",
+		"title":     " \x00\x07Hello\u202e\u200b\ufeff\n\tWorld\x1f\x7f ",
+		"author":    " \u202ejawed\u202c ",
 		"formats":   []any{firstFmt},
 	})
 	ctrlPayload, ctrlStatus := helper.Finalize(context.Background(), ctrlBody, false)
 	if ctrlStatus != http.StatusOK {
-		t.Fatalf("control-char title status = %d", ctrlStatus)
+		t.Fatalf("control-char/Cf title status = %d", ctrlStatus)
 	}
-	if got := unified.Str(unified.Map(ctrlPayload["data"])["title"]); got != "HelloWorld" {
-		t.Fatalf("control-char stripped title = %q, want HelloWorld", got)
+	ctrlData := unified.Map(ctrlPayload["data"])
+	if got := unified.Str(ctrlData["title"]); got != "HelloWorld" {
+		t.Fatalf("control-char/Cf stripped title = %q, want HelloWorld", got)
+	}
+	if got := unified.Str(unified.Map(ctrlData["author"])["name"]); got != "jawed" {
+		t.Fatalf("Cf stripped author = %q, want jawed", got)
 	}
 
 	emptyCtrlBody, _ := json.Marshal(map[string]any{
 		"video_id":  "I9JvDaciaFk",
 		"player_id": "a5c2aafe",
-		"title":     " \x00\x07\t\n ",
+		"title":     " \x00\x07\u202e\u200b\ufeff\t\n ",
 		"formats":   []any{firstFmt},
 	})
 	emptyCtrlPayload, emptyCtrlStatus := helper.Finalize(context.Background(), emptyCtrlBody, false)
 	if emptyCtrlStatus != http.StatusOK {
-		t.Fatalf("empty control-char title status = %d", emptyCtrlStatus)
+		t.Fatalf("empty control-char/Cf title status = %d", emptyCtrlStatus)
 	}
 	if got := unified.Str(unified.Map(emptyCtrlPayload["data"])["title"]); got != "I9JvDaciaFk" {
 		t.Fatalf("fallback title = %q, want I9JvDaciaFk", got)
@@ -635,35 +644,140 @@ func TestYouTubeHelperFinalizeMetadataFields(t *testing.T) {
 		t.Fatalf("truncated title rune count = %d, want %d", rc, MaxFinalizeTitleRunes)
 	}
 
-	// 4. Non-whitelisted thumbnail URLs and invalid duration_seconds must be rejected with 400.
-	for _, badThumb := range []string{
+	// 4. Invalid optional fields (thumbnail, duration_seconds, title, author) drop only that field and still return 200 OK.
+	for _, badThumb := range []any{
 		"https://evil.example.com/vi/I9JvDaciaFk/hqdefault.jpg",
 		"http://127.0.0.1/thumb.jpg",
 		"https://rr1---sn-npoe7n7r.googlevideo.com/videoplayback?itag=18",
 		"ftp://i.ytimg.com/vi/I9JvDaciaFk/hqdefault.jpg",
+		12345,
 	} {
 		badThumbBody, _ := json.Marshal(map[string]any{
 			"video_id":  "I9JvDaciaFk",
 			"player_id": "a5c2aafe",
+			"title":     "Valid Title",
 			"thumbnail": badThumb,
 			"formats":   []any{firstFmt},
 		})
-		rejPayload, rejStatus := helper.Finalize(context.Background(), badThumbBody, false)
-		if rejStatus != http.StatusBadRequest || unified.Str(rejPayload["code"]) != "INVALID_INPUT" {
-			t.Fatalf("expected 400 INVALID_INPUT for thumbnail %q, got %d (%#v)", badThumb, rejStatus, rejPayload)
+		okPayload, okStatus := helper.Finalize(context.Background(), badThumbBody, false)
+		if okStatus != http.StatusOK || unified.Str(okPayload["code"]) != "OK" {
+			t.Fatalf("expected 200 OK with bad thumbnail %v dropped, got %d (%#v)", badThumb, okStatus, okPayload)
+		}
+		okData := unified.Map(okPayload["data"])
+		if okData["cover"] != nil {
+			t.Fatalf("expected cover to be omitted for bad thumbnail %v, got %#v", badThumb, okData["cover"])
+		}
+		if got := unified.Str(okData["title"]); got != "Valid Title" {
+			t.Fatalf("expected valid title preserved, got %q", got)
 		}
 	}
 
-	for _, badDur := range []any{0, -10, "19", 19.5} {
+	for _, badDur := range []any{0, -10, 86400*365 + 1, "19", 19.5} {
 		badDurBody, _ := json.Marshal(map[string]any{
 			"video_id":         "I9JvDaciaFk",
 			"player_id":        "a5c2aafe",
+			"title":            "Valid Title",
 			"duration_seconds": badDur,
 			"formats":          []any{firstFmt},
 		})
-		rejPayload, rejStatus := helper.Finalize(context.Background(), badDurBody, false)
-		if rejStatus != http.StatusBadRequest || unified.Str(rejPayload["code"]) != "INVALID_INPUT" {
-			t.Fatalf("expected 400 INVALID_INPUT for duration_seconds %v, got %d (%#v)", badDur, rejStatus, rejPayload)
+		okPayload, okStatus := helper.Finalize(context.Background(), badDurBody, false)
+		if okStatus != http.StatusOK || unified.Str(okPayload["code"]) != "OK" {
+			t.Fatalf("expected 200 OK with bad duration_seconds %v dropped, got %d (%#v)", badDur, okStatus, okPayload)
 		}
+		okItem := unified.Map(unified.Slice(unified.Map(okPayload["data"])["items"])[0])
+		if okItem["duration_ms"] != nil {
+			t.Fatalf("expected duration_ms omitted for duration_seconds %v, got %#v", badDur, okItem["duration_ms"])
+		}
+	}
+
+	nonStringOptionalBody, _ := json.Marshal(map[string]any{
+		"video_id":  "I9JvDaciaFk",
+		"player_id": "a5c2aafe",
+		"title":     123,
+		"author":    false,
+		"formats":   []any{firstFmt},
+	})
+	optPayload, optStatus := helper.Finalize(context.Background(), nonStringOptionalBody, false)
+	if optStatus != http.StatusOK || unified.Str(optPayload["code"]) != "OK" {
+		t.Fatalf("expected 200 OK with non-string title/author dropped, got %d (%#v)", optStatus, optPayload)
+	}
+	optData := unified.Map(optPayload["data"])
+	if got := unified.Str(optData["title"]); got != "I9JvDaciaFk" {
+		t.Fatalf("expected fallback video_id title, got %q", got)
+	}
+	if optData["author"] != nil {
+		t.Fatalf("expected invalid author omitted, got %#v", optData["author"])
+	}
+}
+
+func TestYouTubeHelperRefreshPanicDoesNotWedgeSubsequentContext(t *testing.T) {
+	sb := newTestSandbox(t)
+	playerJS, err := os.ReadFile(filepath.Join("testdata", "player_base_fixture.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	execMock := &mockYouTubeFetchExecutor{
+		playerID:     "a5c2aafe",
+		playerBaseJS: playerJS,
+		fetchDelay:   25 * time.Millisecond,
+	}
+	execMock.panicRefresh.Store(true)
+
+	currentNow := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	helper, err := NewHelper(execMock, sb, func() time.Time { return currentNow })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Launch a concurrent waiter alongside the panicking leader to ensure neither wedges.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	panicked := atomic.Bool{}
+	waiterStatus := atomic.Int32{}
+
+	go func() {
+		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				panicked.Store(true)
+			}
+		}()
+		_, _ = helper.Context(context.Background())
+	}()
+
+	time.Sleep(5 * time.Millisecond)
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, st := helper.Context(ctx)
+		waiterStatus.Store(int32(st))
+	}()
+
+	wg.Wait()
+	if !panicked.Load() {
+		t.Fatal("expected first Context call to panic during simulated refresh panic")
+	}
+	if got := int(waiterStatus.Load()); got != http.StatusBadGateway {
+		t.Fatalf("concurrent waiter status = %d, want 502 after leader panic", got)
+	}
+	if helper.HasCachedContext() {
+		t.Fatal("expected cache to remain empty after panicked refresh")
+	}
+
+	// Clear panic flag: subsequent Context request must refresh normally without hanging.
+	execMock.panicRefresh.Store(false)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	payload, status := helper.Context(ctx)
+	if status != http.StatusOK {
+		t.Fatalf("subsequent Context status = %d, payload = %#v", status, payload)
+	}
+	if got := unified.Str(unified.Map(payload["data"])["player_id"]); got != "a5c2aafe" {
+		t.Fatalf("player_id = %q, want a5c2aafe", got)
+	}
+	if !helper.HasCachedContext() {
+		t.Fatal("expected HasCachedContext() == true after successful refresh")
 	}
 }

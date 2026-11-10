@@ -89,7 +89,79 @@ function triggerBrowserDownload(
   return !threw && !clickEvent?.defaultPrevented;
 }
 
+function isToutiaovodAttachmentUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+    if (!host.endsWith(".toutiaovod.com") || host === ".toutiaovod.com") {
+      return false;
+    }
+    return parsed.pathname.length > 1;
+  } catch {
+    return false;
+  }
+}
+
+function inferredVideoFileExtension(
+  rawUrl: string,
+  platform?: string,
+  hasTbvideo = false,
+): string | undefined {
+  try {
+    const parsed = new URL(rawUrl);
+    const queryMime = (parsed.searchParams.get("mime_type") || "")
+      .trim()
+      .toLowerCase();
+    if (queryMime === "video_mp4" || queryMime === "video/mp4") {
+      return "mp4";
+    }
+    if (queryMime === "video_webm" || queryMime === "video/webm") {
+      return "webm";
+    }
+    if (queryMime === "video_quicktime" || queryMime === "video/quicktime") {
+      return "mov";
+    }
+    if (queryMime) {
+      return undefined;
+    }
+    const pathLower = parsed.pathname.toLowerCase();
+    const pathExtMatch = /\.([a-z0-9]{2,5})$/.exec(pathLower);
+    if (pathExtMatch) {
+      const pathExt = pathExtMatch[1];
+      if (pathExt === "mp4" || pathExt === "m4v") return "mp4";
+      if (pathExt === "webm" || pathExt === "mov" || pathExt === "mkv") {
+        return pathExt;
+      }
+      return undefined;
+    }
+    const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+    if (isToutiaovodAttachmentUrl(rawUrl)) {
+      return "mp4";
+    }
+    if (
+      hasTbvideo ||
+      ((platform === "zuiyou" || platform === "pipigx") &&
+        (host === "web-v01.izuiyou.com" ||
+          host === "tbvideo.ixiaochuan.cn" ||
+          host === "video01.szsttkj.com" ||
+          host === "video03.szsttkj.com" ||
+          host === "xlal-ppvideo.szsttkj.com"))
+    ) {
+      return "mp4";
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isCorsBlockedDirectCdn(rawUrl: string): boolean {
+  if (isToutiaovodAttachmentUrl(rawUrl)) {
+    return true;
+  }
   try {
     const parsed = new URL(rawUrl);
     const host = parsed.hostname.toLowerCase();
@@ -102,6 +174,9 @@ function isCorsBlockedDirectCdn(rawUrl: string): boolean {
 // URL parameters only indicate that a direct attachment attempt can be made;
 // they never prove that the actual upstream HTTP response is a verified attachment.
 function canAttemptDirectAttachment(rawUrl: string): boolean {
+  if (isToutiaovodAttachmentUrl(rawUrl)) {
+    return true;
+  }
   try {
     const parsed = new URL(rawUrl);
     const host = parsed.hostname.toLowerCase();
@@ -1268,10 +1343,22 @@ export function useMediaDownload({
       );
       const formatMime = target.kind === "file" ? confirmedFormatMime(target.variant.metadata) : undefined;
       const suffixes = extensionsFor(formatMime || "");
-      const resolvedExt =
+      let resolvedExt =
         suffixes.length && !suffixes.includes(extension)
           ? suffixes[0]
           : extension;
+      if (
+        resolvedExt === "bin" &&
+        target.kind === "file" &&
+        item.type === "video"
+      ) {
+        resolvedExt =
+          inferredVideoFileExtension(
+            target.url,
+            snapshot.platform,
+            Boolean(item.tbvideo?.vid),
+          ) || resolvedExt;
+      }
       const filename = filenameFor(snapshot, resolvedExt, target.variant);
       videoStore.updateDownload(id, { filename });
       if (target.kind === "file") {

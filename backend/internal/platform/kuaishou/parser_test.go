@@ -102,6 +102,51 @@ func TestShortShareCanReachOfficialMobilePhotoPage(t *testing.T) {
 	}
 }
 
+func TestDesktopShortVideoRedirectsToGifshowMobilePhotoPage(t *testing.T) {
+	const desktop = "https://www.kuaishou.com/short-video/3xngkmw8vacriqu"
+	const page = "https://m.gifshow.com/fw/photo/3xngkmw8vacriqu"
+	const html = `<script>window.INIT_STATE = {"tusjoh-a":{"photo":{"photoType":"VIDEO","caption":"快手桌面端跳转样本","mainMvUrls":[{"url":"https://media.example.test/kuaishou-desktop.mp4"}]}}};</script>`
+	calls := 0
+	parser := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+		calls++
+		if request.Method == http.MethodHead {
+			if request.URL != desktop || !request.Policy.AllowedURL(page) {
+				return fetch.Response{}, fetch.ErrPolicy
+			}
+			for _, unsafe := range []string{
+				"http://m.gifshow.com/fw/photo/3xngkmw8vacriqu",
+				"https://m.gifshow.com:8443/fw/photo/3xngkmw8vacriqu",
+				"https://user@m.gifshow.com/fw/photo/3xngkmw8vacriqu",
+				"https://sub.m.gifshow.com/fw/photo/3xngkmw8vacriqu",
+				"https://m.gifshow.com.example.org/fw/photo/3xngkmw8vacriqu",
+				"https://m.gifshow.com/private/path",
+				"https://m.gifshow.com/fw/photo/%2e%2e",
+				"https://m.gifshow.com/fw/photo/3xngkmw8vacriqu#fragment",
+			} {
+				if request.Policy.AllowedURL(unsafe) {
+					t.Fatalf("gifshow mobile page policy admitted unsafe destination %q", unsafe)
+				}
+			}
+			return fetch.Response{StatusCode: 200, URL: page, History: []string{desktop, page}}, nil
+		}
+		if request.Method != http.MethodGet || request.URL != page || !request.Policy.AllowedURL(page) {
+			t.Fatalf("page GET did not target approved gifshow redirect: method=%s url=%s", request.Method, request.URL)
+		}
+		return fetch.Response{StatusCode: 200, URL: page, Body: []byte(html)}, nil
+	}))
+
+	payload, err := parser.Parse(context.Background(), desktop, 1793361600)
+	if err != nil || payload["code"] != "OK" || calls != 2 {
+		t.Fatalf("desktop short-video redirect to m.gifshow.com failed: calls=%d code=%v err=%v", calls, payload["code"], err)
+	}
+
+	// m.gifshow.com must never be accepted as a direct user-entered input URL.
+	directPayload, err := parser.Parse(context.Background(), page, 1793361600)
+	if err != nil || directPayload["code"] != "INVALID_INPUT" || calls != 2 {
+		t.Fatalf("m.gifshow.com became a directly accepted input: calls=%d payload=%v err=%v", calls, directPayload, err)
+	}
+}
+
 func TestParseKeepsHEADAndGETRequestBoundaries(t *testing.T) {
 	const target = "https://www.kuaishou.com/short-video/test"
 	calls := 0

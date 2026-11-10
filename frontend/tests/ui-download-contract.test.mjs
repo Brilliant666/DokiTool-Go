@@ -2531,3 +2531,149 @@ test('tbvideo manual fallback on pipigx and zuiyou allows a fresh main-button at
     assert.equal(hTb.store.downloads[1].status, 'manual');
   }
 });
+
+test('toutiaovod native attachment handoff uses isolated noopener/no-referrer link without reading cross-origin bytes and names MP4s as .mp4', async () => {
+  clicked = [];
+  fetched = [];
+  const toutiaoUrl =
+    'https://v3-web.toutiaovod.com/11bf2e6d39c589275cf3cd937691188a/68eb15d2/video/tos/cn/tos-cn-v-0004c002-alinc2/oAPBf0iAn7t9hA9E3IiC0Az7EBBAvIQymKsxIo/?a=24&br=2092&ch=0&cr=0&cs=0&cv=1&dr=0&ds=4&er=0&l=20261110&lr=all&mime_type=video_mp4&net=0&pl=0&qs=0&rc=anY6cHM5cjN2MzMzNDczM0ApZTwzNWQ0Ozw6Nzw6Ozg1NGdfYGJfMmRzL25gLS1kLTBzczJgXy0yMzJiNS8tNTEuXmI6Yw%3D%3D';
+  const toutiaoItem = {
+    id: 'video-1',
+    type: 'video',
+    index: 1,
+    state: 'ready',
+    default: { variant_id: 'v-1080p', source_id: 's-0', url: toutiaoUrl, access: 'direct' },
+    variants: [
+      {
+        id: 'v-1080p',
+        label: '1080p',
+        metadata: { width: 1920, height: 1080, fps: 30, bitrate_bps: 2142661, video_codec: 'h264', evidence: 'upstream' },
+        delivery: { kind: 'file', sources: [{ id: 's-0', url: toutiaoUrl, access: 'direct', size_bytes: 25912280 }] },
+      },
+    ],
+  };
+
+  const hToutiao = harness({
+    platform: 'toutiao',
+    title: '南大光电重大突破',
+    items: [toutiaoItem],
+    default_item_id: toutiaoItem.id,
+  });
+
+  await hToutiao.instance.downloadMainVideo();
+  await settled(hToutiao.store.downloads[0]);
+  assert.equal(fetched.length, 0, 'toutiaovod must never trigger JS/SW cross-origin fetch');
+  assert.equal(hToutiao.store.downloads.length, 1);
+  assert.equal(hToutiao.store.downloads[0].status, 'handed-off');
+  assert.equal(hToutiao.store.downloads[0].statusText, '已交给浏览器');
+  assert.equal(hToutiao.store.downloads[0].transport, 'browser_native');
+  assert.equal(hToutiao.store.downloads[0].filename, '南大光电重大突破.mp4');
+  assert.equal(clicked.length, 1);
+  assert.equal(clicked[0].href, toutiaoUrl);
+  assert.equal(clicked[0].filename, '南大光电重大突破.mp4');
+  assert.equal(clicked[0].target, '_blank');
+  assert.equal(clicked[0].rel, 'noopener noreferrer');
+  assert.equal(clicked[0].referrerPolicy, 'no-referrer');
+
+  // Popup-blocked fallback transitions cleanly to manual ("打开源链接") while keeping .mp4 filename
+  const blockClick = (e) => e.preventDefault();
+  globalThis.document.addEventListener('click', blockClick);
+  try {
+    const hBlocked = harness({
+      platform: 'toutiao',
+      title: '南大光电重大突破',
+      items: [toutiaoItem],
+      default_item_id: toutiaoItem.id,
+    });
+    await hBlocked.instance.downloadMainVideo();
+    await settled(hBlocked.store.downloads[0]);
+    assert.equal(hBlocked.store.downloads[0].status, 'manual');
+    assert.equal(hBlocked.store.downloads[0].statusText, '打开源链接');
+    assert.equal(hBlocked.store.downloads[0].filename, '南大光电重大突破.mp4');
+  } finally {
+    globalThis.document.removeEventListener('click', blockClick);
+  }
+});
+
+test('zuiyou and pipigx manual-entry filenames use .mp4 while genuinely unknown formats retain .bin', async () => {
+  clicked = [];
+  fetched = [];
+
+  // 1. Zuiyou production shape (no metadata.extension/mime_type, opaque path on web-v01.izuiyou.com + tbvideo.vid)
+  const zuiyouUrl = 'http://web-v01.izuiyou.com/zyvqwz/52/1a/afac-65fe-11eb-97df-00163e143aa6?auth_key=1794300000-0-0-test';
+  const zuiyouItem = {
+    id: 'video-1',
+    type: 'video',
+    index: 1,
+    state: 'ready',
+    default: { variant_id: 'v-0', source_id: 's-0', url: zuiyouUrl, access: 'direct' },
+    variants: [
+      {
+        id: 'v-0',
+        metadata: { duration_ms: 333000, evidence: 'upstream' },
+        delivery: { kind: 'file', sources: [{ id: 's-0', url: zuiyouUrl, access: 'direct' }] },
+      },
+    ],
+    tbvideo: { platform: 'zuiyou', pid: '163566379', vid: '1028117147', sources: {} },
+  };
+  const hZuiyou = harness({
+    platform: 'zuiyou',
+    title: '笑死了哈哈哈哈哈',
+    items: [zuiyouItem],
+    default_item_id: zuiyouItem.id,
+  });
+  await hZuiyou.instance.downloadMainVideo();
+  await settled(hZuiyou.store.downloads[0]);
+  assert.equal(hZuiyou.store.downloads[0].status, 'manual');
+  assert.equal(hZuiyou.store.downloads[0].statusText, '打开源链接');
+  assert.equal(hZuiyou.store.downloads[0].filename, '笑死了哈哈哈哈哈.mp4');
+
+  // 2. Genuinely unknown format (no metadata, no mime_type param, no MP4 path/bucket) retains .bin
+  const opaqueUrl = 'https://cdn.unknown-example.test/stream/opaque-object?token=abc';
+  const unknownItem = {
+    id: 'video-unknown',
+    type: 'video',
+    index: 1,
+    state: 'ready',
+    default: { variant_id: 'v-0', source_id: 's-0', url: opaqueUrl, access: 'direct' },
+    variants: [
+      {
+        id: 'v-0',
+        metadata: { evidence: 'upstream' },
+        delivery: { kind: 'file', sources: [{ id: 's-0', url: opaqueUrl, access: 'direct' }] },
+      },
+    ],
+  };
+  const prevManager = globalThis.__uiDownloadManager;
+  globalThis.__uiDownloadManager = {
+    async run(request, _signal, observe) {
+      const snap = {
+        id: request.id,
+        transport: 'browser_streaming',
+        status: 'manual',
+        filename: request.filename,
+        url: request.url,
+        loaded: 0,
+        total: 0,
+        speed: 0,
+        elapsed: 0,
+        averageSpeed: 0,
+      };
+      observe(snap);
+      return snap;
+    },
+  };
+  try {
+    const hUnknown = harness({
+      platform: 'douyin',
+      title: '未知格式流',
+      items: [unknownItem],
+      default_item_id: unknownItem.id,
+    });
+    await hUnknown.instance.downloadMainVideo();
+    await settled(hUnknown.store.downloads[0]);
+    assert.equal(hUnknown.store.downloads[0].filename, '未知格式流.bin');
+  } finally {
+    globalThis.__uiDownloadManager = prevManager;
+  }
+});
