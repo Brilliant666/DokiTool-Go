@@ -360,18 +360,37 @@ export function useVideoParser(options: {
       );
     }
 
+    const vd = playerResult.videoDetails;
+    const finalizeBody: Record<string, unknown> = {
+      video_id: videoId,
+      player_id: contextData.player_id,
+      formats: playerResult.streamingData?.formats || [],
+      adaptiveFormats: playerResult.streamingData?.adaptiveFormats || [],
+    };
+    if (typeof vd?.title === "string" && vd.title.trim()) {
+      finalizeBody.title = vd.title.trim();
+    }
+    if (typeof vd?.author === "string" && vd.author.trim()) {
+      finalizeBody.author = vd.author.trim();
+    }
+    if (
+      typeof vd?.lengthSeconds === "number" &&
+      Number.isInteger(vd.lengthSeconds) &&
+      vd.lengthSeconds > 0
+    ) {
+      finalizeBody.duration_seconds = vd.lengthSeconds;
+    }
+    if (typeof vd?.thumbnail === "string" && vd.thumbnail.trim()) {
+      finalizeBody.thumbnail = vd.thumbnail.trim();
+    }
+
     const finalizePayload = await fetchJSON(
       `${apiConfig.baseUrl}/api/youtube/finalize?schema_version=1.0`,
       controller.signal,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          video_id: videoId,
-          player_id: contextData.player_id,
-          formats: playerResult.streamingData?.formats || [],
-          adaptiveFormats: playerResult.streamingData?.adaptiveFormats || [],
-        }),
+        body: JSON.stringify(finalizeBody),
       },
     );
 

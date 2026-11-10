@@ -56,10 +56,12 @@ function cleanBase(title: string): string {
   return cleaned.slice(0, MAX_BASE_LENGTH);
 }
 
-/** 由标题+index 构造可读文件名：`标题_P{index}.mp4`，无标题回退哈希名 */
+/** 由标题+index+可选后缀构造可读文件名：多条目加 `_P{index}`，单条目不加 `_P1`，无标题回退哈希名 */
 export function buildMediaFilename(input: {
   title?: string;
   index?: number;
+  total?: number;
+  suffix?: string;
   fallback: string;
   extension?: string;
 }): string {
@@ -67,10 +69,19 @@ export function buildMediaFilename(input: {
     (input.extension || "mp4").replace(/[^a-z0-9]/gi, "").slice(0, 12) || "bin";
   const rawTitle = (input.title ?? "").trim();
   const page = typeof input.index === "number" ? input.index : undefined;
-  const pageTag = page !== undefined && page > 0 ? `_P${page}` : "";
+  const isMultiItem =
+    typeof input.total === "number"
+      ? input.total > 1
+      : page !== undefined && page > 1;
+  const pageTag =
+    isMultiItem && page !== undefined && page > 0 ? `_P${page}` : "";
+  const rawSuffix = cleanBase(input.suffix ?? "").replace(/\s+/g, "_");
+  const suffixTag = rawSuffix ? `_${rawSuffix}` : "";
   if (rawTitle) {
     const base = cleanBase(rawTitle);
-    return `${base}${pageTag}.${extension}`;
+    if (base) {
+      return `${base}${pageTag}${suffixTag}.${extension}`;
+    }
   }
-  return `${hashMediaName(input.fallback)}.${extension}`;
+  return `${hashMediaName(input.fallback)}${pageTag}${suffixTag}.${extension}`;
 }

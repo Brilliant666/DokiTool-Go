@@ -10,9 +10,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
@@ -126,6 +128,8 @@ func TestEJSSandboxBlocksNetworkAndFilesystem(t *testing.T) {
 type mockYouTubeFetchExecutor struct {
 	playerID      string
 	playerBaseJS  []byte
+	fetchDelay    time.Duration
+	failRefresh   atomic.Bool
 	iframeHits    atomic.Int32
 	playerJSHits  atomic.Int32
 	forbiddenHits atomic.Int32
@@ -143,9 +147,15 @@ func (m *mockYouTubeFetchExecutor) Do(_ context.Context, req fetch.Request) (fet
 		m.forbiddenHits.Add(1)
 		return fetch.Response{}, fetch.ErrPolicy
 	}
+	if m.fetchDelay > 0 {
+		time.Sleep(m.fetchDelay)
+	}
 	switch req.URL {
 	case "https://www.youtube.com/iframe_api":
 		m.iframeHits.Add(1)
+		if m.failRefresh.Load() {
+			return fetch.Response{StatusCode: http.StatusBadGateway}, nil
+		}
 		body := `var scriptUrl = 'https:\/\/www.youtube.com\/s\/player\/` + m.playerID + `\/www-widgetapi.vflset\/www-widgetapi.js';`
 		return fetch.Response{
 			StatusCode: http.StatusOK,
@@ -155,6 +165,9 @@ func (m *mockYouTubeFetchExecutor) Do(_ context.Context, req fetch.Request) (fet
 		}, nil
 	case "https://www.youtube.com/s/player/" + m.playerID + "/player_ias.vflset/en_US/base.js":
 		m.playerJSHits.Add(1)
+		if m.failRefresh.Load() {
+			return fetch.Response{StatusCode: http.StatusBadGateway}, nil
+		}
 		return fetch.Response{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": {"application/javascript"}},
@@ -254,8 +267,8 @@ func TestYouTubeHelperContextAndFinalizeSample46(t *testing.T) {
 	if parsedDefURL.Query().Get("itag") != "18" {
 		t.Fatalf("default url itag = %q, want 18", parsedDefURL.Query().Get("itag"))
 	}
-	if parsedDefURL.Query().Get("title") != "I9JvDaciaFk" {
-		t.Fatalf("expected itag 18 URL to have title=I9JvDaciaFk, got %q", parsedDefURL.Query().Get("title"))
+	if parsedDefURL.Query().Get("title") != "I9JvDaciaFk_360p" {
+		t.Fatalf("expected itag 18 URL to have title=I9JvDaciaFk_360p, got %q", parsedDefURL.Query().Get("title"))
 	}
 	if parsedDefURL.Query().Get("n") != "SOLVED_N_CHALLENGE_N_18" {
 		t.Fatalf("expected solved n parameter, got %q", parsedDefURL.Query().Get("n"))
@@ -433,4 +446,224 @@ func TestYouTubeHelperFinalizeRejections(t *testing.T) {
 		"visitor_id": "unexpected",
 	})
 	mustReject("unknown top-level field", unknownFieldBody)
+}
+
+func TestYouTubeHelperContextConcurrentSingleflightAndStaleFallback(t *testing.T) {
+	sb := newTestSandbox(t)
+	playerJS, err := os.ReadFile(filepath.Join("testdata", "player_base_fixture.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	execMock := &mockYouTubeFetchExecutor{
+		playerID:     "a5c2aafe",
+		playerBaseJS: playerJS,
+		fetchDelay:   25 * time.Millisecond,
+	}
+	var nowMu sync.Mutex
+	currentNow := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	helper, err := NewHelper(execMock, sb, func() time.Time {
+		nowMu.Lock()
+		defer nowMu.Unlock()
+		return currentNow
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. 20 concurrent Context calls when cache is empty must coalesce into a single refresh.
+	const concurrency = 20
+	var wg sync.WaitGroup
+	startGate := make(chan struct{})
+	statuses := make([]int, concurrency)
+	playerIDs := make([]string, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-startGate
+			payload, status := helper.Context(context.Background())
+			statuses[idx] = status
+			playerIDs[idx] = unified.Str(unified.Map(payload["data"])["player_id"])
+		}(i)
+	}
+	close(startGate)
+	wg.Wait()
+
+	for i := 0; i < concurrency; i++ {
+		if statuses[i] != http.StatusOK || playerIDs[i] != "a5c2aafe" {
+			t.Fatalf("caller %d got status=%d player_id=%q", i, statuses[i], playerIDs[i])
+		}
+	}
+	if got := execMock.iframeHits.Load(); got != 1 {
+		t.Fatalf("iframe_api hits = %d, want 1", got)
+	}
+	if got := execMock.playerJSHits.Load(); got != 1 {
+		t.Fatalf("base.js hits = %d, want 1", got)
+	}
+
+	// 2. Stale fallback within 1 hour when refresh fails.
+	execMock.failRefresh.Store(true)
+	nowMu.Lock()
+	currentNow = currentNow.Add(DefaultPlayerCacheTTL + 30*time.Minute)
+	nowMu.Unlock()
+
+	stalePayload, staleStatus := helper.Context(context.Background())
+	if staleStatus != http.StatusOK {
+		t.Fatalf("expected 200 from stale fallback within 1h, got %d (%#v)", staleStatus, stalePayload)
+	}
+	if got := unified.Str(unified.Map(stalePayload["data"])["player_id"]); got != "a5c2aafe" {
+		t.Fatalf("stale fallback player_id = %q, want a5c2aafe", got)
+	}
+
+	// 3. Past 1 hour after expiry, failed refresh must return 502.
+	nowMu.Lock()
+	currentNow = currentNow.Add(45 * time.Minute) // total +6h75m (> +7h)
+	nowMu.Unlock()
+
+	failPayload, failStatus := helper.Context(context.Background())
+	if failStatus != http.StatusBadGateway {
+		t.Fatalf("expected 502 when stale > 1h and refresh fails, got %d (%#v)", failStatus, failPayload)
+	}
+}
+
+func TestYouTubeHelperFinalizeMetadataFields(t *testing.T) {
+	sb := newTestSandbox(t)
+	playerJS, err := os.ReadFile(filepath.Join("testdata", "player_base_fixture.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sampleJSON, err := os.ReadFile(filepath.Join("testdata", "finalize_sample_46.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	execMock := &mockYouTubeFetchExecutor{
+		playerID:     "a5c2aafe",
+		playerBaseJS: playerJS,
+	}
+	currentNow := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	helper, err := NewHelper(execMock, sb, func() time.Time { return currentNow })
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = helper.Context(context.Background())
+
+	var baseReq map[string]any
+	if err := json.Unmarshal(sampleJSON, &baseReq); err != nil {
+		t.Fatal(err)
+	}
+	firstFmt := baseReq["formats"].([]any)[0].(map[string]any)
+
+	// 1. Valid title, author, duration_seconds, and i.ytimg.com thumbnail.
+	validBody, _ := json.Marshal(map[string]any{
+		"video_id":         "I9JvDaciaFk",
+		"player_id":        "a5c2aafe",
+		"title":            "  Me at the zoo  ",
+		"author":           "  jawed  ",
+		"duration_seconds": 19,
+		"thumbnail":        "https://i.ytimg.com/vi/I9JvDaciaFk/maxresdefault.jpg",
+		"formats":          []any{firstFmt},
+	})
+	payload, status := helper.Finalize(context.Background(), validBody, false)
+	if status != http.StatusOK {
+		t.Fatalf("valid metadata finalize status = %d, payload = %#v", status, payload)
+	}
+	data := unified.Map(payload["data"])
+	if got := unified.Str(data["title"]); got != "Me at the zoo" {
+		t.Fatalf("data.title = %q, want %q", got, "Me at the zoo")
+	}
+	if got := unified.Str(unified.Map(data["author"])["name"]); got != "jawed" {
+		t.Fatalf("data.author.name = %q, want %q", got, "jawed")
+	}
+	if got := unified.Str(unified.Map(data["cover"])["url"]); got != "https://i.ytimg.com/vi/I9JvDaciaFk/maxresdefault.jpg" {
+		t.Fatalf("data.cover.url = %q", got)
+	}
+	item := unified.Map(unified.Slice(data["items"])[0])
+	if got, ok := unified.Numeric(item["duration_ms"]); !ok || int(got) != 19000 {
+		t.Fatalf("item.duration_ms = %v, want 19000", item["duration_ms"])
+	}
+	defURL, _ := url.Parse(unified.Str(unified.Map(item["default"])["url"]))
+	if got := defURL.Query().Get("title"); got != "Me_at_the_zoo_360p" {
+		t.Fatalf("itag 18 title query = %q, want Me_at_the_zoo_360p", got)
+	}
+
+	// 2. Title with control characters and Title with only control chars/whitespace.
+	ctrlBody, _ := json.Marshal(map[string]any{
+		"video_id":  "I9JvDaciaFk",
+		"player_id": "a5c2aafe",
+		"title":     " \x00\x07Hello\n\tWorld\x1f\x7f ",
+		"formats":   []any{firstFmt},
+	})
+	ctrlPayload, ctrlStatus := helper.Finalize(context.Background(), ctrlBody, false)
+	if ctrlStatus != http.StatusOK {
+		t.Fatalf("control-char title status = %d", ctrlStatus)
+	}
+	if got := unified.Str(unified.Map(ctrlPayload["data"])["title"]); got != "HelloWorld" {
+		t.Fatalf("control-char stripped title = %q, want HelloWorld", got)
+	}
+
+	emptyCtrlBody, _ := json.Marshal(map[string]any{
+		"video_id":  "I9JvDaciaFk",
+		"player_id": "a5c2aafe",
+		"title":     " \x00\x07\t\n ",
+		"formats":   []any{firstFmt},
+	})
+	emptyCtrlPayload, emptyCtrlStatus := helper.Finalize(context.Background(), emptyCtrlBody, false)
+	if emptyCtrlStatus != http.StatusOK {
+		t.Fatalf("empty control-char title status = %d", emptyCtrlStatus)
+	}
+	if got := unified.Str(unified.Map(emptyCtrlPayload["data"])["title"]); got != "I9JvDaciaFk" {
+		t.Fatalf("fallback title = %q, want I9JvDaciaFk", got)
+	}
+
+	// 3. Overly long title (> 200 runes) is truncated to 200 runes.
+	longTitle := strings.Repeat("测A", 125) // 250 runes
+	longBody, _ := json.Marshal(map[string]any{
+		"video_id":  "I9JvDaciaFk",
+		"player_id": "a5c2aafe",
+		"title":     longTitle,
+		"formats":   []any{firstFmt},
+	})
+	longPayload, longStatus := helper.Finalize(context.Background(), longBody, false)
+	if longStatus != http.StatusOK {
+		t.Fatalf("overlong title status = %d", longStatus)
+	}
+	gotLongTitle := unified.Str(unified.Map(longPayload["data"])["title"])
+	if rc := utf8.RuneCountInString(gotLongTitle); rc != MaxFinalizeTitleRunes {
+		t.Fatalf("truncated title rune count = %d, want %d", rc, MaxFinalizeTitleRunes)
+	}
+
+	// 4. Non-whitelisted thumbnail URLs and invalid duration_seconds must be rejected with 400.
+	for _, badThumb := range []string{
+		"https://evil.example.com/vi/I9JvDaciaFk/hqdefault.jpg",
+		"http://127.0.0.1/thumb.jpg",
+		"https://rr1---sn-npoe7n7r.googlevideo.com/videoplayback?itag=18",
+		"ftp://i.ytimg.com/vi/I9JvDaciaFk/hqdefault.jpg",
+	} {
+		badThumbBody, _ := json.Marshal(map[string]any{
+			"video_id":  "I9JvDaciaFk",
+			"player_id": "a5c2aafe",
+			"thumbnail": badThumb,
+			"formats":   []any{firstFmt},
+		})
+		rejPayload, rejStatus := helper.Finalize(context.Background(), badThumbBody, false)
+		if rejStatus != http.StatusBadRequest || unified.Str(rejPayload["code"]) != "INVALID_INPUT" {
+			t.Fatalf("expected 400 INVALID_INPUT for thumbnail %q, got %d (%#v)", badThumb, rejStatus, rejPayload)
+		}
+	}
+
+	for _, badDur := range []any{0, -10, "19", 19.5} {
+		badDurBody, _ := json.Marshal(map[string]any{
+			"video_id":         "I9JvDaciaFk",
+			"player_id":        "a5c2aafe",
+			"duration_seconds": badDur,
+			"formats":          []any{firstFmt},
+		})
+		rejPayload, rejStatus := helper.Finalize(context.Background(), badDurBody, false)
+		if rejStatus != http.StatusBadRequest || unified.Str(rejPayload["code"]) != "INVALID_INPUT" {
+			t.Fatalf("expected 400 INVALID_INPUT for duration_seconds %v, got %d (%#v)", badDur, rejStatus, rejPayload)
+		}
+	}
 }

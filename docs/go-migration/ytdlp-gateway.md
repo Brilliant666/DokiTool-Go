@@ -34,3 +34,7 @@ Go 定向测试覆盖配置、共享端口租约、并发忙、HTTP/CONNECT 认�
 隔离 Linux 验证在独立网络命名空间内重建拒绝基线，产品/探针以非 root 身份运行，管理进程仅为测试设置命名空间及规则：先复现拒绝，加入精确例外后验证收发及计数，再验证有监听的邻接端口、其他本地地址和私网/元数据仍拒绝，最后撤回并复验。准确执行结果以 PR 的 Head CI 为准，未执行或跳过的部分必须明确列出。
 
 本阶段仅交 Draft PR；不改日本规则、安装生产依赖、重启服务或切流。旧九平台差分、T1/T2/T3、R1–R6/C1/C2 继承并运行受影响回归，不重复九平台现场媒体矩阵。前端、Worker、上海、冻结 PHP、容量与媒体源不变。
+
+## YouTube 助手与 yt-dlp 升级同步要求
+
+升级锁定版本 `yt-dlp` 时，必须同步核对并一起更新 YouTube 助手服务端（`backend/internal/platform/youtube/`）中的 `PinnedEJSVersion`、两个 `ejs` 资产的 SHA-256 哈希（`OfficialEJSLibSHA256`、`OfficialEJSCoreSHA256`）以及 `TVHTML5ClientVersion`（同时保持前端/用户脚本允许的 `TVHTML5_VERSION_RE` 兼容）。

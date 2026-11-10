@@ -963,6 +963,7 @@ export function useMediaDownload({
     item: MediaItem;
     choice: MediaSelection | null;
     title?: string;
+    total: number;
     version: number;
     selectionKey: string;
     platform?: string;
@@ -998,6 +999,7 @@ export function useMediaDownload({
       // must not change the user's selection or the displayed server default.
       selectionKey: JSON.stringify(choice),
       title: videoStore.resultData?.title,
+      total: videoStore.resultData?.items?.length ?? 1,
       platform: videoStore.resultData?.platform,
       version: videoStore.resultVersion,
     });
@@ -1038,13 +1040,56 @@ export function useMediaDownload({
   function selectionBusyNotice(): void {
     showToast("该版本和来源已有任务正在处理，请在下载列表查看进度", "info");
   }
-  const filenameFor = (snapshot: ItemSnapshot, extension: string) =>
-    buildMediaFilename({
-      title: snapshot.item.title || snapshot.title,
+  function resolveYouTubeTrackSuffix(
+    snapshot: ItemSnapshot,
+    variant?: {
+      label?: string;
+      metadata?: { mime_type?: string; width?: number; height?: number };
+    },
+    ext?: string,
+  ): string | undefined {
+    if (snapshot.platform !== "youtube") return undefined;
+    const mime = String(variant?.metadata?.mime_type || "").toLowerCase();
+    if (
+      snapshot.item.type === "audio" ||
+      ext === "m4a" ||
+      mime.startsWith("audio/")
+    ) {
+      return "audio";
+    }
+    const w = Number(variant?.metadata?.width);
+    const h = Number(variant?.metadata?.height);
+    if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+      return `${Math.min(w, h)}p`;
+    }
+    const labelMatch = String(variant?.label || "").match(/(\d{3,4}p)/i);
+    if (labelMatch) {
+      return labelMatch[1].toLowerCase();
+    }
+    return undefined;
+  }
+  const filenameFor = (
+    snapshot: ItemSnapshot,
+    extension: string,
+    variant?: {
+      label?: string;
+      metadata?: { mime_type?: string; width?: number; height?: number };
+    },
+  ) => {
+    const rawTitle =
+      snapshot.platform === "youtube" && snapshot.item.type === "audio"
+        ? snapshot.title ||
+          (snapshot.item.title || "").replace(/\s*\(M4A[^)]*\)$/i, "")
+        : snapshot.item.title || snapshot.title;
+    return buildMediaFilename({
+      title: rawTitle,
       index: snapshot.item.index,
+      total: snapshot.total,
+      suffix: resolveYouTubeTrackSuffix(snapshot, variant, extension),
       fallback: snapshot.item.id,
       extension,
     });
+  };
   function snapshotTarget(
     snapshot: ItemSnapshot,
     item: MediaItem,
@@ -1223,7 +1268,11 @@ export function useMediaDownload({
       );
       const formatMime = target.kind === "file" ? confirmedFormatMime(target.variant.metadata) : undefined;
       const suffixes = extensionsFor(formatMime || "");
-      const filename = filenameFor(snapshot, suffixes.length && !suffixes.includes(extension) ? suffixes[0] : extension);
+      const resolvedExt =
+        suffixes.length && !suffixes.includes(extension)
+          ? suffixes[0]
+          : extension;
+      const filename = filenameFor(snapshot, resolvedExt, target.variant);
       videoStore.updateDownload(id, { filename });
       if (target.kind === "file") {
         const hints = item.tbvideo;

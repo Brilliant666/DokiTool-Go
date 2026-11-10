@@ -676,6 +676,9 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 		titleForAttachment := ""
 		if hasAudio != nil && *hasAudio {
 			titleForAttachment = itemTitle
+			if opts.PlatformID == "youtube" && titleForAttachment != "" && shortEdge(f) > 0 {
+				titleForAttachment = fmt.Sprintf("%s_%dp", titleForAttachment, shortEdge(f))
+			}
 		}
 		sources := buildFormatSourcesWithContext(f, opts, entryKey, formatKey, titleForAttachment, now)
 		if len(sources) == 0 {
