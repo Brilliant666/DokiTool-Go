@@ -25,7 +25,9 @@ const userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleW
 var allowedInput = fetch.AllowHosts(".kuaishou.com")
 var mobilePageHost = fetch.AllowHosts(".m.chenzhongtech.com")
 var gifshowRedirectHost = fetch.AllowHosts("m.gifshow.com")
+var desktopShortVideoHost = fetch.AllowHosts("www.kuaishou.com")
 var mobilePhotoPath = regexp.MustCompile(`^/fw/photo/([A-Za-z0-9_-]+)/?$`)
+var desktopShortVideoPath = regexp.MustCompile(`^/short-video/([A-Za-z0-9_-]+)$`)
 
 // A kuaishou.com short share can lead to this mobile work page. Only the
 // redirect/GET path may use it; it is not another public parser entry.
@@ -40,9 +42,25 @@ func allowedPageURL(raw string) bool {
 	return err == nil && u.Scheme == "https" && mobilePhotoPath.MatchString(u.EscapedPath())
 }
 
-// Kuaishou desktop short-video pages redirect to https://m.gifshow.com/fw/photo/<id>,
-// whose TLS handshake resets from the production network. Rewrite matching photo
+// Kuaishou desktop short-video pages and m.gifshow.com share the same edge pool
+// whose TLS handshakes intermittently reset from the production network.
+// Rewrite canonical https://www.kuaishou.com/short-video/<id> inputs and
 // redirects directly to https://c.kuaishou.com/fw/photo/<id> before dialing.
+func rewriteDesktopShortVideo(raw string) string {
+	if !desktopShortVideoHost(raw) || strings.Contains(raw, "#") {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Port() != "" {
+		return raw
+	}
+	match := desktopShortVideoPath.FindStringSubmatch(u.EscapedPath())
+	if match == nil {
+		return raw
+	}
+	return "https://c.kuaishou.com/fw/photo/" + match[1]
+}
+
 func rewriteGifshowRedirect(raw string) string {
 	if !gifshowRedirectHost(raw) || strings.Contains(raw, "#") {
 		return raw
@@ -58,12 +76,20 @@ func rewriteGifshowRedirect(raw string) string {
 	return "https://c.kuaishou.com/fw/photo/" + match[1]
 }
 
+func rewriteKuaishouRedirect(raw string) string {
+	if rewritten := rewriteDesktopShortVideo(raw); rewritten != raw {
+		return rewritten
+	}
+	return rewriteGifshowRedirect(raw)
+}
+
 var contentPaths = []struct {
 	kind    string
 	pattern *regexp.Regexp
 }{
 	{"short-video", regexp.MustCompile(`short-video/([^?]+)`)},
 	{"long-video", regexp.MustCompile(`long-video/([^?]+)`)},
+	{"fw-photo", regexp.MustCompile(`fw/photo/([^?]+)`)},
 	{"photo", regexp.MustCompile(`photo/([^?]+)`)},
 }
 
@@ -93,7 +119,7 @@ func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Obje
 	// The combined real deadline cannot outlive both bounded requests.
 	ctx, cancel := context.WithTimeout(parent, 40*time.Second)
 	defer cancel()
-	head, err := p.request(ctx, input, http.MethodHead)
+	head, err := p.request(ctx, rewriteDesktopShortVideo(input), http.MethodHead)
 	if cancelled := parent.Err(); cancelled != nil {
 		return nil, cancelled
 	}
@@ -148,7 +174,7 @@ func (p *Parser) request(ctx context.Context, target, method string) (fetch.Resp
 		}
 	}
 	request := fetch.Request{URL: target, Method: method, Header: headers,
-		Policy: fetch.Policy{Purpose: "kuaishou-page", AllowedURL: allowedPageURL, RewriteRedirect: rewriteGifshowRedirect, Timeout: 20 * time.Second,
+		Policy: fetch.Policy{Purpose: "kuaishou-page", AllowedURL: allowedPageURL, RewriteRedirect: rewriteKuaishouRedirect, Timeout: 20 * time.Second,
 			MaxBytes: 8 << 20, FollowRedirects: true, AutoReferer: method == http.MethodGet, MaxRedirects: 5}}
 	if method == http.MethodHead {
 		request.Policy.Purpose = "kuaishou-share"

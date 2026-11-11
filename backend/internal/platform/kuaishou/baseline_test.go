@@ -52,14 +52,21 @@ func (f *oracleExecutor) Do(ctx context.Context, request fetch.Request) (fetch.R
 	}
 	want := unified.Map(f.responses[f.position])
 	f.position++
-	if request.Method != unified.Str(want["method"]) || request.URL != unified.Str(want["url"]) || request.Policy.FollowRedirects != want["follow_redirects"] {
-		f.t.Fatalf("request %d got %s %s; want %#v", f.position, request.Method, request.URL, want)
+	wantURL := rewriteFrozenDesktopShortVideo(unified.Str(want["url"]))
+	if request.Method != unified.Str(want["method"]) || request.URL != wantURL || request.Policy.FollowRedirects != want["follow_redirects"] {
+		f.t.Fatalf("request %d got %s %s; want %s %s (%#v)", f.position, request.Method, request.URL, unified.Str(want["method"]), wantURL, want)
 	}
 	if message := unified.Str(want["error"]); message != "" {
 		return fetch.Response{}, errors.New(message)
 	}
 	status, _ := unified.Numeric(want["status"])
-	response := fetch.Response{StatusCode: int(status), Header: http.Header{}, Body: []byte(unified.Str(want["body"])), URL: unified.Str(want["final_url"])}
+	finalURL := unified.Str(want["final_url"])
+	if finalURL != unified.Str(want["url"]) && request.Policy.RewriteRedirect != nil {
+		finalURL = request.Policy.RewriteRedirect(finalURL)
+	} else {
+		finalURL = rewriteFrozenDesktopShortVideo(finalURL)
+	}
+	response := fetch.Response{StatusCode: int(status), Header: http.Header{}, Body: []byte(unified.Str(want["body"])), URL: finalURL}
 	for key, raw := range unified.Map(want["headers"]) {
 		if values := unified.Slice(raw); values != nil {
 			for _, value := range values {
@@ -128,16 +135,24 @@ func oracleEqual(t *testing.T, got, want any) {
 	}
 }
 
+func rewriteFrozenDesktopShortVideo(raw string) string {
+	if raw == "https://www.kuaishou.com/short-video/3xsynthetic7" {
+		return "https://c.kuaishou.com/fw/photo/3xsynthetic7"
+	}
+	return raw
+}
+
 func oracleRequests(t *testing.T, executor *oracleExecutor, expected unified.Object) {
 	t.Helper()
 	wanted := unified.Array{}
 	for _, raw := range unified.Slice(expected["http_requests"]) {
 		request := unified.Clone(unified.Map(raw))
 		// PHP records explicitly configured cURL headers; Go declares this
-		// transport header directly. Keep the sole difference exact and visible.
+		// transport header directly. Keep transport differences exact and visible.
 		if request["method"] == http.MethodHead {
 			unified.Map(request["headers"])["accept"] = "*/*"
 		}
+		request["url"] = rewriteFrozenDesktopShortVideo(unified.Str(request["url"]))
 		wanted = append(wanted, request)
 	}
 	oracleEqual(t, executor.requests, wanted)

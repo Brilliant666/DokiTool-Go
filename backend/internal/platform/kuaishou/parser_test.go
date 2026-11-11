@@ -102,56 +102,141 @@ func TestShortShareCanReachOfficialMobilePhotoPage(t *testing.T) {
 	}
 }
 
-func TestDesktopShortVideoRedirectsToGifshowMobilePhotoPage(t *testing.T) {
+func TestDesktopShortVideoSkipsFirstHopAndStripsQuery(t *testing.T) {
 	const (
-		desktop        = "https://www.kuaishou.com/short-video/3xngkmw8vacriqu"
-		gifshowWithQ   = "https://m.gifshow.com/fw/photo/3xngkmw8vacriqu?x=y&cc=share_copylink"
+		desktopWithQ   = "https://www.kuaishou.com/short-video/3xngkmw8vacriqu?x=y&cc=share_copylink"
 		rewrittenPhoto = "https://c.kuaishou.com/fw/photo/3xngkmw8vacriqu"
-		html           = `<script>window.INIT_STATE = {"tusjoh-a":{"photo":{"photoType":"VIDEO","caption":"快手桌面端跳转样本","mainMvUrls":[{"url":"https://media.example.test/kuaishou-desktop.mp4"}]}}};</script>`
+		html           = `<script>window.INIT_STATE = {"tusjoh-a":{"photo":{"photoType":"VIDEO","caption":"快手桌面端直连样本","mainMvUrls":[{"url":"https://media.example.test/kuaishou-desktop.mp4"}]}}};</script>`
 	)
 
 	var wireCalls []string
 	parser := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
-		if request.Policy.RewriteRedirect == nil {
-			t.Fatal("missing kuaishou redirect rewrite hook")
+		if strings.Contains(request.URL, "www.kuaishou.com") {
+			t.Fatalf("unexpected request sent to www.kuaishou.com: %s %s", request.Method, request.URL)
 		}
-		current := request.URL
-		var history []string
-		for hop := 0; ; hop++ {
-			if !request.Policy.AllowedURL(current) {
-				return fetch.Response{}, fetch.ErrPolicy
-			}
-			wireCalls = append(wireCalls, request.Method+" "+current)
-			if request.Method == http.MethodHead && current == desktop {
-				next := request.Policy.RewriteRedirect(gifshowWithQ)
-				history = append(history, next)
-				current = next
-				continue
-			}
-			if request.Method == http.MethodHead && current == rewrittenPhoto {
-				return fetch.Response{StatusCode: 200, URL: current, History: history}, nil
-			}
-			if request.Method == http.MethodGet && current == rewrittenPhoto {
-				return fetch.Response{StatusCode: 200, URL: current, Body: []byte(html)}, nil
-			}
-			t.Fatalf("unexpected outbound hop %d: %s %s", hop, request.Method, current)
+		if !request.Policy.AllowedURL(request.URL) {
+			return fetch.Response{}, fetch.ErrPolicy
 		}
+		wireCalls = append(wireCalls, request.Method+" "+request.URL)
+		if request.Method == http.MethodHead && request.URL == rewrittenPhoto {
+			return fetch.Response{StatusCode: 200, URL: request.URL}, nil
+		}
+		if request.Method == http.MethodGet && request.URL == rewrittenPhoto {
+			return fetch.Response{StatusCode: 200, URL: request.URL, Body: []byte(html)}, nil
+		}
+		t.Fatalf("unexpected outbound request: %s %s", request.Method, request.URL)
+		return fetch.Response{}, nil
 	}))
 
-	payload, err := parser.Parse(context.Background(), desktop, 1793361600)
+	payload, err := parser.Parse(context.Background(), desktopWithQ, 1793361600)
 	if err != nil || payload["code"] != "OK" {
-		t.Fatalf("desktop short-video redirect rewrite failed: code=%v err=%v", payload["code"], err)
+		t.Fatalf("desktop short-video direct rewrite failed: code=%v err=%v", payload["code"], err)
 	}
 	wantCalls := []string{
-		"HEAD " + desktop,
 		"HEAD " + rewrittenPhoto,
 		"GET " + rewrittenPhoto,
 	}
 	if strings.Join(wireCalls, "\n") != strings.Join(wantCalls, "\n") {
 		t.Fatalf("unexpected outbound request sequence:\ngot:  %v\nwant: %v", wireCalls, wantCalls)
 	}
+}
+
+func TestShareRedirectsToDesktopShortVideoOrGifshowMobilePhotoPage(t *testing.T) {
+	const (
+		share          = "https://v.kuaishou.com/test"
+		desktopWithQ   = "https://www.kuaishou.com/short-video/3xngkmw8vacriqu?x=y&cc=share_copylink"
+		gifshowWithQ   = "https://m.gifshow.com/fw/photo/3xngkmw8vacriqu?x=y&cc=share_copylink"
+		rewrittenPhoto = "https://c.kuaishou.com/fw/photo/3xngkmw8vacriqu"
+		html           = `<script>window.INIT_STATE = {"tusjoh-a":{"photo":{"photoType":"VIDEO","caption":"快手跳转改写样本","mainMvUrls":[{"url":"https://media.example.test/kuaishou-desktop.mp4"}]}}};</script>`
+	)
+
+	for _, redirectTarget := range []string{desktopWithQ, gifshowWithQ} {
+		t.Run(redirectTarget, func(t *testing.T) {
+			var wireCalls []string
+			parser := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+				if request.Policy.RewriteRedirect == nil {
+					t.Fatal("missing kuaishou redirect rewrite hook")
+				}
+				current := request.URL
+				var history []string
+				for hop := 0; ; hop++ {
+					if strings.Contains(current, "www.kuaishou.com") || strings.Contains(current, "m.gifshow.com") {
+						t.Fatalf("unrewritten unstable host dialed on hop %d: %s %s", hop, request.Method, current)
+					}
+					if !request.Policy.AllowedURL(current) {
+						return fetch.Response{}, fetch.ErrPolicy
+					}
+					wireCalls = append(wireCalls, request.Method+" "+current)
+					if request.Method == http.MethodHead && current == share {
+						next := request.Policy.RewriteRedirect(redirectTarget)
+						history = append(history, next)
+						current = next
+						continue
+					}
+					if request.Method == http.MethodHead && current == rewrittenPhoto {
+						return fetch.Response{StatusCode: 200, URL: current, History: history}, nil
+					}
+					if request.Method == http.MethodGet && current == rewrittenPhoto {
+						return fetch.Response{StatusCode: 200, URL: current, Body: []byte(html)}, nil
+					}
+					t.Fatalf("unexpected outbound hop %d: %s %s", hop, request.Method, current)
+				}
+			}))
+
+			payload, err := parser.Parse(context.Background(), share, 1793361600)
+			if err != nil || payload["code"] != "OK" {
+				t.Fatalf("redirect rewrite failed for %q: code=%v err=%v", redirectTarget, payload["code"], err)
+			}
+			wantCalls := []string{
+				"HEAD " + share,
+				"HEAD " + rewrittenPhoto,
+				"GET " + rewrittenPhoto,
+			}
+			if strings.Join(wireCalls, "\n") != strings.Join(wantCalls, "\n") {
+				t.Fatalf("unexpected outbound request sequence:\ngot:  %v\nwant: %v", wireCalls, wantCalls)
+			}
+		})
+	}
+
 	if got := rewriteGifshowRedirect("https://m.gifshow.com/fw/photo/3xngkmw8vacriqu/?x=y"); got != rewrittenPhoto {
 		t.Fatalf("trailing slash and query were not normalized: got %q want %q", got, rewrittenPhoto)
+	}
+
+	// Non-matching desktop short-video variants must not be rewritten as input or redirect.
+	for _, unchanged := range []string{
+		"https://www.kuaishou.com/short-video/",
+		"https://www.kuaishou.com/short-video/%2e%2e?x=y",
+		"https://www.kuaishou.com/short-video/bad.id?x=y",
+		"https://www.kuaishou.com/short-video/bad$id?x=y",
+		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu/extra",
+		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu/",
+		"https://www.kuaishou.com/prefix/short-video/3xngkmw8vacriqu",
+		"http://www.kuaishou.com/short-video/3xngkmw8vacriqu?x=y",
+		"https://www.kuaishou.com:443/short-video/3xngkmw8vacriqu?x=y",
+		"https://www.kuaishou.com:8443/short-video/3xngkmw8vacriqu?x=y",
+		"https://user@www.kuaishou.com/short-video/3xngkmw8vacriqu?x=y",
+		"https://sub.www.kuaishou.com/short-video/3xngkmw8vacriqu?x=y",
+		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu#fragment",
+	} {
+		t.Run("not-rewritten/"+unchanged, func(t *testing.T) {
+			if got := rewriteDesktopShortVideo(unchanged); got != unchanged {
+				t.Fatalf("rewriteDesktopShortVideo(%q) = %q, want unchanged", unchanged, got)
+			}
+			if got := rewriteKuaishouRedirect(unchanged); got != unchanged {
+				t.Fatalf("rewriteKuaishouRedirect(%q) = %q, want unchanged", unchanged, got)
+			}
+			if allowedInput(unchanged) {
+				var firstURL string
+				probe := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+					firstURL = request.URL
+					return fetch.Response{}, errors.New("stop after first hop")
+				}))
+				_, _ = probe.Parse(context.Background(), unchanged, 1793361600)
+				if firstURL != unchanged {
+					t.Fatalf("direct input %q was rewritten to %q", unchanged, firstURL)
+				}
+			}
+		})
 	}
 
 	// Non-matching paths and unsafe m.gifshow.com variants must never be rewritten or admitted.
@@ -183,7 +268,7 @@ func TestDesktopShortVideoRedirectsToGifshowMobilePhotoPage(t *testing.T) {
 					t.Fatalf("unapproved redirect %q reached second request %q", rejected, current)
 				}
 			}))
-			got, err := rejectParser.Parse(context.Background(), desktop, 1793361600)
+			got, err := rejectParser.Parse(context.Background(), share, 1793361600)
 			if err != nil || got["code"] != "INVALID_INPUT" || hopCalls != 1 {
 				t.Fatalf("unapproved redirect %q was not rejected after first hop: calls=%d payload=%v err=%v", rejected, hopCalls, got, err)
 			}
@@ -191,10 +276,13 @@ func TestDesktopShortVideoRedirectsToGifshowMobilePhotoPage(t *testing.T) {
 	}
 
 	// Direct m.gifshow.com user input must remain rejected before starting transport.
-	beforeCalls := len(wireCalls)
-	directPayload, err := parser.Parse(context.Background(), "https://m.gifshow.com/fw/photo/3xngkmw8vacriqu", 1793361600)
-	if err != nil || directPayload["code"] != "INVALID_INPUT" || len(wireCalls) != beforeCalls {
-		t.Fatalf("m.gifshow.com became a directly accepted input: calls=%d payload=%v err=%v", len(wireCalls), directPayload, err)
+	directParser := New(executorFunc(func(context.Context, fetch.Request) (fetch.Response, error) {
+		t.Fatal("m.gifshow.com started outbound transport")
+		return fetch.Response{}, nil
+	}))
+	directPayload, err := directParser.Parse(context.Background(), "https://m.gifshow.com/fw/photo/3xngkmw8vacriqu", 1793361600)
+	if err != nil || directPayload["code"] != "INVALID_INPUT" {
+		t.Fatalf("m.gifshow.com became a directly accepted input: payload=%v err=%v", directPayload, err)
 	}
 }
 
