@@ -30,6 +30,8 @@ const props = defineProps({
 });
 const emit = defineEmits([
   "download-main",
+  "download-separate",
+  "download-backup",
   "download-all",
   "download-images",
   "download-image",
@@ -91,6 +93,17 @@ const activeVariant = computed(() =>
       : null,
 );
 const metadata = computed(() => activeVariant.value?.metadata || {});
+const isActiveYouTubeSplitVideo = computed(
+  () =>
+    props.resultData?.platform === "youtube" &&
+    currentItem.value?.type === "video" &&
+    activeVariant.value?.metadata?.has_audio === false,
+);
+const isYouTubeSplitOption = (option) =>
+  props.resultData?.platform === "youtube" &&
+  currentItem.value?.type === "video" &&
+  option?.downloadTarget?.kind === "file" &&
+  option?.variant?.metadata?.has_audio === false;
 const hasVideo = computed(
   () =>
     currentItem.value && ["video", "audio"].includes(currentItem.value.type),
@@ -523,6 +536,8 @@ const content = {
     playbackFailed: "该视频源无法在本站直接播放，可尝试其他画质或打开原作品。",
     openOriginal: "打开原作品",
     downloadSingle: "下载视频",
+    downloadMux: "合并保存",
+    downloadSeparate: "分开保存",
     downloadLive: "下载实况",
     downloadAll: "下载全部",
     downloadSelected: "下载选中",
@@ -594,6 +609,8 @@ const content = {
       "This source cannot play directly here. Try another quality or open the original post.",
     openOriginal: "Open original post",
     downloadSingle: "Download Video",
+    downloadMux: "Merge & Save",
+    downloadSeparate: "Save Separately",
     downloadLive: "Download Live",
     downloadAll: "Download All",
     downloadSelected: "Download Selected",
@@ -928,7 +945,7 @@ onUnmounted(() => {
     >
       <AppIcon class="fas fa-info-circle" />
       <span>
-        YouTube 助手已就绪（v{{ youtubeHelper.version }}）：360p 音画合一由浏览器原生附件直下；仅视频轨（如 1080p）和 M4A 音频由助手保存，受 2 倍码率限速，预计耗时较长。
+        YouTube 助手已就绪（v{{ youtubeHelper.version }}）：360p 音画合一由浏览器原生附件直下；高画质支持浏览器内无损「合并保存」与音视频「分开保存」，受 2 倍码率限速，预计耗时较长。
       </span>
     </div>
     <div
@@ -996,6 +1013,7 @@ onUnmounted(() => {
             <button
               @click="emit('download-main')"
               class="rs-btn rs-btn--primary"
+              :data-youtube-mux-save="isActiveYouTubeSplitVideo || undefined"
               :disabled="
                 isYouTubeHelperBlocked ||
                 isResolving ||
@@ -1005,7 +1023,27 @@ onUnmounted(() => {
               "
             >
               <AppIcon class="fas fa-download" /><span>{{
-                t(locale, "downloadSingle")
+                isActiveYouTubeSplitVideo
+                  ? t(locale, "downloadMux")
+                  : t(locale, "downloadSingle")
+              }}</span>
+            </button>
+            <button
+              v-if="isActiveYouTubeSplitVideo"
+              type="button"
+              data-youtube-separate-save
+              @click="emit('download-separate')"
+              class="rs-btn rs-btn--ghost"
+              :disabled="
+                isYouTubeHelperBlocked ||
+                isResolving ||
+                target?.kind === 'unsupported' ||
+                target?.kind === 'unavailable' ||
+                target?.kind === 'invalid'
+              "
+            >
+              <AppIcon class="fas fa-layer-group" /><span>{{
+                t(locale, "downloadSeparate")
               }}</span>
             </button>
             <button
@@ -1447,6 +1485,47 @@ onUnmounted(() => {
                     >
                   </div>
                 </button>
+                <div
+                  v-if="isYouTubeSplitOption(option)"
+                  class="rs-backup-split-actions"
+                >
+                  <button
+                    type="button"
+                    class="rs-btn rs-btn--primary rs-btn--sm"
+                    :disabled="isYouTubeHelperBlocked || isResolving"
+                    @click="
+                      selectQuality(option);
+                      emit('download-backup', {
+                        variant_id: option.variant.id,
+                        ...(option.source?.id
+                          ? { source_id: option.source.id }
+                          : {}),
+                      });
+                    "
+                  >
+                    <AppIcon class="fas fa-download" /><span>{{
+                      t(locale, "downloadMux")
+                    }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="rs-btn rs-btn--ghost rs-btn--sm"
+                    :disabled="isYouTubeHelperBlocked || isResolving"
+                    @click="
+                      selectQuality(option);
+                      emit('download-separate', {
+                        variant_id: option.variant.id,
+                        ...(option.source?.id
+                          ? { source_id: option.source.id }
+                          : {}),
+                      });
+                    "
+                  >
+                    <AppIcon class="fas fa-layer-group" /><span>{{
+                      t(locale, "downloadSeparate")
+                    }}</span>
+                  </button>
+                </div>
               </div>
             </div>
             <details v-if="otherQualityOptions.length" :key="currentItem.id" class="rs-other-versions">
@@ -3339,5 +3418,12 @@ onUnmounted(() => {
   color: var(--c-fg-2);
   border-color: rgba(108, 92, 231, 0.25);
   background: rgba(108, 92, 231, 0.05);
+}
+.rs-backup-split-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+  padding: 0 0.25rem 0.25rem;
 }
 </style>

@@ -1,6 +1,14 @@
+import type { Attachment, ReadyVariant, Source, Variant } from "../types/media";
+
 export const YOUTUBE_HELPER_VERSION: string;
 export const MIN_YOUTUBE_HELPER_VERSION: string;
 export const YOUTUBE_HELPER_SCRIPT_URL: string;
+
+export const DEFAULT_MUX_CHUNK_BYTES: number;
+export const DEFAULT_MUX_VIDEO_CONCURRENCY: number;
+export const DEFAULT_MUX_AUDIO_CONCURRENCY: number;
+export const DEFAULT_MUX_MAX_RETRIES: number;
+export const MAX_IN_MEMORY_MUX_BYTES: number;
 
 export const YOUTUBE_HELPER_REQUEST_EVENT: string;
 export const YOUTUBE_HELPER_RESPONSE_EVENT: string;
@@ -68,6 +76,33 @@ export interface YouTubeHelperDownloadPayload {
   signal?: AbortSignal;
 }
 
+export interface YouTubeHelperMuxDownloadPayload {
+  videoUrl: string;
+  audioUrl: string;
+  videoSize?: number;
+  audioSize?: number;
+  filename: string;
+  outputContainer: "mp4" | "webm";
+  onProgress?: (detail: YouTubeHelperProgressDetail) => void;
+  signal?: AbortSignal;
+}
+
+export type YouTubeMuxPairResult =
+  | {
+      ok: true;
+      outputContainer: "mp4" | "webm";
+      outputExtension: "mp4" | "webm";
+      outputMimeType: "video/mp4" | "video/webm";
+      videoVariant: ReadyVariant;
+      audioVariant: ReadyVariant;
+      videoSource: Source;
+      audioSource: Source;
+    }
+  | {
+      ok: false;
+      reason: string;
+    };
+
 export function isValidYouTubeVideoId(videoId: unknown): videoId is string;
 export function extractYouTubeVideoId(rawUrl: string): string;
 export function isValidSignatureTimestamp(sts: unknown): sts is number;
@@ -80,6 +115,12 @@ export function sanitizeHelperFilename(rawName: unknown): {
   filename: string;
   error?: string;
 };
+export function extractUrlClen(rawUrl: unknown): number;
+export function selectYouTubeMuxPair(
+  videoVariant: Variant | null | undefined,
+  allVariants: Variant[] | null | undefined,
+  attachments?: Attachment[] | null,
+): YouTubeMuxPairResult;
 export function compareSemver(a: string, b: string): number;
 export function isHelperVersionSupported(
   version: string,
@@ -105,9 +146,25 @@ export function createUserscriptController(options?: {
   gmXmlhttpRequest?: (details: Record<string, unknown>) => unknown;
   gmDownload?: (details: Record<string, unknown>) => { abort?: () => void } | void;
   eventTarget?: EventTarget;
+  pageWindow?: Window | typeof globalThis;
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   now?: () => number;
   version?: string;
+  mediabunny?: Record<string, unknown> | null;
+  muxConfig?: {
+    chunkSize?: number;
+    videoConcurrency?: number;
+    audioConcurrency?: number;
+    maxRetries?: number;
+    retryBaseDelayMs?: number;
+    chunkTimeoutMs?: number;
+    maxBufferBytes?: number;
+  };
+  saveBuffer?: (
+    buffer: ArrayBuffer,
+    filename: string,
+    mimeType: string,
+  ) => void | Promise<void>;
 }): {
   mount: () => () => void;
   handleRequestObject: (message: unknown) => Promise<Record<string, unknown> | null>;
@@ -141,3 +198,9 @@ export function downloadViaYouTubeHelper(
     eventTarget?: EventTarget;
   },
 ): Promise<{ filename: string }>;
+export function muxDownloadViaYouTubeHelper(
+  payload: YouTubeHelperMuxDownloadPayload,
+  options?: {
+    eventTarget?: EventTarget;
+  },
+): Promise<{ filename: string; mode: "stream_picker" | "memory_buffer" }>;

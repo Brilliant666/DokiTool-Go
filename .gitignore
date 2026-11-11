@@ -203,6 +203,7 @@
 !/frontend/public/sitemap.xml
 !/frontend/public/social/
 /frontend/scripts/*
+!/frontend/scripts/build-youtube-helper.mjs
 !/frontend/scripts/check-load-budget.mjs
 !/frontend/scripts/generate-brand-assets.mjs
 !/frontend/scripts/generate-platform-catalog.mjs
@@ -474,6 +475,7 @@
 !/frontend/public/helper/dokitool-youtube.user.js
 /frontend/public/licenses/*
 !/frontend/public/licenses/fontawesome-free-6.7.2.txt
+!/frontend/public/licenses/mediabunny-MPL-2.0.txt
 !/frontend/public/licenses/swiper-11.2.10.txt
 !/frontend/public/licenses/third-party-notices.txt
 !/frontend/public/licenses/vue-devtools-api-MIT.txt
@@ -548,6 +550,7 @@
 !/frontend/src/utils/videoFilename.ts
 !/frontend/src/utils/youtubeHelperCore.d.ts
 !/frontend/src/utils/youtubeHelperCore.js
+!/frontend/src/utils/youtubeHelperEntry.js
 /frontend/tests/fixtures/*
 !/frontend/tests/fixtures/download/
 /frontend/tests/helpers/*

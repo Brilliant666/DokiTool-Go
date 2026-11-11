@@ -267,6 +267,8 @@ export interface DownloadTask {
   nativeAvailable?: boolean;
   /** In-memory capability: refresh the owned, pinned complete-file task once. */
   refreshAvailable?: boolean;
+  /** Reason displayed on the card when in-browser muxing falls back to separate track downloads. */
+  fallbackReason?: string | null;
   error: string | null;
   statusText: string;
   show: boolean;

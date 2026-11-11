@@ -125,6 +125,8 @@ const showToast = (message, type = "success", duration = 3000) => {
 const {
   restoreDownloads,
   downloadMainVideo,
+  downloadBackupVideo,
+  downloadYouTubeSeparate,
   downloadVideoByIndex,
   downloadSelected,
   downloadAllVideos,
@@ -285,6 +287,8 @@ onMounted(() => {
         :resolving-ids="videoStore.resolvingItems"
         @refresh-item="resolveSelectedItem"
         @download-main="downloadMainVideo"
+        @download-backup="downloadBackupVideo"
+        @download-separate="downloadYouTubeSeparate"
         @download-all="downloadAll"
         @download-images="downloadAllImages"
         @download-image="downloadImage"
