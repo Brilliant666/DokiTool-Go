@@ -50,6 +50,9 @@ func (f *kuaishouHTTPFixtureTape) Do(ctx context.Context, request fetch.Request)
 	if wantRequest["method"] == http.MethodHead {
 		wantHeaders["accept"] = "*/*"
 	}
+	// Canonical desktop short-video URLs now bypass www.kuaishou.com and request
+	// https://c.kuaishou.com/fw/photo/<id> directly (#45 F1 follow-up).
+	wantRequest["url"] = rewriteFrozenKuaishouShortVideo(unified.Str(wantRequest["url"]))
 	headers := unified.Object{}
 	for key, values := range request.Header {
 		headers[strings.ToLower(key)] = strings.Join(values, ", ")
@@ -63,7 +66,8 @@ func (f *kuaishouHTTPFixtureTape) Do(ctx context.Context, request fetch.Request)
 	if request.Policy.Timeout < time.Second || request.Policy.Timeout > 20*time.Second || request.Policy.Timeout%time.Second != 0 {
 		f.t.Fatal("Kuaishou request timeout is not a bounded whole-second PHP budget")
 	}
-	if request.Method != wantResponse["method"] || request.URL != wantResponse["url"] || request.Policy.FollowRedirects != wantResponse["follow_redirects"] {
+	wantResponseURL := rewriteFrozenKuaishouShortVideo(unified.Str(wantResponse["url"]))
+	if request.Method != wantResponse["method"] || request.URL != wantResponseURL || request.Policy.FollowRedirects != wantResponse["follow_redirects"] {
 		f.t.Fatal("PHP request observation and upstream response tape disagree")
 	}
 	// Metadata authorization is independent from URLs returned to the browser.
@@ -88,7 +92,13 @@ func (f *kuaishouHTTPFixtureTape) Do(ctx context.Context, request fetch.Request)
 	if !ok {
 		f.t.Fatal("upstream response status is missing")
 	}
-	response := fetch.Response{StatusCode: int(status), Header: http.Header{}, Body: []byte(unified.Str(wantResponse["body"])), URL: unified.Str(wantResponse["final_url"])}
+	finalURL := unified.Str(wantResponse["final_url"])
+	if finalURL != unified.Str(wantResponse["url"]) && policy.RewriteRedirect != nil {
+		finalURL = policy.RewriteRedirect(finalURL)
+	} else {
+		finalURL = rewriteFrozenKuaishouShortVideo(finalURL)
+	}
+	response := fetch.Response{StatusCode: int(status), Header: http.Header{}, Body: []byte(unified.Str(wantResponse["body"])), URL: finalURL}
 	for key, raw := range unified.Map(wantResponse["headers"]) {
 		if values := unified.Slice(raw); values != nil {
 			for _, value := range values {
@@ -99,6 +109,13 @@ func (f *kuaishouHTTPFixtureTape) Do(ctx context.Context, request fetch.Request)
 		}
 	}
 	return response, nil
+}
+
+func rewriteFrozenKuaishouShortVideo(raw string) string {
+	if raw == "https://www.kuaishou.com/short-video/3xsynthetic7" {
+		return "https://c.kuaishou.com/fw/photo/3xsynthetic7"
+	}
+	return raw
 }
 
 func kuaishouHTTPFixtures(t *testing.T) []unified.Object {
