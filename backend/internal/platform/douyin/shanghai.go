@@ -38,30 +38,46 @@ func removeDispatchEntries(q *qualityVideo) {
 	}
 }
 
+type shanghaiSameObject struct {
+	objectKey string
+	sources   array
+}
+
+type shanghaiValidated struct {
+	url       any
+	objectKey string
+	sources   array
+	metadata  object
+}
+
 // The official dispatcher and validated service response establish provenance.
 // Compare against this work's own duration and declared renditions before
-// allowing an optional resolver to replace the Japan probe.
-func (p *Parser) probeOriginal(ctx context.Context, vid, entry string, detail object, known qualityVideo) (object, error) {
+// allowing an optional resolver to replace or supplement the Japan route.
+func (p *Parser) probeOriginal(ctx context.Context, vid, entry string, detail object, known qualityVideo) (object, *shanghaiSameObject, error) {
+	video := unified.Map(detail["video"])
 	if p.resolver != nil {
 		candidates, err := p.resolver.ResolveOriginal(ctx, vid)
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 		if err == nil {
-			if result := shanghaiOriginal(vid, candidates, unified.Map(detail["video"]), known); result != nil {
-				return result, nil
+			if validated := validateShanghai(vid, candidates, video); validated != nil {
+				if higherThanDeclared(validated.metadata, known, video, validated.objectKey) {
+					return object{"url": validated.url, "metadata": validated.metadata}, nil, nil
+				}
+				return nil, &shanghaiSameObject{objectKey: validated.objectKey, sources: validated.sources}, nil
 			}
 		}
 	}
 	if p.prober == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	probed, err := p.prober.Probe(ctx, entry)
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 	if err != nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	// With the feature enabled the same confirmed CDN object keeps its version
 	// identity even when its credentials came from the Japan fallback.
@@ -69,8 +85,8 @@ func (p *Parser) probeOriginal(ctx context.Context, vid, entry string, detail ob
 		raw := unified.Str(probed["url"])
 		key := unified.DouyinStoragePath(raw)
 		meta := unified.Map(probed["metadata"])
-		if len(meta) > 0 && !higherThanDeclared(meta, known, unified.Map(detail["video"]), key) {
-			return nil, nil
+		if len(meta) > 0 && !higherThanDeclared(meta, known, video, key) {
+			return nil, nil, nil
 		}
 		if key != "" && len(meta) > 0 {
 			// DouyinStoragePath has already parsed and validated this URL.
@@ -80,13 +96,13 @@ func (p *Parser) probeOriginal(ctx context.Context, vid, entry string, detail ob
 			src := object{"url": raw, "size": meta["size"], "private_source_identity": id + "@" + strings.ToLower(u.Hostname())}
 			meta["sources"] = array{src}
 			meta["private_media_identity"] = id
-			return object{"url": raw, "metadata": meta}, nil
+			return object{"url": raw, "metadata": meta}, nil, nil
 		}
 	}
-	return probed, nil
+	return probed, nil, nil
 }
 
-func shanghaiOriginal(vid string, candidates []object, video object, known qualityVideo) object {
+func validateShanghai(vid string, candidates []object, video object) *shanghaiValidated {
 	if len(candidates) == 0 || len(candidates) > 2 {
 		return nil
 	}
@@ -97,16 +113,20 @@ func shanghaiOriginal(vid string, candidates []object, video object, known quali
 	declaredMS, _ := unified.Numeric(video["duration"])
 	objectKey := unified.Str(observation["object_key"])
 	prefix := unified.Str(observation["prefix_sha256"])
-	if objectKey == "" || prefix == "" || size <= 0 || declaredMS <= 0 || duration <= 0 || math.Abs(duration*1000-declaredMS) > 1000 || !higherThanDeclared(metadata, known, video, objectKey) {
+	if objectKey == "" || prefix == "" || size <= 0 || declaredMS <= 0 || duration <= 0 || math.Abs(duration*1000-declaredMS) > 1000 {
 		return nil
 	}
 	identity := originalFileID(vid, objectKey, prefix, metadata)
 	sources := array{}
 	for _, c := range candidates {
+		raw := unified.Str(c["url"])
+		if !AllowedMediaURL(raw) || isOriginalDispatcher(raw) {
+			return nil
+		}
 		if c["object_key"] != objectKey || c["prefix_sha256"] != prefix || !unified.Equal(c["metadata"], observation["metadata"]) {
 			return nil
 		}
-		source := object{"url": c["url"], "size": metadata["size"], "private_source_identity": identity + "@" + unified.Str(c["source_key"])}
+		source := object{"url": raw, "size": metadata["size"], "private_source_identity": identity + "@" + unified.Str(c["source_key"])}
 		if c["expires_at"] != nil {
 			source["expires_at"] = c["expires_at"]
 		}
@@ -114,7 +134,76 @@ func shanghaiOriginal(vid string, candidates []object, video object, known quali
 	}
 	metadata["sources"] = sources
 	metadata["private_media_identity"] = identity
-	return object{"url": observation["url"], "metadata": metadata}
+	return &shanghaiValidated{url: observation["url"], objectKey: objectKey, sources: sources, metadata: metadata}
+}
+
+func renditionIdentityKey(candidate object) string {
+	if unified.Str(candidate["private_delivery_kind"]) == "video_track" {
+		return ""
+	}
+	if id, ok := unified.Text(candidate["private_media_identity"]); ok {
+		return "m:" + id
+	}
+	if rep, ok := unified.Text(candidate["private_representation_id"]); ok {
+		return "r:" + rep
+	}
+	return "u:" + unified.Str(candidate["url"])
+}
+
+func declaredCandidateSource(candidate object) object {
+	src := object{"url": candidate["url"]}
+	for _, field := range []string{"size", "size_bytes", "expires_at", "availability", "browser_fetch", "fallback_urls", "private_source_identity"} {
+		if value := candidate[field]; value != nil {
+			src[field] = unified.CloneValue(value)
+		}
+	}
+	return src
+}
+
+func prependSameObjectSources(mainCandidate object, backups array, same *shanghaiSameObject) {
+	if same == nil || same.objectKey == "" || len(same.sources) == 0 {
+		return
+	}
+	all := make([]object, 0, 1+len(backups))
+	if truthy(mainCandidate["url"]) {
+		all = append(all, mainCandidate)
+	}
+	for _, value := range backups {
+		if entry := unified.Map(value); entry != nil && truthy(entry["url"]) {
+			all = append(all, entry)
+		}
+	}
+	matchedGroups := map[string]bool{}
+	for _, candidate := range all {
+		key := renditionIdentityKey(candidate)
+		if key == "" {
+			continue
+		}
+		if unified.DouyinStoragePath(unified.Str(candidate["url"])) == same.objectKey {
+			matchedGroups[key] = true
+		}
+	}
+	if len(matchedGroups) == 0 {
+		return
+	}
+	prepended := map[string]bool{}
+	for _, candidate := range all {
+		key := renditionIdentityKey(candidate)
+		if !matchedGroups[key] || prepended[key] {
+			continue
+		}
+		existing := unified.Slice(candidate["sources"])
+		if existing == nil {
+			existing = array{declaredCandidateSource(candidate)}
+		}
+		merged := make(array, 0, len(same.sources)+len(existing))
+		for _, src := range same.sources {
+			merged = append(merged, unified.CloneValue(src))
+		}
+		merged = append(merged, existing...)
+		candidate["sources"] = merged
+		prepended[key] = true
+	}
 }
 
 // Both routes identify the storage object and fingerprint the same initial bytes.
