@@ -1696,3 +1696,137 @@ func TestOmniGetPythonZipappStartupVersionSelfCheckFallback(t *testing.T) {
 		t.Fatalf("expected engine to be disabled when --version != %s, got enabled=%v err=%v", PinnedVersion, wrongVerEng != nil && wrongVerEng.Enabled(), err)
 	}
 }
+
+func TestAdaptInfoDualContainerDASHAudioVariants(t *testing.T) {
+	const now int64 = 1762300800
+	w360, h360, sz360 := int64(640), int64(360), int64(15048844)
+	w1080, h1080, sz1080 := int64(1920), int64(1080), int64(98000000)
+	w4k, h4k, sz4k := int64(3840), int64(2160), int64(429584204)
+	abr140, abr251, abr171 := 129.4, 135.2, 118.0
+	ch2 := int64(2)
+	asr44, asr48 := int64(44100), int64(48000)
+	sz140, sz251, sz171 := int64(5044939), int64(6407118), int64(5500000)
+
+	ytOpts := AdaptOptions{
+		PlatformID:    "youtube",
+		ContentID:     "tO01J-M3g0U",
+		SourceURL:     "https://www.youtube.com/watch?v=tO01J-M3g0U",
+		MaxEntries:    1,
+		EnableDASHMux: true,
+	}
+
+	env := AdaptInfo(&Info{
+		ID:       "tO01J-M3g0U",
+		Title:    "Costa Rica in 4K 60fps HDR",
+		Uploader: "Jacob + Katie Schwarz",
+		Formats: []Format{
+			{
+				FormatID: "18",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=18&source=youtube&clen=15048844&dur=313.8&sig=SIG_18",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w360,
+				Height:   &h360,
+				VCodec:   "avc1.42001E",
+				ACodec:   "mp4a.40.2",
+				Filesize: &sz360,
+			},
+			{
+				FormatID: "137",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=137&source=youtube&clen=98000000&dur=313.8&sig=SIG_137",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w1080,
+				Height:   &h1080,
+				VCodec:   "avc1.640028",
+				ACodec:   "none",
+				Filesize: &sz1080,
+			},
+			{
+				FormatID: "315",
+				URL:      "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=315&source=youtube&clen=429584204&dur=313.8&sig=SIG_315",
+				Ext:      "webm",
+				Protocol: "https",
+				Width:    &w4k,
+				Height:   &h4k,
+				VCodec:   "vp9",
+				ACodec:   "none",
+				Filesize: &sz4k,
+			},
+			{
+				FormatID:      "140",
+				URL:           "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=140&source=youtube&clen=5044939&dur=313.8&sig=SIG_140",
+				Ext:           "m4a",
+				Protocol:      "https",
+				VCodec:        "none",
+				ACodec:        "mp4a.40.2",
+				ABR:           &abr140,
+				ASR:           &asr44,
+				AudioChannels: &ch2,
+				Filesize:      &sz140,
+			},
+			{
+				FormatID:      "171",
+				URL:           "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=171&source=youtube&clen=5500000&dur=313.8&sig=SIG_171",
+				Ext:           "webm",
+				Protocol:      "https",
+				VCodec:        "none",
+				ACodec:        "vorbis",
+				ABR:           &abr171,
+				ASR:           &asr44,
+				AudioChannels: &ch2,
+				Filesize:      &sz171,
+			},
+			{
+				FormatID:      "251",
+				URL:           "https://rr2---sn-a5mekn6s.googlevideo.com/videoplayback?expire=1762320000&id=o-1&itag=251&source=youtube&clen=6407118&dur=313.8&sig=SIG_251",
+				Ext:           "webm",
+				Protocol:      "https",
+				VCodec:        "none",
+				ACodec:        "opus",
+				ABR:           &abr251,
+				ASR:           &asr48,
+				AudioChannels: &ch2,
+				Filesize:      &sz251,
+			},
+		},
+	}, ytOpts, now)
+
+	for viewName, view := range map[string]unified.Object{
+		"normal": unified.PublicView(env, false, now),
+		"debug":  unified.PublicView(env, true, now),
+	} {
+		if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("dual-container audio %s envelope failed ValidateEnvelopeAt: %v", viewName, err)
+		}
+		item := unified.Map(unified.Slice(unified.Map(view["data"])["items"])[0])
+		var sawAAC, sawOpus bool
+		var audioVariantCount int
+		for _, rawV := range unified.Slice(item["variants"]) {
+			v := unified.Map(rawV)
+			meta := unified.Map(v["metadata"])
+			mime := unified.Str(meta["mime_type"])
+			if !strings.HasPrefix(mime, "audio/") {
+				continue
+			}
+			audioVariantCount++
+			src := unified.Map(unified.Slice(unified.Map(v["delivery"])["sources"])[0])
+			srcURL := unified.Str(src["url"])
+			switch unified.Str(meta["container"]) {
+			case "mp4":
+				sawAAC = true
+				if unified.Str(meta["extension"]) != "m4a" || unified.Str(meta["audio_codec"]) != "mp4a.40.2" || !strings.Contains(srcURL, "itag=140") {
+					t.Fatalf("unexpected mp4/m4a audio variant in %s: %+v url=%s", viewName, meta, srcURL)
+				}
+			case "webm":
+				sawOpus = true
+				if unified.Str(meta["extension"]) != "webm" || unified.Str(meta["audio_codec"]) != "opus" || !strings.Contains(srcURL, "itag=251") {
+					t.Fatalf("expected best webm audio variant to prefer opus (itag=251) over vorbis (itag=171) in %s: %+v url=%s", viewName, meta, srcURL)
+				}
+			}
+		}
+		if !sawAAC || !sawOpus || audioVariantCount != 2 {
+			t.Fatalf("expected exactly 2 deduplicated standalone audio variants (mp4/AAC + webm/Opus) in %s, got count=%d sawAAC=%v sawOpus=%v", viewName, audioVariantCount, sawAAC, sawOpus)
+		}
+	}
+}

@@ -3,9 +3,15 @@
 // userscript (Tampermonkey / Violentmonkey), the Vue frontend, and Node unit tests,
 // and can be packaged into a browser extension in the future.
 
-export const YOUTUBE_HELPER_VERSION = "1.1.0";
-export const MIN_YOUTUBE_HELPER_VERSION = "1.1.0";
+export const YOUTUBE_HELPER_VERSION = "1.2.0";
+export const MIN_YOUTUBE_HELPER_VERSION = "1.2.0";
 export const YOUTUBE_HELPER_SCRIPT_URL = "/helper/dokitool-youtube.user.js";
+
+export const DEFAULT_MUX_CHUNK_BYTES = 10 * 1024 * 1024;
+export const DEFAULT_MUX_VIDEO_CONCURRENCY = 3;
+export const DEFAULT_MUX_AUDIO_CONCURRENCY = 2;
+export const DEFAULT_MUX_MAX_RETRIES = 3;
+export const MAX_IN_MEMORY_MUX_BYTES = 1024 * 1024 * 1024;
 
 export const YOUTUBE_HELPER_REQUEST_EVENT = "dokitool:youtube-helper:request";
 export const YOUTUBE_HELPER_RESPONSE_EVENT = "dokitool:youtube-helper:response";
@@ -144,11 +150,13 @@ export function sanitizeHelperFilename(rawName) {
     ext = ".mp4";
   } else if (lower.endsWith(".m4a")) {
     ext = ".m4a";
+  } else if (lower.endsWith(".webm")) {
+    ext = ".webm";
   } else {
     return {
       ok: false,
       filename: "",
-      error: "仅允许保存 .mp4 或 .m4a 后缀的文件",
+      error: "仅允许保存 .mp4、.m4a 或 .webm 后缀的文件",
     };
   }
   const stemRaw = trimmed.slice(0, trimmed.length - ext.length);
@@ -160,6 +168,183 @@ export function sanitizeHelperFilename(rawName) {
     .slice(0, 120);
   const safeStem = cleanedStem || "youtube_media";
   return { ok: true, filename: `${safeStem}${ext}` };
+}
+
+export function extractUrlClen(rawUrl) {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) return 0;
+  try {
+    const u = new URL(rawUrl.trim());
+    const raw = u.searchParams.get("clen");
+    if (!raw || !/^[0-9]+$/.test(raw.trim())) return 0;
+    const n = Number(raw.trim());
+    return Number.isSafeInteger(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function pickUsableVariantSource(variant) {
+  const sources = variant?.delivery?.sources;
+  if (!Array.isArray(sources) || sources.length === 0) return null;
+  return (
+    sources.find(
+      (s) =>
+        s &&
+        s.availability !== "unavailable" &&
+        typeof s.url === "string" &&
+        s.url.trim(),
+    ) ||
+    sources.find((s) => s && typeof s.url === "string" && s.url.trim()) ||
+    null
+  );
+}
+
+export function selectYouTubeMuxPair(
+  videoVariant,
+  allVariants,
+  attachments = [],
+) {
+  if (
+    !videoVariant ||
+    typeof videoVariant !== "object" ||
+    videoVariant.state === "deferred" ||
+    videoVariant.delivery?.kind !== "file"
+  ) {
+    return { ok: false, reason: "当前画质不支持浏览器内合流" };
+  }
+  const vMeta = videoVariant.metadata || {};
+  if (vMeta.has_audio !== false) {
+    return { ok: false, reason: "当前画质已包含音轨，无需合流" };
+  }
+  const videoSource = pickUsableVariantSource(videoVariant);
+  if (!videoSource || !isValidGooglevideoPlaybackUrl(videoSource.url)) {
+    return { ok: false, reason: "视频轨地址无效或不可用" };
+  }
+
+  const vcodec = String(vMeta.video_codec || "")
+    .trim()
+    .toLowerCase();
+  const vContainer = String(vMeta.container || vMeta.extension || "")
+    .trim()
+    .toLowerCase();
+
+  const isH264OrAV1 =
+    vcodec === "h264" ||
+    vcodec.startsWith("avc1") ||
+    vcodec === "av1" ||
+    vcodec.startsWith("av01");
+  const isVP9 =
+    vcodec === "vp9" || vcodec.startsWith("vp9.") || vcodec.startsWith("vp09");
+
+  const isMp4Video = isH264OrAV1 && (!vContainer || vContainer === "mp4");
+  const isWebmVideo = isVP9 && (!vContainer || vContainer === "webm");
+
+  if (!isMp4Video && !isWebmVideo) {
+    return {
+      ok: false,
+      reason: `不支持的视频编码或容器组合（${vcodec || "未知"} / ${vContainer || "未知"}）`,
+    };
+  }
+
+  const candidates = [
+    ...(Array.isArray(allVariants) ? allVariants : []),
+    ...(Array.isArray(attachments)
+      ? attachments
+          .filter(
+            (att) =>
+              att &&
+              typeof att === "object" &&
+              att.resource?.role === "audio" &&
+              att.resource?.delivery?.kind === "file",
+          )
+          .map((att) => ({
+            id: att.id || `att-${att.resource.id || "audio"}`,
+            state: "ready",
+            label: att.title || "原声轨",
+            metadata: att.resource.metadata,
+            delivery: att.resource.delivery,
+          }))
+      : []),
+  ];
+  for (const cand of candidates) {
+    if (
+      !cand ||
+      typeof cand !== "object" ||
+      cand.state === "deferred" ||
+      cand.id === videoVariant.id ||
+      cand.delivery?.kind !== "file"
+    ) {
+      continue;
+    }
+    const aMeta = cand.metadata || {};
+    const aMime = String(aMeta.mime_type || "")
+      .trim()
+      .toLowerCase();
+    const aExt = String(aMeta.extension || "")
+      .trim()
+      .toLowerCase();
+    const aContainer = String(aMeta.container || "")
+      .trim()
+      .toLowerCase();
+    const acodec = String(aMeta.audio_codec || "")
+      .trim()
+      .toLowerCase();
+
+    const isStandaloneAudio =
+      aMeta.has_audio === true &&
+      !aMeta.video_codec &&
+      (aMime.startsWith("audio/") || aExt === "m4a" || aExt === "webm");
+    if (!isStandaloneAudio) continue;
+
+    if (isMp4Video) {
+      const aacMatch =
+        (acodec === "aac" || acodec.startsWith("mp4a")) &&
+        (aContainer === "mp4" || aContainer === "m4a" || aExt === "m4a");
+      if (!aacMatch) continue;
+      const audioSource = pickUsableVariantSource(cand);
+      if (!audioSource || !isValidGooglevideoPlaybackUrl(audioSource.url)) {
+        continue;
+      }
+      return {
+        ok: true,
+        outputContainer: "mp4",
+        outputExtension: "mp4",
+        outputMimeType: "video/mp4",
+        videoVariant,
+        audioVariant: cand,
+        videoSource,
+        audioSource,
+      };
+    }
+
+    if (isWebmVideo) {
+      const opusMatch =
+        (acodec === "opus" || acodec.startsWith("opus")) &&
+        (aContainer === "webm" || aExt === "webm");
+      if (!opusMatch) continue;
+      const audioSource = pickUsableVariantSource(cand);
+      if (!audioSource || !isValidGooglevideoPlaybackUrl(audioSource.url)) {
+        continue;
+      }
+      return {
+        ok: true,
+        outputContainer: "webm",
+        outputExtension: "webm",
+        outputMimeType: "video/webm",
+        videoVariant,
+        audioVariant: cand,
+        videoSource,
+        audioSource,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    reason: isMp4Video
+      ? "未找到同容器 AAC (M4A) 音轨，不做跨容器合流"
+      : "未找到同容器 Opus (WebM) 音轨，不做跨容器合流",
+  };
 }
 
 export function compareSemver(a, b) {
@@ -420,12 +605,83 @@ export function createUserscriptController(options = {}) {
     gmXmlhttpRequest,
     gmDownload,
     eventTarget = typeof window !== "undefined" ? window : globalThis,
+    pageWindow = (typeof document !== "undefined" && document?.defaultView) ||
+      (typeof window !== "undefined" ? window : globalThis),
     now = () => Date.now(),
     version = YOUTUBE_HELPER_VERSION,
+    mediabunny = null,
+    muxConfig = {},
+    saveBuffer = null,
   } = options;
 
   let memoryVisitorCache = null;
   const activeDownloads = new Map();
+  let muxRnCounter = 0;
+
+  function makeCodedError(code, message) {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+  }
+
+  function makeUserCancelledError(message = "已取消保存") {
+    const err = new Error(message);
+    err.name = "AbortError";
+    err.code = "USER_CANCELLED";
+    return err;
+  }
+
+  function ensureLocalWritableStream(rawWritable) {
+    if (!rawWritable || typeof rawWritable !== "object") return null;
+    if (
+      typeof WritableStream === "function" &&
+      rawWritable instanceof WritableStream
+    ) {
+      return rawWritable;
+    }
+    if (typeof WritableStream !== "function") {
+      return rawWritable;
+    }
+    const hasGetWriter = typeof rawWritable.getWriter === "function";
+    const hasWrite = typeof rawWritable.write === "function";
+    if (!hasGetWriter && !hasWrite) {
+      return null;
+    }
+    let underlyingWriter = null;
+    return new WritableStream({
+      start() {
+        if (hasGetWriter) {
+          underlyingWriter = rawWritable.getWriter();
+        }
+      },
+      async write(chunk) {
+        if (underlyingWriter) {
+          await underlyingWriter.write(chunk);
+        } else {
+          await rawWritable.write(chunk);
+        }
+      },
+      async close() {
+        if (underlyingWriter) {
+          await underlyingWriter.close();
+        } else if (typeof rawWritable.close === "function") {
+          await rawWritable.close();
+        }
+      },
+      async abort(reason) {
+        if (underlyingWriter) {
+          await underlyingWriter.abort(reason);
+        } else if (typeof rawWritable.abort === "function") {
+          await rawWritable.abort(reason);
+        }
+      },
+    });
+  }
+
+  function positiveSafeInt(val) {
+    const n = typeof val === "string" ? Number(val.trim()) : Number(val);
+    return Number.isSafeInteger(n) && n > 0 ? n : 0;
+  }
 
   function readCachedVisitorData() {
     const current = now();
@@ -630,13 +886,15 @@ export function createUserscriptController(options = {}) {
         return;
       }
 
-      const isM4a = cleanName.filename.toLowerCase().endsWith(".m4a");
+      const lowerName = cleanName.filename.toLowerCase();
+      const useNativeMode =
+        lowerName.endsWith(".m4a") || lowerName.endsWith(".webm");
       const handle = gmDownload({
         url: url.trim(),
         name: cleanName.filename,
         saveAs: false,
         anonymous: true,
-        ...(isM4a ? { mode: "native" } : {}),
+        ...(useNativeMode ? { mode: "native" } : {}),
         onprogress(progress) {
           const loaded = Number(progress?.loaded ?? progress?.done ?? 0);
           const total = Number(progress?.total ?? progress?.totalSize ?? 0);
@@ -671,6 +929,771 @@ export function createUserscriptController(options = {}) {
     });
   }
 
+  function abortableSleep(ms, cancelState) {
+    if (!(ms > 0)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      if (cancelState.aborted) {
+        reject(makeUserCancelledError());
+        return;
+      }
+      const timer = setTimeout(() => {
+        cancelState.abortListeners.delete(onCancel);
+        resolve();
+      }, ms);
+      const onCancel = () => {
+        clearTimeout(timer);
+        reject(makeUserCancelledError());
+      };
+      cancelState.abortListeners.add(onCancel);
+    });
+  }
+
+  function gmRequestRangeBuffer(reqUrl, timeoutMs, cancelState) {
+    return new Promise((resolve, reject) => {
+      if (cancelState.aborted) {
+        reject(makeUserCancelledError());
+        return;
+      }
+      if (typeof gmXmlhttpRequest !== "function") {
+        reject(makeCodedError("GM_XHR_UNAVAILABLE", "GM_xmlhttpRequest 不可用"));
+        return;
+      }
+      if (!isValidGooglevideoPlaybackUrl(reqUrl)) {
+        reject(
+          makeCodedError(
+            "INVALID_MEDIA_URL",
+            "拒绝请求：仅允许 https://*.googlevideo.com/videoplayback 地址",
+          ),
+        );
+        return;
+      }
+      let finished = false;
+      let handle = null;
+      const onCancel = () => {
+        if (finished) return;
+        finished = true;
+        try {
+          handle?.abort?.();
+        } catch {
+          // Ignore abort errors
+        }
+        reject(makeUserCancelledError());
+      };
+      cancelState.abortListeners.add(onCancel);
+      const finish = (fn) => {
+        if (finished) return;
+        finished = true;
+        cancelState.abortListeners.delete(onCancel);
+        if (handle) cancelState.handles.delete(handle);
+        fn();
+      };
+      handle = gmXmlhttpRequest({
+        method: "GET",
+        url: reqUrl,
+        responseType: "arraybuffer",
+        anonymous: true,
+        timeout: timeoutMs,
+        onload(response) {
+          finish(() => resolve(response));
+        },
+        onerror() {
+          finish(() => reject(new Error("读取媒体分块网络失败")));
+        },
+        ontimeout() {
+          finish(() => reject(new Error("读取媒体分块超时")));
+        },
+      });
+      if (handle && !finished) {
+        cancelState.handles.add(handle);
+      }
+    });
+  }
+
+  function extractMetSeconds(rawUrl) {
+    try {
+      const u = new URL(rawUrl);
+      const metRaw = (u.searchParams.get("met") || "").split(",")[0];
+      const n = Number(metRaw);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function createChunkedGooglevideoSource(
+    initialUrl,
+    declaredSize,
+    streamOpts,
+    cancelState,
+    onProgressTick,
+  ) {
+    const {
+      chunkSize,
+      concurrency,
+      maxRetries,
+      maxCachedChunks,
+      retryBaseDelayMs,
+      chunkTimeoutMs,
+      CustomSourceCtor,
+    } = streamOpts;
+
+    let activeBaseUrl = initialUrl.trim();
+    let resolvedSize =
+      positiveSafeInt(declaredSize) || extractUrlClen(activeBaseUrl);
+    let totalChunks = resolvedSize > 0 ? Math.ceil(resolvedSize / chunkSize) : 0;
+    let loadedBytes = 0;
+    const completedChunks = new Set();
+    const cache = new Map();
+    const inFlight = new Map();
+    const prefetchQueue = [];
+    let useTick = 0;
+
+    async function ensureMetGate() {
+      const metSec = extractMetSeconds(activeBaseUrl);
+      if (metSec <= 0) return;
+      const waitMs = Math.ceil((metSec + 4.5) * 1000 - now());
+      if (waitMs > 0 && waitMs <= 15000) {
+        await abortableSleep(waitMs, cancelState);
+      }
+    }
+
+    function adoptFinalUrl(finalUrl) {
+      if (typeof finalUrl !== "string" || !finalUrl.trim()) return;
+      if (!isValidGooglevideoPlaybackUrl(finalUrl)) {
+        throw makeCodedError(
+          "DISALLOWED_REDIRECT",
+          "媒体重定向地址不在允许的 *.googlevideo.com/videoplayback 范围内",
+        );
+      }
+      const fu = new URL(finalUrl.trim());
+      fu.searchParams.delete("range");
+      fu.searchParams.delete("rn");
+      activeBaseUrl = fu.toString();
+    }
+
+    function touchCache(chunkIdx, bytes) {
+      cache.set(chunkIdx, { data: bytes, lastUsed: ++useTick });
+      while (cache.size > maxCachedChunks) {
+        let oldestKey = null;
+        let oldestTick = Infinity;
+        for (const [k, v] of cache.entries()) {
+          if (v.lastUsed < oldestTick) {
+            oldestTick = v.lastUsed;
+            oldestKey = k;
+          }
+        }
+        if (oldestKey !== null) cache.delete(oldestKey);
+        else break;
+      }
+    }
+
+    async function ensureSize() {
+      if (cancelState.aborted) throw makeUserCancelledError();
+      if (resolvedSize > 0) {
+        totalChunks = Math.ceil(resolvedSize / chunkSize);
+        return resolvedSize;
+      }
+      await ensureMetGate();
+      const u = new URL(activeBaseUrl);
+      u.searchParams.set("range", "0-0");
+      u.searchParams.set("rn", String(++muxRnCounter));
+      const resp = await gmRequestRangeBuffer(
+        u.toString(),
+        Math.min(20000, chunkTimeoutMs),
+        cancelState,
+      );
+      if (resp?.finalUrl) adoptFinalUrl(resp.finalUrl);
+      const clenParam = extractUrlClen(resp?.finalUrl || activeBaseUrl);
+      const headerMatch = /bytes\s+0-0\/(\d+)/i.exec(
+        String(resp?.responseHeaders || ""),
+      );
+      const parsed = headerMatch ? Number(headerMatch[1]) : clenParam;
+      if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+        throw makeCodedError(
+          "MUX_SIZE_UNKNOWN",
+          `无法获取媒体流总字节数（HTTP ${resp?.status ?? 0}）`,
+        );
+      }
+      resolvedSize = parsed;
+      totalChunks = Math.ceil(resolvedSize / chunkSize);
+      return resolvedSize;
+    }
+
+    async function downloadSingleChunk(chunkIdx) {
+      await ensureMetGate();
+      const size = await ensureSize();
+      const start = chunkIdx * chunkSize;
+      const end = Math.min(size - 1, start + chunkSize - 1);
+      const expectedLen = end - start + 1;
+
+      let lastErr = null;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (cancelState.aborted) throw makeUserCancelledError();
+        if (attempt > 0) {
+          await abortableSleep(
+            retryBaseDelayMs * Math.pow(2, attempt - 1),
+            cancelState,
+          );
+        }
+        const u = new URL(activeBaseUrl);
+        u.searchParams.set("range", `${start}-${end}`);
+        u.searchParams.set("rn", String(++muxRnCounter));
+        let resp;
+        try {
+          resp = await gmRequestRangeBuffer(
+            u.toString(),
+            chunkTimeoutMs,
+            cancelState,
+          );
+        } catch (err) {
+          if (
+            cancelState.aborted ||
+            err?.code === "USER_CANCELLED" ||
+            err?.code === "INVALID_MEDIA_URL"
+          ) {
+            throw err;
+          }
+          lastErr = err;
+          if (attempt === maxRetries) throw err;
+          continue;
+        }
+        if (resp?.finalUrl) {
+          adoptFinalUrl(resp.finalUrl);
+        }
+        if (resp?.status !== 200 && resp?.status !== 206) {
+          lastErr = makeCodedError(
+            "MUX_CHUNK_HTTP_ERROR",
+            `分块 #${chunkIdx} 请求失败（HTTP ${resp?.status ?? 0}）`,
+          );
+          if (attempt === maxRetries) throw lastErr;
+          continue;
+        }
+        const rawBuf = resp?.response;
+        const u8 =
+          rawBuf instanceof Uint8Array
+            ? rawBuf
+            : rawBuf instanceof ArrayBuffer
+              ? new Uint8Array(rawBuf)
+              : ArrayBuffer.isView(rawBuf)
+                ? new Uint8Array(
+                    rawBuf.buffer,
+                    rawBuf.byteOffset,
+                    rawBuf.byteLength,
+                  )
+                : null;
+        const gotLen = u8 ? u8.byteLength : 0;
+        if (gotLen !== expectedLen) {
+          lastErr = makeCodedError(
+            "MUX_CHUNK_TRUNCATED",
+            `分块 #${chunkIdx} 字节不完整（收到 ${gotLen}，预期 ${expectedLen}）`,
+          );
+          if (attempt === maxRetries) throw lastErr;
+          continue;
+        }
+        if (!completedChunks.has(chunkIdx)) {
+          completedChunks.add(chunkIdx);
+          loadedBytes += gotLen;
+          onProgressTick();
+        }
+        touchCache(chunkIdx, u8);
+        return u8;
+      }
+      throw lastErr || new Error(`分块 #${chunkIdx} 重试耗尽`);
+    }
+
+    function getChunk(chunkIdx) {
+      if (cancelState.aborted) {
+        return Promise.reject(makeUserCancelledError());
+      }
+      if (cache.has(chunkIdx)) {
+        const entry = cache.get(chunkIdx);
+        entry.lastUsed = ++useTick;
+        return Promise.resolve(entry.data);
+      }
+      if (inFlight.has(chunkIdx)) {
+        return inFlight.get(chunkIdx);
+      }
+      const p = downloadSingleChunk(chunkIdx).finally(() => {
+        inFlight.delete(chunkIdx);
+        pumpPrefetch();
+      });
+      inFlight.set(chunkIdx, p);
+      return p;
+    }
+
+    function pumpPrefetch() {
+      while (
+        !cancelState.aborted &&
+        prefetchQueue.length > 0 &&
+        inFlight.size < concurrency &&
+        cache.size + inFlight.size < maxCachedChunks
+      ) {
+        const nextIdx = prefetchQueue.shift();
+        if (cache.has(nextIdx) || inFlight.has(nextIdx)) continue;
+        getChunk(nextIdx)
+          .catch(() => {})
+          .finally(() => {
+            pumpPrefetch();
+          });
+      }
+    }
+
+    function schedulePrefetchFrom(startChunkIdx) {
+      if (!totalChunks || cancelState.aborted) return;
+      prefetchQueue.length = 0;
+      const limit = Math.min(totalChunks, startChunkIdx + concurrency);
+      for (let idx = startChunkIdx; idx < limit; idx++) {
+        if (!cache.has(idx) && !inFlight.has(idx)) {
+          prefetchQueue.push(idx);
+        }
+      }
+      pumpPrefetch();
+    }
+
+    const customSource = new CustomSourceCtor({
+      maxCacheSize: 2 * 1024 * 1024,
+      getSize: () => ensureSize(),
+      read: async (start, end) => {
+        if (cancelState.aborted) throw makeUserCancelledError();
+        const size = await ensureSize();
+        const clampedEnd = Math.min(size, end);
+        const len = clampedEnd - start;
+        if (len <= 0) return new Uint8Array(0);
+
+        const firstChunk = Math.floor(start / chunkSize);
+        const lastChunk = Math.floor((clampedEnd - 1) / chunkSize);
+
+        if (firstChunk === lastChunk) {
+          const chunkBytes = await getChunk(firstChunk);
+          schedulePrefetchFrom(lastChunk + 1);
+          const offset = start - firstChunk * chunkSize;
+          return chunkBytes.slice(offset, offset + len);
+        }
+
+        const needed = [];
+        for (let c = firstChunk; c <= lastChunk; c++) {
+          needed.push(getChunk(c));
+        }
+        const chunks = await Promise.all(needed);
+        schedulePrefetchFrom(lastChunk + 1);
+        const out = new Uint8Array(len);
+        let written = 0;
+        for (let i = 0; i < chunks.length; i++) {
+          const c = firstChunk + i;
+          const chunkBytes = chunks[i];
+          const chunkStart = c * chunkSize;
+          const sliceStart = Math.max(0, start - chunkStart);
+          const sliceEnd = Math.min(
+            chunkBytes.byteLength,
+            clampedEnd - chunkStart,
+          );
+          const part = chunkBytes.subarray(sliceStart, sliceEnd);
+          out.set(part, written);
+          written += part.byteLength;
+        }
+        return out;
+      },
+    });
+
+    return {
+      source: customSource,
+      ensureSize,
+      getKnownSize: () => resolvedSize,
+      getLoadedBytes: () => loadedBytes,
+      clear: () => {
+        prefetchQueue.length = 0;
+        cache.clear();
+      },
+    };
+  }
+
+  function defaultSaveBufferToPage(arrayBuffer, filename, mimeType) {
+    if (typeof saveBuffer === "function") {
+      return saveBuffer(arrayBuffer, filename, mimeType);
+    }
+    const doc =
+      pageWindow?.document ||
+      (typeof document !== "undefined" ? document : null);
+    const BlobCtor = pageWindow?.Blob || globalThis.Blob;
+    const URLObj = pageWindow?.URL || globalThis.URL;
+    if (
+      !doc ||
+      typeof doc.createElement !== "function" ||
+      typeof BlobCtor !== "function" ||
+      typeof URLObj?.createObjectURL !== "function"
+    ) {
+      throw makeCodedError(
+        "SAVE_UNAVAILABLE",
+        "当前环境无法触发内存合流文件下载",
+      );
+    }
+    const blob = new BlobCtor([arrayBuffer], { type: mimeType });
+    const blobUrl = URLObj.createObjectURL(blob);
+    try {
+      const anchor = doc.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = filename;
+      anchor.rel = "noopener";
+      anchor.style.display = "none";
+      (doc.body || doc.documentElement)?.appendChild?.(anchor);
+      anchor.click();
+      anchor.remove?.();
+    } finally {
+      setTimeout(() => {
+        try {
+          URLObj.revokeObjectURL(blobUrl);
+        } catch {
+          // Ignore revoke errors
+        }
+      }, 30000);
+    }
+  }
+
+  async function handleMuxDownloadAction(requestId, payload) {
+    if (!payload || typeof payload !== "object") {
+      throw makeCodedError("INVALID_MUX_PARAMS", "合流请求参数无效");
+    }
+    const { videoUrl, audioUrl, filename, outputContainer } = payload;
+    if (
+      !isValidGooglevideoPlaybackUrl(videoUrl) ||
+      !isValidGooglevideoPlaybackUrl(audioUrl)
+    ) {
+      throw makeCodedError(
+        "INVALID_MEDIA_URL",
+        "拒绝合流：仅允许 https://*.googlevideo.com/videoplayback 地址",
+      );
+    }
+    if (outputContainer !== "mp4" && outputContainer !== "webm") {
+      throw makeCodedError(
+        "UNSUPPORTED_CONTAINER",
+        "仅支持封装为 mp4 或 webm 容器",
+      );
+    }
+    const cleanName = sanitizeHelperFilename(filename);
+    if (!cleanName.ok) {
+      throw makeCodedError("INVALID_FILENAME", `拒绝合流：${cleanName.error}`);
+    }
+    const expectedExt = `.${outputContainer}`;
+    if (!cleanName.filename.toLowerCase().endsWith(expectedExt)) {
+      throw makeCodedError(
+        "CONTAINER_FILENAME_MISMATCH",
+        `文件名后缀与目标容器（${expectedExt}）不一致`,
+      );
+    }
+    if (!mediabunny || typeof mediabunny.Input !== "function") {
+      throw makeCodedError("MEDIABUNNY_UNAVAILABLE", "合流组件尚未加载");
+    }
+    if (typeof gmXmlhttpRequest !== "function") {
+      throw makeCodedError("GM_XHR_UNAVAILABLE", "GM_xmlhttpRequest 不可用");
+    }
+
+    const chunkSize = positiveSafeInt(muxConfig.chunkSize) || DEFAULT_MUX_CHUNK_BYTES;
+    const videoConcurrency =
+      positiveSafeInt(muxConfig.videoConcurrency) ||
+      DEFAULT_MUX_VIDEO_CONCURRENCY;
+    const audioConcurrency =
+      positiveSafeInt(muxConfig.audioConcurrency) ||
+      DEFAULT_MUX_AUDIO_CONCURRENCY;
+    const maxRetries =
+      Number.isInteger(muxConfig.maxRetries) && muxConfig.maxRetries >= 0
+        ? muxConfig.maxRetries
+        : DEFAULT_MUX_MAX_RETRIES;
+    const retryBaseDelayMs =
+      Number.isFinite(muxConfig.retryBaseDelayMs) &&
+      muxConfig.retryBaseDelayMs >= 0
+        ? muxConfig.retryBaseDelayMs
+        : 500;
+    const chunkTimeoutMs =
+      positiveSafeInt(muxConfig.chunkTimeoutMs) || 60000;
+    const maxBufferBytes =
+      positiveSafeInt(muxConfig.maxBufferBytes) || MAX_IN_MEMORY_MUX_BYTES;
+
+    const cancelState = {
+      aborted: false,
+      handles: new Set(),
+      abortListeners: new Set(),
+      writable: null,
+    };
+    activeDownloads.set(requestId, {
+      abort() {
+        cancelState.aborted = true;
+        for (const h of Array.from(cancelState.handles)) {
+          try {
+            h?.abort?.();
+          } catch {
+            // Ignore
+          }
+        }
+        cancelState.handles.clear();
+        for (const fn of Array.from(cancelState.abortListeners)) {
+          try {
+            fn();
+          } catch {
+            // Ignore
+          }
+        }
+        cancelState.abortListeners.clear();
+      },
+    });
+
+    // Invoke showSaveFilePicker synchronously before the first await so transient user activation is preserved.
+    let pickerPromise = null;
+    if (typeof pageWindow?.showSaveFilePicker === "function") {
+      try {
+        const acceptMime =
+          outputContainer === "webm"
+            ? { "video/webm": [".webm"] }
+            : { "video/mp4": [".mp4"] };
+        pickerPromise = pageWindow.showSaveFilePicker({
+          suggestedName: cleanName.filename,
+          types: [
+            {
+              description:
+                outputContainer === "webm" ? "WebM Video" : "MP4 Video",
+              accept: acceptMime,
+            },
+          ],
+        });
+      } catch (syncErr) {
+        pickerPromise = Promise.reject(syncErr);
+      }
+    }
+
+    let writable = null;
+    let writableFinalized = false;
+    let vStream = null;
+    let aStream = null;
+    let vInput = null;
+    let aInput = null;
+
+    try {
+      if (pickerPromise !== null) {
+        try {
+          const fileHandle = await pickerPromise;
+          if (cancelState.aborted) throw makeUserCancelledError();
+          const rawWritable = await fileHandle.createWritable();
+          writable = ensureLocalWritableStream(rawWritable);
+          cancelState.writable = rawWritable;
+        } catch (pickerErr) {
+          if (
+            cancelState.aborted ||
+            pickerErr?.name === "AbortError" ||
+            pickerErr?.code === "USER_CANCELLED"
+          ) {
+            throw makeUserCancelledError();
+          }
+          writable = null;
+        }
+      }
+
+      const estVideo =
+        positiveSafeInt(payload.videoSize) || extractUrlClen(videoUrl);
+      const estAudio =
+        positiveSafeInt(payload.audioSize) || extractUrlClen(audioUrl);
+      if (!writable && estVideo + estAudio >= maxBufferBytes) {
+        throw makeCodedError(
+          "MUX_TOO_LARGE_FOR_MEMORY",
+          "当前环境不支持流式落盘（showSaveFilePicker），且预计文件不小于 1 GB",
+        );
+      }
+
+      const emitProgress = () => {
+        if (!vStream || !aStream || cancelState.aborted) return;
+        const total =
+          (vStream.getKnownSize() || estVideo) +
+          (aStream.getKnownSize() || estAudio);
+        const loaded = vStream.getLoadedBytes() + aStream.getLoadedBytes();
+        const percent =
+          total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0;
+        dispatchBridgeEvent(eventTarget, YOUTUBE_HELPER_PROGRESS_EVENT, {
+          requestId,
+          loaded,
+          total,
+          percent,
+        });
+      };
+
+      vStream = createChunkedGooglevideoSource(
+        videoUrl,
+        estVideo,
+        {
+          chunkSize,
+          concurrency: videoConcurrency,
+          maxRetries,
+          maxCachedChunks: 3,
+          retryBaseDelayMs,
+          chunkTimeoutMs,
+          CustomSourceCtor: mediabunny.CustomSource,
+        },
+        cancelState,
+        emitProgress,
+      );
+      aStream = createChunkedGooglevideoSource(
+        audioUrl,
+        estAudio,
+        {
+          chunkSize,
+          concurrency: audioConcurrency,
+          maxRetries,
+          maxCachedChunks: 2,
+          retryBaseDelayMs,
+          chunkTimeoutMs,
+          CustomSourceCtor: mediabunny.CustomSource,
+        },
+        cancelState,
+        emitProgress,
+      );
+
+      const [resolvedVSize, resolvedASize] = await Promise.all([
+        vStream.ensureSize(),
+        aStream.ensureSize(),
+      ]);
+      if (!writable && resolvedVSize + resolvedASize >= maxBufferBytes) {
+        throw makeCodedError(
+          "MUX_TOO_LARGE_FOR_MEMORY",
+          "当前环境不支持流式落盘（showSaveFilePicker），且文件不小于 1 GB",
+        );
+      }
+
+      vInput = new mediabunny.Input({
+        source: vStream.source,
+        formats: [mediabunny.MP4, mediabunny.WEBM],
+      });
+      aInput = new mediabunny.Input({
+        source: aStream.source,
+        formats: [mediabunny.MP4, mediabunny.WEBM],
+      });
+
+      const [vTrack, aTrack] = await Promise.all([
+        vInput.getPrimaryVideoTrack(),
+        aInput.getPrimaryAudioTrack(),
+      ]);
+      if (!vTrack) {
+        throw makeCodedError("MUX_NO_VIDEO_TRACK", "视频流中未找到主视频轨");
+      }
+      if (!aTrack) {
+        throw makeCodedError("MUX_NO_AUDIO_TRACK", "音频流中未找到主音轨");
+      }
+
+      const [vCodec, aCodec, vDecoderConfig, aDecoderConfig] =
+        await Promise.all([
+          vTrack.getCodec(),
+          aTrack.getCodec(),
+          vTrack.getDecoderConfig(),
+          aTrack.getDecoderConfig(),
+        ]);
+      if (!vCodec || !aCodec) {
+        throw makeCodedError(
+          "MUX_CODEC_UNSUPPORTED",
+          `音视频编码不支持转封装（video=${vCodec || "未知"}, audio=${aCodec || "未知"}）`,
+        );
+      }
+
+      const format =
+        outputContainer === "webm"
+          ? new mediabunny.WebMOutputFormat()
+          : new mediabunny.Mp4OutputFormat({ fastStart: false });
+      const target = writable
+        ? new mediabunny.StreamTarget(writable, {
+            chunked: true,
+            chunkSize: 8 * 1024 * 1024,
+          })
+        : new mediabunny.BufferTarget();
+      const output = new mediabunny.Output({ format, target });
+
+      const vOut = new mediabunny.EncodedVideoPacketSource(vCodec);
+      const aOut = new mediabunny.EncodedAudioPacketSource(aCodec);
+      output.addVideoTrack(vOut, { rotation: vTrack.rotation });
+      output.addAudioTrack(aOut);
+
+      await output.start();
+
+      const vSink = new mediabunny.EncodedPacketSink(vTrack);
+      const aSink = new mediabunny.EncodedPacketSink(aTrack);
+      const vIter = vSink.packets()[Symbol.asyncIterator]();
+      const aIter = aSink.packets()[Symbol.asyncIterator]();
+
+      let [vNext, aNext] = await Promise.all([vIter.next(), aIter.next()]);
+      let vFirst = true;
+      let aFirst = true;
+
+      while (!vNext.done || !aNext.done) {
+        if (cancelState.aborted) throw makeUserCancelledError();
+        const takeVideo =
+          !vNext.done &&
+          (aNext.done || vNext.value.timestamp <= aNext.value.timestamp);
+        if (takeVideo) {
+          await vOut.add(
+            vNext.value,
+            vFirst && vDecoderConfig
+              ? { decoderConfig: vDecoderConfig }
+              : undefined,
+          );
+          vFirst = false;
+          vNext = await vIter.next();
+        } else {
+          await aOut.add(
+            aNext.value,
+            aFirst && aDecoderConfig
+              ? { decoderConfig: aDecoderConfig }
+              : undefined,
+          );
+          aFirst = false;
+          aNext = await aIter.next();
+        }
+      }
+
+      vOut.close();
+      aOut.close();
+      await output.finalize();
+      writableFinalized = true;
+
+      if (!writable) {
+        const outBuf = target.buffer;
+        if (!outBuf || outBuf.byteLength === 0) {
+          throw makeCodedError("MUX_EMPTY_OUTPUT", "合流输出为空");
+        }
+        if (outBuf.byteLength >= maxBufferBytes) {
+          throw makeCodedError(
+            "MUX_TOO_LARGE_FOR_MEMORY",
+            "内存合流输出不小于 1 GB，已中止",
+          );
+        }
+        const mimeType =
+          outputContainer === "webm" ? "video/webm" : "video/mp4";
+        await defaultSaveBufferToPage(outBuf, cleanName.filename, mimeType);
+      }
+
+      return {
+        filename: cleanName.filename,
+        mode: writable ? "stream_picker" : "memory_buffer",
+      };
+    } catch (err) {
+      if (writable && !writableFinalized) {
+        try {
+          await writable.abort?.();
+        } catch {
+          // Ignore stream abort error
+        }
+      }
+      throw err;
+    } finally {
+      activeDownloads.delete(requestId);
+      vStream?.clear();
+      aStream?.clear();
+      try {
+        vInput?.dispose?.();
+      } catch {
+        // Ignore
+      }
+      try {
+        aInput?.dispose?.();
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
   async function handleRequestObject(message) {
     if (!message || typeof message !== "object") {
       return null;
@@ -696,6 +1719,10 @@ export function createUserscriptController(options = {}) {
         }
         case "download": {
           const data = await handleDownloadAction(requestId, payload);
+          return { requestId, ok: true, data };
+        }
+        case "mux_download": {
+          const data = await handleMuxDownloadAction(requestId, payload);
           return { requestId, ok: true, data };
         }
         case "cancel_download": {
@@ -726,7 +1753,10 @@ export function createUserscriptController(options = {}) {
         requestId,
         ok: false,
         error: {
-          code: "HELPER_REJECTED",
+          code:
+            error && typeof error.code === "string" && error.code
+              ? error.code
+              : "HELPER_REJECTED",
           message: error instanceof Error ? error.message : "助手执行失败",
         },
       };
@@ -828,7 +1858,7 @@ export function sendHelperRequest(action, payload = {}, options = {}) {
       if (settled) return;
       settled = true;
       cleanup();
-      if (action === "download") {
+      if (action === "download" || action === "mux_download") {
         dispatchBridgeEvent(eventTarget, YOUTUBE_HELPER_REQUEST_EVENT, {
           requestId: nextRequestId("cancel"),
           action: "cancel_download",
@@ -853,7 +1883,13 @@ export function sendHelperRequest(action, payload = {}, options = {}) {
       if (detail.ok) {
         resolve(detail.data);
       } else {
-        const err = new Error(detail.error?.message || "助手请求失败");
+        const err = new Error(
+          detail.error?.message ||
+            (detail.error?.code === "USER_CANCELLED" ? "Aborted" : "助手请求失败"),
+        );
+        if (detail.error?.code === "USER_CANCELLED") {
+          err.name = "AbortError";
+        }
         if (detail.error?.code) {
           err.code = detail.error.code;
         }
@@ -920,6 +1956,26 @@ export async function downloadViaYouTubeHelper(payload, options = {}) {
   return sendHelperRequest(
     "download",
     { url: payload.url, filename: payload.filename },
+    {
+      timeoutMs: 0,
+      onProgress: payload.onProgress,
+      signal: payload.signal,
+      eventTarget: options.eventTarget,
+    },
+  );
+}
+
+export async function muxDownloadViaYouTubeHelper(payload, options = {}) {
+  return sendHelperRequest(
+    "mux_download",
+    {
+      videoUrl: payload.videoUrl,
+      audioUrl: payload.audioUrl,
+      videoSize: payload.videoSize,
+      audioSize: payload.audioSize,
+      filename: payload.filename,
+      outputContainer: payload.outputContainer,
+    },
     {
       timeoutMs: 0,
       onProgress: payload.onProgress,

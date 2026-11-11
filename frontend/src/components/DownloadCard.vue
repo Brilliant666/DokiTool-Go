@@ -168,6 +168,14 @@ onBeforeUnmount(stopCollapseTimer)
             </div>
           </div>
 
+          <div
+            v-if="item.fallbackReason"
+            data-download-fallback-reason
+            class="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 rounded-lg px-2.5 py-1.5 leading-snug"
+          >
+            {{ item.fallbackReason }}
+          </div>
+
           <div v-if="item.recoveryExpired" class="mt-2 text-xs text-slate-500 dark:text-slate-400">
             无法确认下载结果，请查看浏览器下载列表。
             <button type="button" @click="emit('query', item.id)" class="block mt-2 text-indigo-600 dark:text-indigo-400 hover:underline">重新查询状态</button>

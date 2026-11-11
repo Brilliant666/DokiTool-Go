@@ -21,6 +21,14 @@ the earlier distribution; Swiper is no longer a frontend runtime dependency.
 Other dependency notices are collected in third-party-notices.txt. Preserve
 these notices when distributing built assets.
 
+The standalone YouTube helper userscript (frontend/public/helper/dokitool-youtube.user.js)
+bundles an unmodified release of Mediabunny 1.65.2 (Copyright (c) Vanilagy,
+https://github.com/Vanilagy/mediabunny/tree/v1.65.2), licensed under the Mozilla
+Public License 2.0 (MPL-2.0). The full MPL-2.0 license text is retained in
+frontend/public/licenses/mediabunny-MPL-2.0.txt. Mediabunny is combined into a
+Larger Work as an unmodified library; its MPL-2.0 terms apply to the Covered
+Software from Mediabunny and do not alter the licenses of the rest of DokiTool.
+
 Local platform artwork retains the respective platform's branding and ownership.
 It is used to identify supported platforms, without implying endorsement or
 relicensing the marks under this project's MIT license. Sources and file hashes

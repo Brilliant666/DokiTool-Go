@@ -709,27 +709,42 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 		variants = append(variants, variant)
 	}
 
-	// 3. Standalone Audio Track (both as a downloadable file variant in quality options and as a background_audio attachment)
+	// 3. Standalone Audio Tracks (both as downloadable file variants in quality options and as a background_audio attachment)
 	if opts.EnableDASHMux && hasSplitSilentTracks && len(dashAudioFormats) > 0 {
+		seenAudioContainer := make(map[string]bool, 2)
+		for _, candAudio := range dashAudioFormats {
+			audioMeta := buildAudioFileMetadata(candAudio)
+			audioContainer := unified.Str(audioMeta["container"])
+			if audioContainer == "" {
+				audioContainer = "mp4"
+			}
+			if seenAudioContainer[audioContainer] {
+				continue
+			}
+			candKey := nonEmptyOr(candAudio.FormatID, "audio-"+audioContainer)
+			audioSources := buildFormatSourcesWithContext(candAudio, opts, entryKey, candKey, "", now)
+			if len(audioSources) == 0 {
+				continue
+			}
+			audioVariantID := "v-" + shortDigest(opts.PlatformID+":dasha-file:"+entryKey+":"+candKey)
+			if seenVariantIDs[audioVariantID] {
+				continue
+			}
+			seenAudioContainer[audioContainer] = true
+			seenVariantIDs[audioVariantID] = true
+			audioVariant := unified.Object{
+				"id":       audioVariantID,
+				"label":    formatAudioVariantLabel(candAudio),
+				"metadata": audioMeta,
+				"delivery": unified.Object{
+					"kind":    "file",
+					"sources": audioSources,
+				},
+			}
+			variants = append(variants, audioVariant)
+		}
 		bestAudio := dashAudioFormats[0]
 		audioKey := nonEmptyOr(bestAudio.FormatID, "audio")
-		audioSources := buildFormatSourcesWithContext(bestAudio, opts, entryKey, audioKey, "", now)
-		if len(audioSources) > 0 {
-			audioVariantID := "v-" + shortDigest(opts.PlatformID+":dasha-file:"+entryKey+":"+audioKey)
-			if !seenVariantIDs[audioVariantID] {
-				seenVariantIDs[audioVariantID] = true
-				audioVariant := unified.Object{
-					"id":       audioVariantID,
-					"label":    formatAudioVariantLabel(bestAudio),
-					"metadata": buildAudioFileMetadata(bestAudio),
-					"delivery": unified.Object{
-						"kind":    "file",
-						"sources": audioSources,
-					},
-				}
-				variants = append(variants, audioVariant)
-			}
-		}
 		if audioResource := buildMuxTrackResourceWithContext(bestAudio, "audio", opts, entryKey, audioKey, "", now); audioResource != nil {
 			attID := "att-" + shortDigest(opts.PlatformID+":att-audio:"+opts.ContentID+":"+entryKey)
 			attTitle := formatAudioAttachmentTitle(itemTitle, bestAudio)
@@ -1362,6 +1377,11 @@ func sortAudioFormats(formats []Format) {
 		bAAC := strings.HasPrefix(strings.ToLower(strings.TrimSpace(b.ACodec)), "mp4a")
 		if aAAC != bAAC {
 			return aAAC
+		}
+		aOpus := strings.HasPrefix(strings.ToLower(strings.TrimSpace(a.ACodec)), "opus")
+		bOpus := strings.HasPrefix(strings.ToLower(strings.TrimSpace(b.ACodec)), "opus")
+		if aOpus != bOpus {
+			return aOpus
 		}
 		// Prefer standard stereo (<= 2ch) over 5.1 surround (6ch) for browser <audio> support
 		aStereo := derefInt(a.AudioChannels) == 0 || derefInt(a.AudioChannels) <= 2
