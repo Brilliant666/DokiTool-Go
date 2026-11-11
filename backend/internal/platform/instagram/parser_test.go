@@ -3,6 +3,7 @@ package instagram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -841,6 +842,276 @@ func TestAllowedPageURLHTTPSOnly(t *testing.T) {
 	for _, raw := range rejected {
 		if AllowedPageURL(raw) {
 			t.Fatalf("expected AllowedPageURL(%q) == false", raw)
+		}
+	}
+}
+
+func TestInstagramSingleImageMultiImageMixedCompletionAndLoginBlocked(t *testing.T) {
+	const now int64 = 1762300800
+
+	// 1. Single-image post: Embed lacks contextJSON (has srcset), GraphQL supplies full metadata + max-area 1080x1350 over trailing 1080x1080 crop.
+	singleEmbedHTML := `<img class="EmbeddedMediaImage" src="https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/s640.jpg" srcset="https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/s640.jpg 640w, https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/s1080.jpg 1080w" />`
+	singleGraphQL, _ := json.Marshal(map[string]any{
+		"data": map[string]any{
+			"xdt_shortcode_media": map[string]any{
+				"__typename": "XDTGraphImage",
+				"id":         "4100001",
+				"shortcode":  "BqvsDleB3lV",
+				"dimensions": map[string]any{"width": 1080, "height": 1350},
+				"display_resources": []any{
+					map[string]any{"src": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/single_640x800.jpg", "config_width": 640, "config_height": 800},
+					map[string]any{"src": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/single_1080x1350_orig.jpg", "config_width": 1080, "config_height": 1350},
+					map[string]any{"src": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/single_1080x1080_crop.jpg", "config_width": 1080, "config_height": 1080},
+				},
+				"edge_media_to_caption": map[string]any{
+					"edges": []any{
+						map[string]any{"node": map[string]any{"text": "Single Photo Portrait"}},
+					},
+				},
+			},
+		},
+	})
+	singleParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "There is no video in this post"}
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				if strings.HasSuffix(req.URL, "/embed/captioned/") {
+					return fetch.Response{StatusCode: http.StatusOK, Body: []byte(singleEmbedHTML), URL: req.URL}, nil
+				}
+				return fetch.Response{StatusCode: http.StatusOK, Body: singleGraphQL, URL: req.URL}, nil
+			},
+		},
+	)
+	singleEnv, err := singleParser.Parse(context.Background(), "https://www.instagram.com/p/BqvsDleB3lV/", now)
+	if err != nil {
+		t.Fatalf("single image Parse failed: %v", err)
+	}
+	singleView := unified.PublicView(singleEnv, false, now)
+	if err := unified.ValidateEnvelopeAt(singleView, now); err != nil {
+		t.Fatalf("single image ValidateEnvelopeAt failed: %v", err)
+	}
+	singleItem := unified.Map(unified.Slice(unified.Map(singleView["data"])["items"])[0])
+	if !strings.Contains(unified.Str(unified.Map(singleItem["default"])["url"]), "single_1080x1350_orig.jpg") {
+		t.Fatalf("expected uncropped 1080x1350 candidate over trailing 1080x1080 square crop, got %+v", singleItem["default"])
+	}
+	singleMeta := unified.Map(unified.Map(unified.Slice(singleItem["variants"])[0])["metadata"])
+	if singleMeta["width"] != int64(1080) || singleMeta["height"] != int64(1350) {
+		t.Fatalf("expected 1080x1350 metadata on single image, got %+v", singleMeta)
+	}
+
+	// 2. Pure multi-image carousel fixture (3 photos via image_versions2.candidates max-area selection).
+	multiImageGraphQL, _ := json.Marshal(map[string]any{
+		"data": map[string]any{
+			"xdt_shortcode_media": map[string]any{
+				"__typename": "XDTGraphSidecar",
+				"id":         "4100002",
+				"shortcode":  "DaBUYYOjNgA",
+				"edge_sidecar_to_children": map[string]any{
+					"edges": []any{
+						map[string]any{
+							"node": map[string]any{
+								"__typename": "GraphImage",
+								"id":         "c1",
+								"image_versions2": map[string]any{
+									"candidates": []any{
+										map[string]any{"url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/c1_720.webp", "width": 720, "height": 900},
+										map[string]any{"url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/c1_1440x1800.webp", "width": 1440, "height": 1800},
+									},
+								},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "c2",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/c2_1440x1800.jpg",
+								"dimensions":  map[string]any{"width": 1440, "height": 1800},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "c3",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/c3_1440x1800.png",
+								"dimensions":  map[string]any{"width": 1440, "height": 1800},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	multiImageParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "There is no video in this post"}
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				if strings.HasSuffix(req.URL, "/embed/captioned/") {
+					return fetch.Response{StatusCode: http.StatusNotFound}, nil
+				}
+				return fetch.Response{StatusCode: http.StatusOK, Body: multiImageGraphQL, URL: req.URL}, nil
+			},
+		},
+	)
+	multiEnv, err := multiImageParser.Parse(context.Background(), "https://www.instagram.com/p/DaBUYYOjNgA/", now)
+	if err != nil {
+		t.Fatalf("multi-image carousel Parse failed: %v", err)
+	}
+	multiView := unified.PublicView(multiEnv, false, now)
+	if err := unified.ValidateEnvelopeAt(multiView, now); err != nil {
+		t.Fatalf("multi-image carousel ValidateEnvelopeAt failed: %v", err)
+	}
+	multiItems := unified.Slice(unified.Map(multiView["data"])["items"])
+	if len(multiItems) != 3 || !strings.Contains(unified.Str(unified.Map(unified.Map(multiItems[0])["default"])["url"]), "c1_1440x1800.webp") {
+		t.Fatalf("expected 3 full-res carousel images starting with c1_1440x1800.webp, got %+v", multiItems)
+	}
+
+	// 3. Mixed carousel where yt-dlp only returns the 1 video item (omitting the 2 image slides):
+	// native pipeline completes all 3 slides while preserving yt-dlp's richer video variants on slide 1.
+	mixedSidecarCtx := map[string]any{
+		"gql_data": map[string]any{
+			"shortcode_media": map[string]any{
+				"__typename": "GraphSidecar",
+				"id":         "4100003",
+				"shortcode":  "DIqghhpok2K",
+				"edge_sidecar_to_children": map[string]any{
+					"edges": []any{
+						map[string]any{
+							"node": map[string]any{
+								"__typename":     "GraphVideo",
+								"id":             "vid-slide-1",
+								"is_video":       true,
+								"display_url":    "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/vid1_poster.jpg",
+								"video_url":      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/vid1_native.mp4",
+								"video_duration": 12.0,
+								"dimensions":     map[string]any{"width": 720, "height": 1280},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "img-slide-2",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/img2_1440.jpg",
+								"dimensions":  map[string]any{"width": 1440, "height": 1800},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "img-slide-3",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/img3_1440.jpg",
+								"dimensions":  map[string]any{"width": 1440, "height": 1800},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	rawMixedCtx, _ := json.Marshal(mixedSidecarCtx)
+	escapedMixedCtx, _ := json.Marshal(string(rawMixedCtx))
+	mixedEmbedHTML := `<script>window.__data = {"contextJSON":` + string(escapedMixedCtx) + `};</script>`
+
+	mixedCompletionParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return &ytengine.Info{
+					ID:    "DIqghhpok2K",
+					Title: "Mixed Post Video Only From YTDLP",
+					Formats: []ytengine.Format{
+						{
+							FormatID: "0",
+							URL:      "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/vid1_ytdlp_probed.mp4",
+							Ext:      "mp4",
+							Protocol: "https",
+							Width:    int64Ptr(720),
+							Height:   int64Ptr(1280),
+							Filesize: int64Ptr(4096000),
+						},
+					},
+				}, nil
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: []byte(mixedEmbedHTML), URL: req.URL}, nil
+			},
+		},
+	)
+	completedEnv, err := mixedCompletionParser.Parse(context.Background(), "https://www.instagram.com/p/DIqghhpok2K/", now)
+	if err != nil {
+		t.Fatalf("mixed completion Parse failed: %v", err)
+	}
+	completedView := unified.PublicView(completedEnv, false, now)
+	if err := unified.ValidateEnvelopeAt(completedView, now); err != nil {
+		t.Fatalf("mixed completion ValidateEnvelopeAt failed: %v", err)
+	}
+	completedData := unified.Map(completedView["data"])
+	completedItems := unified.Slice(completedData["items"])
+	if len(completedItems) != 3 {
+		t.Fatalf("expected 3 completed carousel items (1 video + 2 images), got %d", len(completedItems))
+	}
+	if !strings.Contains(unified.Str(unified.Map(unified.Map(completedItems[0])["default"])["url"]), "vid1_ytdlp_probed.mp4") {
+		t.Fatalf("expected slide 1 video to preserve yt-dlp variant URL, got %+v", unified.Map(completedItems[0])["default"])
+	}
+	if unified.Str(unified.Map(completedItems[1])["type"]) != "image" || unified.Str(unified.Map(completedItems[2])["type"]) != "image" {
+		t.Fatalf("expected slides 2 and 3 to be completed image items, got %+v", completedItems)
+	}
+
+	// 4. Stories, private long-token posts, and login-gated posts explicitly return "需要登录，暂不支持".
+	loginBlockedParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return nil, &ytengine.Error{
+					Code:      ytengine.CodeUpstreamUnavailable,
+					Message:   "当前平台解析服务暂不可用，请稍后重试",
+					Retryable: true,
+					Cause:     errors.New("ERROR: [Instagram] CVm3L6qjykFPSee: Instagram sent an empty media response. Check if this post is accessible in your browser without being logged-in."),
+				}
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				if strings.HasSuffix(req.URL, "/embed/captioned/") {
+					return fetch.Response{StatusCode: http.StatusOK, Body: []byte(`<html><body>BrokenMedia</body></html>`), URL: req.URL}, nil
+				}
+				return fetch.Response{StatusCode: http.StatusOK, Body: []byte(`{"data":{"xdt_shortcode_media":null},"status":"ok"}`), URL: req.URL}, nil
+			},
+		},
+	)
+	for _, loginURL := range []string{
+		"https://www.instagram.com/stories/instagram/1234567890123456789/",
+		"https://www.instagram.com/stories/highlights/17900000000000000/",
+		"https://www.instagram.com/p/C1234567890abcdef1234567890abcdef1234567/",
+		"https://www.instagram.com/p/CVm3L6qjykFPSee/",
+	} {
+		blockedEnv, err := loginBlockedParser.Parse(context.Background(), loginURL, now)
+		if err != nil {
+			t.Fatalf("loginBlocked Parse(%q) returned Go error: %v", loginURL, err)
+		}
+		if err := unified.ValidateEnvelopeAt(blockedEnv, now); err != nil {
+			t.Fatalf("loginBlocked ValidateEnvelopeAt(%q) failed: %v", loginURL, err)
+		}
+		errObj := unified.Map(blockedEnv["error"])
+		if unified.Str(blockedEnv["code"]) != "UPSTREAM_BLOCKED" ||
+			unified.Str(errObj["message"]) != "需要登录，暂不支持" ||
+			errObj["retryable"] == true {
+			t.Fatalf("Parse(%q) = %+v, want UPSTREAM_BLOCKED '需要登录，暂不支持' (non-retryable)", loginURL, blockedEnv)
 		}
 	}
 }

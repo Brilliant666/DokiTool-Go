@@ -18,6 +18,10 @@ import (
 
 // AdaptInfo converts yt-dlp -J metadata for an X status into a unified-v1 envelope.
 func AdaptInfo(info *ytengine.Info, tweetID, sourceURL string, selectedIndex int, now int64) unified.Object {
+	return adaptInfoWithPhotos(info, nil, tweetID, sourceURL, selectedIndex, now)
+}
+
+func adaptInfoWithPhotos(info *ytengine.Info, extraPhotos []syndicationPhoto, tweetID, sourceURL string, selectedIndex int, now int64) unified.Object {
 	if info == nil {
 		return unified.ContractError("UPSTREAM_INVALID_RESPONSE", "解析器返回数据为空", false)
 	}
@@ -142,6 +146,33 @@ func AdaptInfo(info *ytengine.Info, tweetID, sourceURL string, selectedIndex int
 	}
 	if selectedItemID == "" {
 		selectedItemID = unified.Str(unified.Map(items[0])["id"])
+	}
+	if selectedIndex == 0 && len(extraPhotos) > 0 {
+		imageItemIDs := make(unified.Array, 0, len(extraPhotos))
+		for _, photo := range extraPhotos {
+			if len(items) >= maxTweetVideos {
+				break
+			}
+			position := len(items) + 1
+			photoItem := buildXPhotoItem(photo, contentID, sourceURL, position, now)
+			if photoItem == nil || usedItemIDs[unified.Str(photoItem["id"])] {
+				continue
+			}
+			usedItemIDs[unified.Str(photoItem["id"])] = true
+			items = append(items, photoItem)
+			imageItemIDs = append(imageItemIDs, unified.Str(photoItem["id"]))
+		}
+		if len(imageItemIDs) > 0 && len(items) > 1 {
+			data["groups"] = unified.Array{
+				unified.Object{
+					"id":          "album",
+					"kind":        "album",
+					"item_ids":    imageItemIDs,
+					"total_count": int64(len(imageItemIDs)),
+					"complete":    true,
+				},
+			}
+		}
 	}
 	data["items"] = items
 	data["default_item_id"] = selectedItemID
