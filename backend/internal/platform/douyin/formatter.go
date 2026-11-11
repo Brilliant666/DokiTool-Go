@@ -99,8 +99,10 @@ func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID 
 		if truthy(main) {
 			main = toHTTPS(strings.ReplaceAll(main, "playwm", "play"))
 		}
+		var sameObject *shanghaiSameObject
 		if fallback := OriginalPlayURL(playURI); fallback != "" {
-			probed, err := p.probeOriginal(ctx, playURI, fallback, detail, videoInfo)
+			var probed object
+			probed, sameObject, err = p.probeOriginal(ctx, playURI, fallback, detail, videoInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -123,7 +125,7 @@ func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID 
 			currentPixels, originalPixels := pixelCount(videoInfo.metadata), pixelCount(originalMetadata)
 			better := originalPixels > currentPixels || originalPixels > 0 && originalPixels == currentPixels && bitrate(originalMetadata) > bitrate(videoInfo.metadata)
 			if p.resolver != nil && isOriginalDispatcher(originalURL) {
-				// Neither route confirmed a file. Keep only declared renditions.
+				// Neither route confirmed a higher-quality file. Keep only declared renditions.
 			} else if !truthy(main) || better {
 				if truthy(main) && main != originalURL {
 					videoInfo.backup = append(array{withURL(videoInfo.metadata, main, videoInfo.gearName, videoInfo.gearName)}, videoInfo.backup...)
@@ -169,6 +171,7 @@ func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID 
 		result["url"] = main
 		result["size_label"] = formatSizeLabel(result["size"])
 		result["video_backup"] = backups
+		prependSameObjectSources(result, backups, sameObject)
 		result["private_audio_candidates"] = audioCandidates(unified.Slice(child(detail, "video", "bit_rate_audio")), child(detail, "video", "cdn_url_expired"))
 		result["video_id"] = fallbackVideoID
 		if truthy(playURI) {
