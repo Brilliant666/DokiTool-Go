@@ -90,6 +90,52 @@ func TestRedirectChecksAndQueryPreservation(t *testing.T) {
 	}
 }
 
+func TestRedirectRewriteAppliesBeforePolicyAndDNS(t *testing.T) {
+	var calls []string
+	c := fixtureClient(func(req *http.Request, _ []netip.Addr, _ Policy) (*http.Response, error) {
+		calls = append(calls, req.Method+" "+req.URL.String())
+		if len(calls) == 1 {
+			return reply(302, http.Header{"Location": {"https://blocked.example.test/fw/photo/3xngkmw8vacriqu?x=y"}}, ""), nil
+		}
+		if req.Header.Get("Cookie") != "" || req.Header.Get("Authorization") != "" {
+			t.Fatal("credentials followed rewritten cross-host redirect")
+		}
+		return reply(200, nil, "ok"), nil
+	})
+	c.resolver = resolverFunc(func(_ context.Context, _, host string) ([]netip.Addr, error) {
+		if host == "blocked.example.test" {
+			t.Fatal("DNS lookup attempted for rewritten redirect host")
+		}
+		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
+	})
+	p := testPolicy()
+	p.RewriteRedirect = func(raw string) string {
+		if strings.HasPrefix(raw, "https://blocked.example.test/fw/photo/") {
+			return "https://cdn.example.test/fw/photo/3xngkmw8vacriqu"
+		}
+		return raw
+	}
+	result, err := c.Do(context.Background(), Request{
+		URL:    "https://api.example.test/start",
+		Method: http.MethodHead,
+		Header: http.Header{"Cookie": {"test=1"}, "Authorization": {"Bearer secret"}},
+		Policy: p,
+	})
+	if err != nil || result.URL != "https://cdn.example.test/fw/photo/3xngkmw8vacriqu" || len(calls) != 2 || calls[1] != "HEAD https://cdn.example.test/fw/photo/3xngkmw8vacriqu" {
+		t.Fatalf("rewritten redirect failed: calls=%v result=%+v err=%v", calls, result, err)
+	}
+
+	calls = nil
+	c.transport = func(req *http.Request, _ []netip.Addr, _ Policy) (*http.Response, error) {
+		calls = append(calls, req.URL.String())
+		return reply(302, http.Header{"Location": {"https://blocked.example.test/private/path?x=y"}}, ""), nil
+	}
+	_, err = c.Do(context.Background(), Request{URL: "https://api.example.test/start", Method: http.MethodHead, Policy: p})
+	if !errors.Is(err, ErrPolicy) || len(calls) != 1 {
+		t.Fatalf("unmatched redirect host escaped policy: calls=%v err=%v", calls, err)
+	}
+}
+
 func TestRedirectBudgetAndNoFollow(t *testing.T) {
 	calls := 0
 	c := fixtureClient(func(*http.Request, []netip.Addr, Policy) (*http.Response, error) {
