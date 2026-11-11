@@ -28,6 +28,7 @@ var gifshowRedirectHost = fetch.AllowHosts("m.gifshow.com")
 var desktopShortVideoHost = fetch.AllowHosts("www.kuaishou.com")
 var mobilePhotoPath = regexp.MustCompile(`^/fw/photo/([A-Za-z0-9_-]+)/?$`)
 var desktopShortVideoPath = regexp.MustCompile(`^/short-video/([A-Za-z0-9_-]+)$`)
+var desktopSharePath = regexp.MustCompile(`^/f/([A-Za-z0-9_-]+)$`)
 
 // A kuaishou.com short share can lead to this mobile work page. Only the
 // redirect/GET path may use it; it is not another public parser entry.
@@ -42,16 +43,17 @@ func allowedPageURL(raw string) bool {
 	return err == nil && u.Scheme == "https" && mobilePhotoPath.MatchString(u.EscapedPath())
 }
 
-// Kuaishou desktop short-video pages and m.gifshow.com share the same edge pool
-// whose TLS handshakes intermittently reset from the production network.
-// Rewrite canonical https://www.kuaishou.com/short-video/<id> inputs and
-// redirects directly to https://c.kuaishou.com/fw/photo/<id> before dialing.
+// Kuaishou desktop short-video/share pages and m.gifshow.com share the same edge
+// pool whose TLS handshakes intermittently reset from the production network.
+// Rewrite canonical https://www.kuaishou.com/short-video/<id> and
+// https://www.kuaishou.com/f/<shortcode> inputs and redirects directly to
+// c.kuaishou.com before dialing.
 func rewriteDesktopShortVideo(raw string) string {
 	if !desktopShortVideoHost(raw) || strings.Contains(raw, "#") {
 		return raw
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Port() != "" {
+	if err != nil || u.Scheme != "https" || u.Port() != "" || u.User != nil {
 		return raw
 	}
 	match := desktopShortVideoPath.FindStringSubmatch(u.EscapedPath())
@@ -59,6 +61,28 @@ func rewriteDesktopShortVideo(raw string) string {
 		return raw
 	}
 	return "https://c.kuaishou.com/fw/photo/" + match[1]
+}
+
+func rewriteDesktopShare(raw string) string {
+	if !desktopShortVideoHost(raw) || strings.Contains(raw, "#") {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Port() != "" || u.User != nil {
+		return raw
+	}
+	match := desktopSharePath.FindStringSubmatch(u.EscapedPath())
+	if match == nil {
+		return raw
+	}
+	return "https://c.kuaishou.com/f/" + match[1]
+}
+
+func rewriteKuaishouDirectInput(raw string) string {
+	if rewritten := rewriteDesktopShortVideo(raw); rewritten != raw {
+		return rewritten
+	}
+	return rewriteDesktopShare(raw)
 }
 
 func rewriteGifshowRedirect(raw string) string {
@@ -77,7 +101,7 @@ func rewriteGifshowRedirect(raw string) string {
 }
 
 func rewriteKuaishouRedirect(raw string) string {
-	if rewritten := rewriteDesktopShortVideo(raw); rewritten != raw {
+	if rewritten := rewriteKuaishouDirectInput(raw); rewritten != raw {
 		return rewritten
 	}
 	return rewriteGifshowRedirect(raw)
@@ -119,7 +143,7 @@ func (p *Parser) parseLegacy(parent context.Context, input string) (unified.Obje
 	// The combined real deadline cannot outlive both bounded requests.
 	ctx, cancel := context.WithTimeout(parent, 40*time.Second)
 	defer cancel()
-	head, err := p.request(ctx, rewriteDesktopShortVideo(input), http.MethodHead)
+	head, err := p.request(ctx, rewriteKuaishouDirectInput(input), http.MethodHead)
 	if cancelled := parent.Err(); cancelled != nil {
 		return nil, cancelled
 	}

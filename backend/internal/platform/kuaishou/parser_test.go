@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 type executorFunc func(context.Context, fetch.Request) (fetch.Response, error)
@@ -283,6 +284,160 @@ func TestShareRedirectsToDesktopShortVideoOrGifshowMobilePhotoPage(t *testing.T)
 	directPayload, err := directParser.Parse(context.Background(), "https://m.gifshow.com/fw/photo/3xngkmw8vacriqu", 1793361600)
 	if err != nil || directPayload["code"] != "INVALID_INPUT" {
 		t.Fatalf("m.gifshow.com became a directly accepted input: payload=%v err=%v", directPayload, err)
+	}
+}
+
+func TestDesktopShareCodeDirectAndRedirectRewrite(t *testing.T) {
+	const (
+		now               = 1793361600
+		desktopShareWithQ = "https://www.kuaishou.com/f/X-FJK5jXh9dH27s?x=y&cc=share_copylink"
+		rewrittenShare    = "https://c.kuaishou.com/f/X-FJK5jXh9dH27s"
+		mobileLanding     = "https://sample.m.chenzhongtech.com/fw/photo/3xsrqr3u2bfjrem?cc=share_im"
+		vShare            = "https://v.kuaishou.com/test"
+		html              = `<script>window.INIT_STATE = {"tusjoh-a":{"photo":{"photoType":"VIDEO","caption":"快手 /f/ 桌面分享短码样本","mainMvUrls":[{"url":"https://media.example.test/kuaishou-f-share.mp4"}]}}};</script>`
+	)
+
+	// 1. Direct input https://www.kuaishou.com/f/<shortcode>?... skips www.kuaishou.com first hop
+	// and sends HEAD https://c.kuaishou.com/f/<shortcode> directly.
+	var directCalls []string
+	directParser := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+		if strings.Contains(request.URL, "www.kuaishou.com") {
+			t.Fatalf("unexpected request sent to www.kuaishou.com: %s %s", request.Method, request.URL)
+		}
+		if !request.Policy.AllowedURL(request.URL) {
+			return fetch.Response{}, fetch.ErrPolicy
+		}
+		directCalls = append(directCalls, request.Method+" "+request.URL)
+		if request.Method == http.MethodHead && request.URL == rewrittenShare {
+			next := request.Policy.RewriteRedirect(mobileLanding)
+			if !request.Policy.AllowedURL(next) {
+				return fetch.Response{}, fetch.ErrPolicy
+			}
+			directCalls = append(directCalls, request.Method+" "+next)
+			return fetch.Response{StatusCode: http.StatusOK, URL: next, History: []string{next}}, nil
+		}
+		if request.Method == http.MethodGet && request.URL == mobileLanding {
+			return fetch.Response{StatusCode: http.StatusOK, URL: mobileLanding, Body: []byte(html)}, nil
+		}
+		t.Fatalf("unexpected outbound request: %s %s", request.Method, request.URL)
+		return fetch.Response{}, nil
+	}))
+
+	directPayload, err := directParser.Parse(context.Background(), desktopShareWithQ, now)
+	if err != nil || directPayload["code"] != "OK" {
+		t.Fatalf("desktop /f/ direct rewrite failed: code=%v err=%v", directPayload["code"], err)
+	}
+	for _, debug := range []bool{false, true} {
+		view := unified.PublicView(directPayload, debug, now)
+		if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("ValidateEnvelopeAt(debug=%v) failed: %v", debug, err)
+		}
+		if gotSource := unified.Str(unified.Map(view["data"])["source_url"]); gotSource != desktopShareWithQ {
+			t.Fatalf("expected original source_url %q preserved, got %q", desktopShareWithQ, gotSource)
+		}
+	}
+	wantDirectCalls := []string{
+		"HEAD " + rewrittenShare,
+		"HEAD " + mobileLanding,
+		"GET " + mobileLanding,
+	}
+	if strings.Join(directCalls, "\n") != strings.Join(wantDirectCalls, "\n") {
+		t.Fatalf("unexpected direct /f/ outbound sequence:\ngot:  %v\nwant: %v", directCalls, wantDirectCalls)
+	}
+
+	// 2. Redirect hop to https://www.kuaishou.com/f/<shortcode>?... is also rewritten
+	// to https://c.kuaishou.com/f/<shortcode> before dialing.
+	var redirectCalls []string
+	redirectParser := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+		if request.Policy.RewriteRedirect == nil {
+			t.Fatal("missing kuaishou redirect rewrite hook")
+		}
+		current := request.URL
+		var history []string
+		for hop := 0; ; hop++ {
+			if strings.Contains(current, "www.kuaishou.com") || strings.Contains(current, "m.gifshow.com") {
+				t.Fatalf("unrewritten unstable host dialed on hop %d: %s %s", hop, request.Method, current)
+			}
+			if !request.Policy.AllowedURL(current) {
+				return fetch.Response{}, fetch.ErrPolicy
+			}
+			redirectCalls = append(redirectCalls, request.Method+" "+current)
+			if request.Method == http.MethodHead && current == vShare {
+				next := request.Policy.RewriteRedirect(desktopShareWithQ)
+				history = append(history, next)
+				current = next
+				continue
+			}
+			if request.Method == http.MethodHead && current == rewrittenShare {
+				next := request.Policy.RewriteRedirect(mobileLanding)
+				history = append(history, next)
+				current = next
+				continue
+			}
+			if request.Method == http.MethodHead && current == mobileLanding {
+				return fetch.Response{StatusCode: http.StatusOK, URL: current, History: history}, nil
+			}
+			if request.Method == http.MethodGet && current == mobileLanding {
+				return fetch.Response{StatusCode: http.StatusOK, URL: current, Body: []byte(html)}, nil
+			}
+			t.Fatalf("unexpected outbound hop %d: %s %s", hop, request.Method, current)
+		}
+	}))
+
+	redirectPayload, err := redirectParser.Parse(context.Background(), vShare, now)
+	if err != nil || redirectPayload["code"] != "OK" {
+		t.Fatalf("redirect to desktop /f/ rewrite failed: code=%v err=%v", redirectPayload["code"], err)
+	}
+	wantRedirectCalls := []string{
+		"HEAD " + vShare,
+		"HEAD " + rewrittenShare,
+		"HEAD " + mobileLanding,
+		"GET " + mobileLanding,
+	}
+	if strings.Join(redirectCalls, "\n") != strings.Join(wantRedirectCalls, "\n") {
+		t.Fatalf("unexpected redirect /f/ outbound sequence:\ngot:  %v\nwant: %v", redirectCalls, wantRedirectCalls)
+	}
+
+	// 3. Negative cases: invalid shortcode, extra path segment, trailing slash, non-HTTPS,
+	// explicit port, userinfo, subdomain, and #fragment must never be rewritten.
+	for _, unchanged := range []string{
+		"https://www.kuaishou.com/f/",
+		"https://www.kuaishou.com/f/%2e%2e?x=y",
+		"https://www.kuaishou.com/f/bad.id?x=y",
+		"https://www.kuaishou.com/f/bad$id?x=y",
+		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s/extra",
+		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s/",
+		"https://www.kuaishou.com/prefix/f/X-FJK5jXh9dH27s",
+		"http://www.kuaishou.com/f/X-FJK5jXh9dH27s?x=y",
+		"https://www.kuaishou.com:443/f/X-FJK5jXh9dH27s?x=y",
+		"https://www.kuaishou.com:8443/f/X-FJK5jXh9dH27s?x=y",
+		"https://user@www.kuaishou.com/f/X-FJK5jXh9dH27s?x=y",
+		"https://sub.www.kuaishou.com/f/X-FJK5jXh9dH27s?x=y",
+		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s#fragment",
+		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s#",
+	} {
+		t.Run("not-rewritten/"+unchanged, func(t *testing.T) {
+			if got := rewriteDesktopShare(unchanged); got != unchanged {
+				t.Fatalf("rewriteDesktopShare(%q) = %q, want unchanged", unchanged, got)
+			}
+			if got := rewriteKuaishouDirectInput(unchanged); got != unchanged {
+				t.Fatalf("rewriteKuaishouDirectInput(%q) = %q, want unchanged", unchanged, got)
+			}
+			if got := rewriteKuaishouRedirect(unchanged); got != unchanged {
+				t.Fatalf("rewriteKuaishouRedirect(%q) = %q, want unchanged", unchanged, got)
+			}
+			if allowedInput(unchanged) {
+				var firstURL string
+				probe := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+					firstURL = request.URL
+					return fetch.Response{}, errors.New("stop after first hop")
+				}))
+				_, _ = probe.Parse(context.Background(), unchanged, now)
+				if firstURL != unchanged {
+					t.Fatalf("direct input %q was rewritten to %q", unchanged, firstURL)
+				}
+			}
+		})
 	}
 }
 

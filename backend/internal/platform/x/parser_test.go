@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
@@ -1075,5 +1077,274 @@ func TestXSyndicationAbnormalAndOversizedResponses(t *testing.T) {
 				t.Fatalf("got code=%q, want %q (env=%+v)", got, tc.wantCode, env)
 			}
 		})
+	}
+}
+
+func TestParseXVideoParallelSyndicationTimeoutAndErrorFallback(t *testing.T) {
+	const now int64 = 1762300800
+	const tweetID = "1790637656616943991"
+	const tweetURL = "https://x.com/historyinmemes/status/" + tweetID
+
+	sampleVideoInfo := func() *ytengine.Info {
+		return &ytengine.Info{
+			ID:        "1790637589910654976",
+			DisplayID: tweetID,
+			Title:     "Historic Vids",
+			Duration:  float64Ptr(15.488),
+			Formats: []ytengine.Format{
+				{
+					FormatID: "http-2176",
+					URL:      "https://video.twimg.com/amplify_video/1790637589910654976/vid/avc1/728x720/kF5AeH6MK-1qDlBg.mp4?tag=14",
+					Ext:      "mp4",
+					Protocol: "https",
+					Width:    int64Ptr(728),
+					Height:   int64Ptr(720),
+					VCodec:   "avc1.640020",
+					ACodec:   "mp4a.40.2",
+					Filesize: int64Ptr(1404023),
+				},
+			},
+		}
+	}
+
+	// 1. Default supplement timeout is bounded to 3 seconds (~3s per PR #65 follow-up).
+	defaultParser := NewWithFetcher(&stubExtractor{enabled: true}, nil, fakeXFetcher{})
+	if got := defaultParser.effectiveSupplementTimeout(); got != 3*time.Second {
+		t.Fatalf("effectiveSupplementTimeout() = %v, want 3s", got)
+	}
+
+	// 2. Deterministic barrier handshake proving yt-dlp and syndication run concurrently,
+	// and completed syndication photos remain preserved even if yt-dlp finishes after supplementTimeout.
+	ytEntered := make(chan struct{})
+	synEntered := make(chan struct{})
+	bothRunning := make(chan struct{})
+	go func() {
+		<-ytEntered
+		<-synEntered
+		close(bothRunning)
+	}()
+
+	mixedSyndicationBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Parallel mixed post",
+		"video":      map[string]any{"durationMs": 15488},
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/ParallelImg1.jpg", "width": 1600, "height": 900},
+		},
+	})
+
+	parallelParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(ctx context.Context, _ string) (*ytengine.Info, error) {
+				close(ytEntered)
+				select {
+				case <-bothRunning:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				time.Sleep(60 * time.Millisecond)
+				return sampleVideoInfo(), nil
+			},
+		},
+		nil,
+		fakeXFetcher{
+			fn: func(reqCtx context.Context, req fetch.Request) (fetch.Response, error) {
+				close(synEntered)
+				select {
+				case <-bothRunning:
+				case <-reqCtx.Done():
+					return fetch.Response{}, reqCtx.Err()
+				}
+				return fetch.Response{StatusCode: http.StatusOK, Body: mixedSyndicationBody, URL: req.URL}, nil
+			},
+		},
+	)
+	parallelParser.supplementTimeout = 30 * time.Millisecond
+
+	parallelCtx, cancelParallel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelParallel()
+	parallelEnv, err := parallelParser.Parse(parallelCtx, tweetURL, now)
+	if err != nil {
+		t.Fatalf("parallel mixed Parse failed: %v", err)
+	}
+	parallelItems := unified.Slice(unified.Map(unified.PublicView(parallelEnv, false, now)["data"])["items"])
+	if len(parallelItems) != 2 || unified.Str(unified.Map(parallelItems[0])["type"]) != "video" || unified.Str(unified.Map(parallelItems[1])["type"]) != "image" {
+		t.Fatalf("expected [video, image] from parallel mixed tweet even when yt-dlp outlived supplementTimeout, got %+v", parallelItems)
+	}
+
+	// 3. Hung syndication on a video tweet is cancelled at supplementTimeout and returns the video result directly.
+	synCanceled := make(chan struct{})
+	timeoutParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return sampleVideoInfo(), nil
+			},
+		},
+		nil,
+		fakeXFetcher{
+			fn: func(reqCtx context.Context, _ fetch.Request) (fetch.Response, error) {
+				<-reqCtx.Done()
+				close(synCanceled)
+				return fetch.Response{}, reqCtx.Err()
+			},
+		},
+	)
+	timeoutParser.supplementTimeout = 80 * time.Millisecond
+
+	start := time.Now()
+	videoEnv, err := timeoutParser.Parse(context.Background(), tweetURL, now)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("timeout fallback Parse returned Go error: %v", err)
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("expected syndication supplement timeout to cut off promptly (<1s), took %v", elapsed)
+	}
+	select {
+	case <-synCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("expected hung syndication request context to be cancelled on supplement timeout")
+	}
+	videoView := unified.PublicView(videoEnv, false, now)
+	if err := unified.ValidateEnvelopeAt(videoView, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt failed on video fallback envelope: %v", err)
+	}
+	if unified.Str(videoView["code"]) != "OK" {
+		t.Fatalf("expected code=OK video result on syndication timeout, got %+v", videoView)
+	}
+	videoItems := unified.Slice(unified.Map(videoView["data"])["items"])
+	if len(videoItems) != 1 || unified.Str(unified.Map(videoItems[0])["type"]) != "video" {
+		t.Fatalf("expected 1 video item on syndication timeout fallback, got %+v", videoItems)
+	}
+
+	// 4. Syndication HTTP/parse errors on a video tweet never fail the video result.
+	errorCases := []struct {
+		name    string
+		fetchFn func(context.Context, fetch.Request) (fetch.Response, error)
+	}{
+		{
+			name: "rate-limited-429",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusTooManyRequests, Body: []byte(`rate limited`), URL: req.URL}, nil
+			},
+		},
+		{
+			name: "forbidden-403",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusForbidden, Body: []byte(`forbidden`), URL: req.URL}, nil
+			},
+		},
+		{
+			name: "server-error-500",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusInternalServerError, Body: []byte(`error`), URL: req.URL}, nil
+			},
+		},
+		{
+			name: "oversized-err-limit",
+			fetchFn: func(context.Context, fetch.Request) (fetch.Response, error) {
+				return fetch.Response{}, fetch.ErrLimit
+			},
+		},
+		{
+			name: "malformed-json",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: []byte(`<html>bad</html>`), URL: req.URL}, nil
+			},
+		},
+		{
+			name: "transport-deadline-exceeded",
+			fetchFn: func(context.Context, fetch.Request) (fetch.Response, error) {
+				return fetch.Response{}, context.DeadlineExceeded
+			},
+		},
+	}
+	for _, tc := range errorCases {
+		t.Run("video-ignores-syndication-"+tc.name, func(t *testing.T) {
+			p := NewWithFetcher(
+				&stubExtractor{
+					enabled: true,
+					extract: func(context.Context, string) (*ytengine.Info, error) {
+						return sampleVideoInfo(), nil
+					},
+				},
+				nil,
+				fakeXFetcher{fn: tc.fetchFn},
+			)
+			env, err := p.Parse(context.Background(), tweetURL, now)
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if unified.Str(env["code"]) != "OK" {
+				t.Fatalf("expected video result code=OK despite syndication %s, got %+v", tc.name, env)
+			}
+		})
+	}
+
+	// 5. Pure-image tweet where yt-dlp returns CONTENT_UNAVAILABLE is NOT cut off by supplementTimeout.
+	var purePhotoFetchCalls atomic.Int32
+	purePhotoBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Slow pure photo tweet",
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/SlowPhotoOne.jpg", "width": 2048, "height": 1536},
+			{"url": "https://pbs.twimg.com/media/SlowPhotoTwo.png", "width": 1920, "height": 1080},
+		},
+	})
+	slowPurePhotoParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				time.Sleep(15 * time.Millisecond)
+				return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "no video"}
+			},
+		},
+		nil,
+		fakeXFetcher{
+			fn: func(reqCtx context.Context, req fetch.Request) (fetch.Response, error) {
+				purePhotoFetchCalls.Add(1)
+				select {
+				case <-time.After(90 * time.Millisecond):
+					return fetch.Response{StatusCode: http.StatusOK, Body: purePhotoBody, URL: req.URL}, nil
+				case <-reqCtx.Done():
+					return fetch.Response{}, reqCtx.Err()
+				}
+			},
+		},
+	)
+	slowPurePhotoParser.supplementTimeout = 30 * time.Millisecond
+
+	slowPureEnv, err := slowPurePhotoParser.Parse(context.Background(), tweetURL, now)
+	if err != nil || unified.Str(slowPureEnv["code"]) != "OK" {
+		t.Fatalf("expected pure-photo tweet slower than supplementTimeout to succeed, got env=%+v err=%v", slowPureEnv, err)
+	}
+	if gotCalls := purePhotoFetchCalls.Load(); gotCalls != 1 {
+		t.Fatalf("expected exactly 1 syndication request on pure-photo tweet, got %d", gotCalls)
+	}
+	if gotItems := len(unified.Slice(unified.Map(slowPureEnv["data"])["items"])); gotItems != 2 {
+		t.Fatalf("expected 2 photo items, got %d", gotItems)
+	}
+
+	// 6. Explicit /video/<N> URL does not invoke syndication at all.
+	videoOnlyParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return sampleVideoInfo(), nil
+			},
+		},
+		nil,
+		fakeXFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				t.Fatalf("unexpected syndication call for /video/1: %s", req.URL)
+				return fetch.Response{}, nil
+			},
+		},
+	)
+	videoOnlyEnv, err := videoOnlyParser.Parse(context.Background(), tweetURL+"/video/1", now)
+	if err != nil || unified.Str(videoOnlyEnv["code"]) != "OK" {
+		t.Fatalf("/video/1 Parse failed: env=%+v err=%v", videoOnlyEnv, err)
 	}
 }
