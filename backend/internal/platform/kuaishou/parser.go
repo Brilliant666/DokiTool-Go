@@ -23,8 +23,9 @@ func New(executor fetch.Executor) *Parser { return &Parser{executor: executor} }
 const userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1 Edg/122.0.0.0"
 
 var allowedInput = fetch.AllowHosts(".kuaishou.com")
-var mobilePageHost = fetch.AllowHosts(".m.chenzhongtech.com", "m.gifshow.com")
-var mobilePhotoPath = regexp.MustCompile(`^/fw/photo/[A-Za-z0-9_-]+/?$`)
+var mobilePageHost = fetch.AllowHosts(".m.chenzhongtech.com")
+var gifshowRedirectHost = fetch.AllowHosts("m.gifshow.com")
+var mobilePhotoPath = regexp.MustCompile(`^/fw/photo/([A-Za-z0-9_-]+)/?$`)
 
 // A kuaishou.com short share can lead to this mobile work page. Only the
 // redirect/GET path may use it; it is not another public parser entry.
@@ -37,6 +38,24 @@ func allowedPageURL(raw string) bool {
 	}
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme == "https" && mobilePhotoPath.MatchString(u.EscapedPath())
+}
+
+// Kuaishou desktop short-video pages redirect to https://m.gifshow.com/fw/photo/<id>,
+// whose TLS handshake resets from the production network. Rewrite matching photo
+// redirects directly to https://c.kuaishou.com/fw/photo/<id> before dialing.
+func rewriteGifshowRedirect(raw string) string {
+	if !gifshowRedirectHost(raw) || strings.Contains(raw, "#") {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" {
+		return raw
+	}
+	match := mobilePhotoPath.FindStringSubmatch(u.EscapedPath())
+	if match == nil {
+		return raw
+	}
+	return "https://c.kuaishou.com/fw/photo/" + match[1]
 }
 
 var contentPaths = []struct {
@@ -129,7 +148,7 @@ func (p *Parser) request(ctx context.Context, target, method string) (fetch.Resp
 		}
 	}
 	request := fetch.Request{URL: target, Method: method, Header: headers,
-		Policy: fetch.Policy{Purpose: "kuaishou-page", AllowedURL: allowedPageURL, Timeout: 20 * time.Second,
+		Policy: fetch.Policy{Purpose: "kuaishou-page", AllowedURL: allowedPageURL, RewriteRedirect: rewriteGifshowRedirect, Timeout: 20 * time.Second,
 			MaxBytes: 8 << 20, FollowRedirects: true, AutoReferer: method == http.MethodGet, MaxRedirects: 5}}
 	if method == http.MethodHead {
 		request.Policy.Purpose = "kuaishou-share"

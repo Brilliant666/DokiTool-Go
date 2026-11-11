@@ -30,6 +30,7 @@ var (
 type Policy struct {
 	Purpose            string
 	AllowedURL         func(string) bool
+	RewriteRedirect    func(string) string
 	Timeout            time.Duration
 	MaxBytes           int64
 	MaxHeaderBytes     int64
@@ -235,6 +236,16 @@ func (c *Client) Do(parent context.Context, in Request) (Response, error) {
 				return Response{}, ErrRedirect
 			}
 			next := u.ResolveReference(relative)
+			originalHost, originalScheme := next.Host, next.Scheme
+			if p.RewriteRedirect != nil {
+				if rewritten := p.RewriteRedirect(next.String()); rewritten != next.String() {
+					parsed, err := url.Parse(rewritten)
+					if err != nil {
+						return Response{}, ErrPolicy
+					}
+					next = parsed
+				}
+			}
 			if p.AutoReferer {
 				// Match libcurl AUTOREFERER, including cross-origin and HTTPS to
 				// HTTP redirects. Every target is still checked before DNS/IO.
@@ -243,7 +254,9 @@ func (c *Client) Do(parent context.Context, in Request) (Response, error) {
 				previous.User, previous.Fragment, previous.RawFragment = nil, "", ""
 				headers.Set("Referer", previous.String())
 			}
-			if !strings.EqualFold(next.Host, u.Host) || (p.AutoReferer && u.Scheme == "https" && next.Scheme == "http") {
+			crossHost := !strings.EqualFold(originalHost, u.Host) || !strings.EqualFold(next.Host, u.Host)
+			downgraded := p.AutoReferer && u.Scheme == "https" && (originalScheme == "http" || next.Scheme == "http")
+			if crossHost || downgraded {
 				headers.Del("Authorization")
 				headers.Del("Cookie")
 			}
