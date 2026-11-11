@@ -682,6 +682,8 @@
 /backend/internal/platform/ytgeneric/*
 !/backend/internal/platform/ytgeneric/parser.go
 !/backend/internal/platform/ytgeneric/parser_test.go
+!/backend/internal/platform/ytgeneric/sites.go
+!/backend/internal/platform/ytgeneric/testdata/
 /backend/internal/platform/zuiyou/*
 !/backend/internal/platform/zuiyou/baseline_test.go
 !/backend/internal/platform/zuiyou/formatter.go
@@ -803,6 +805,10 @@
 !/backend/internal/platform/youtube/testdata/ejs/
 !/backend/internal/platform/youtube/testdata/finalize_sample_46.json
 !/backend/internal/platform/youtube/testdata/player_base_fixture.js
+/backend/internal/platform/ytgeneric/testdata/*
+!/backend/internal/platform/ytgeneric/testdata/dailymotion.json
+!/backend/internal/platform/ytgeneric/testdata/facebook.json
+!/backend/internal/platform/ytgeneric/testdata/tumblr.json
 /backend/internal/platform/zuiyou/testdata/*
 !/backend/internal/platform/zuiyou/testdata/README.md
 !/backend/internal/platform/zuiyou/testdata/inputs.json

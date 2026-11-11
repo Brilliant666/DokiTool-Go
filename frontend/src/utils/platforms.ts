@@ -61,6 +61,9 @@ const tabIcons: Record<string, string> = {
   x: "fa-x-twitter",
   youtube: "fa-youtube",
   instagram: "fa-instagram",
+  facebook: "fa-facebook",
+  tumblr: "fa-tumblr",
+  dailymotion: "fa-dailymotion",
 };
 export function platformTabs(locale: string) {
   return [

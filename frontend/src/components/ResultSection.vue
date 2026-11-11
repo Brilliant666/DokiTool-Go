@@ -1001,6 +1001,16 @@ onUnmounted(() => {
                 isResolving ? t(locale, "resolving") : targetMessage
               }}</span
               ><button
+                v-if="
+                  downloadableQualityOptions.length > 0 &&
+                  !activeVariant &&
+                  !isResolving
+                "
+                class="rs-btn rs-btn--ghost"
+                @click="activeTab = 'backup'"
+              >
+                {{ t(locale, "selectQuality") }}</button
+              ><button
                 v-if="currentItem.resolve_url && !isResolving"
                 class="rs-btn rs-btn--ghost"
                 @click="emit('refresh-item', currentItem)"

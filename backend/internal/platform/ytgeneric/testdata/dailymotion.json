@@ -1,0 +1,65 @@
+{
+  "id": "xbvrdzy",
+  "title": "Dungeons & Dragons: Long Rest Tavern",
+  "description": "Official Dungeons & Dragons ambiance video.",
+  "uploader": "Dungeons & Dragons",
+  "uploader_id": "x2abcde",
+  "timestamp": 1730000000,
+  "duration": 184.0,
+  "view_count": 8420,
+  "like_count": 310,
+  "thumbnail": "https://s2.dmcdn.net/v/xbvrdzy/x1080",
+  "webpage_url": "https://www.dailymotion.com/video/xbvrdzy",
+  "extractor": "dailymotion",
+  "extractor_key": "Dailymotion",
+  "formats": [
+    {
+      "format_id": "hls-380",
+      "url": "https://vod2.cf.dmcdn.net/sec2(tok_380)/cloud/fmp4/718473886/h264_aac_ld/2/manifest.m3u8",
+      "ext": "mp4",
+      "protocol": "m3u8_native",
+      "width": 512,
+      "height": 288,
+      "fps": 30.0,
+      "tbr": 460.0,
+      "vcodec": "avc1.42001e",
+      "acodec": "mp4a.40.2"
+    },
+    {
+      "format_id": "hls-480",
+      "url": "https://vod2.cf.dmcdn.net/sec2(tok_480)/cloud/fmp4/718473886/h264_aac_sd/2/manifest.m3u8",
+      "ext": "mp4",
+      "protocol": "m3u8_native",
+      "width": 848,
+      "height": 480,
+      "fps": 30.0,
+      "tbr": 890.0,
+      "vcodec": "avc1.64001f",
+      "acodec": "mp4a.40.2"
+    },
+    {
+      "format_id": "hls-720@60",
+      "url": "https://vod2.cf.dmcdn.net/sec2(tok_720)/cloud/fmp4/718473886/h264_aac_hd_hfr/2/manifest.m3u8",
+      "ext": "mp4",
+      "protocol": "m3u8_native",
+      "width": 1280,
+      "height": 720,
+      "fps": 60.0,
+      "tbr": 2450.0,
+      "vcodec": "avc1.640028",
+      "acodec": "mp4a.40.2"
+    },
+    {
+      "format_id": "hls-1080@60",
+      "url": "https://vod2.cf.dmcdn.net/sec2(tok_1080)/cloud/fmp4/718473886/h264_aac_fhd_hfr/2/manifest.m3u8",
+      "ext": "mp4",
+      "protocol": "m3u8_native",
+      "width": 1920,
+      "height": 1080,
+      "fps": 60.0,
+      "tbr": 4820.0,
+      "vcodec": "avc1.64002a",
+      "acodec": "mp4a.40.2"
+    }
+  ]
+}

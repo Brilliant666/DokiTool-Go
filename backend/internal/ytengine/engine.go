@@ -79,6 +79,7 @@ type Config struct {
 	ProxyURL            string
 	EnvPath             string
 	GatePorts           []int
+	Extractors          []string
 }
 
 // Engine executes a SHA-256 verified yt-dlp binary in isolated metadata-only mode.
@@ -100,6 +101,7 @@ type Engine struct {
 	proxyURL            string
 	envPath             string
 	gatePorts           *gatePortPool
+	extractors          []string
 }
 
 // CleanupStaleTempDirs removes orphaned dokitool-ytdlp-* directories in tmpRoot
@@ -438,7 +440,39 @@ func New(cfg Config) (*Engine, error) {
 		maxStdoutBytes:      maxStdout,
 		proxyURL:            proxyURL,
 		envPath:             envPath,
+		extractors:          normalizeExtractors(cfg.Extractors),
 	}, nil
+}
+
+func normalizeExtractors(raw []string) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]bool, len(raw))
+	for _, item := range raw {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" || seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// WithExtractors returns a shallow copy of the Engine pinned to the given yt-dlp
+// extractor names (passed via --use-extractors) so generic fallback cannot occur.
+func (e *Engine) WithExtractors(extractors ...string) *Engine {
+	if e == nil {
+		return NewDisabled("yt-dlp engine is nil")
+	}
+	cp := *e
+	cp.extractors = normalizeExtractors(extractors)
+	return &cp
 }
 
 // WithTargetPolicy returns a shallow copy of the Engine bound to the given input URL
@@ -565,6 +599,9 @@ func (e *Engine) commandArgsWithProxy(targetURL, effectiveProxy string) []string
 	}
 	if effectiveProxy != "" {
 		args = append(args, "--proxy", effectiveProxy)
+	}
+	if e != nil && len(e.extractors) > 0 {
+		args = append(args, "--use-extractors", strings.Join(e.extractors, ","))
 	}
 	args = append(args, "-J", "--", targetURL)
 	return args

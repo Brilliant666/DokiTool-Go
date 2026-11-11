@@ -202,6 +202,13 @@ test('platform duplicates are hidden from keyboard/assistive navigation and redu
   assert.match(source, /x:\s*\{\s*img:\s*xArtwork/);
   assert.match(source, /youtube:\s*\{\s*img:\s*youtubeArtwork/);
   assert.match(source, /instagram:\s*\{[\s\S]*?img:\s*instagramArtwork/);
+  assert.match(source, /facebook:\s*\{[\s\S]*?img:\s*facebookArtwork/);
+  assert.match(source, /tumblr:\s*\{[\s\S]*?img:\s*tumblrArtwork/);
+  assert.match(source, /dailymotion:\s*\{[\s\S]*?img:\s*dailymotionArtwork/);
+  const platformsSource = await readFile(new URL('../src/utils/platforms.ts', import.meta.url), 'utf8');
+  assert.match(platformsSource, /facebook:\s*"fa-facebook"/);
+  assert.match(platformsSource, /tumblr:\s*"fa-tumblr"/);
+  assert.match(platformsSource, /dailymotion:\s*"fa-dailymotion"/);
   const reduced = source.slice(source.indexOf('@media (prefers-reduced-motion: reduce)'));
   assert.match(reduced, /animation: none/);
   assert.doesNotMatch(reduced, /animation:\s*marquee/);
