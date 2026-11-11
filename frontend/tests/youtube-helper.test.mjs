@@ -1331,5 +1331,33 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       }),
       "Album Work_P3.mp4",
     );
+
+    // Strip Unicode format characters (Cf, e.g. U+202E RLO, U+200B ZWSP, U+FEFF BOM)
+    const { sanitizeFilename, hashMediaName } = videoFilenameMod;
+    assert.equal(
+      buildMediaFilename({
+        title: " \ufeffClip\u202e4pm.exe\u200b\u202c ",
+        index: 1,
+        total: 1,
+        suffix: "360\u202ep",
+        fallback: "I9JvDaciaFk",
+        extension: "mp4",
+      }),
+      "Clip4pm.exe_360p.mp4",
+    );
+    assert.equal(
+      buildMediaFilename({
+        title: "\u202e\u200b\ufeff",
+        index: 1,
+        total: 1,
+        fallback: "I9JvDaciaFk",
+        extension: "mp4",
+      }),
+      `${hashMediaName("I9JvDaciaFk")}.mp4`,
+    );
+    assert.equal(
+      sanitizeFilename("test\u202e4pm.exe.mp4"),
+      "test4pm.exe.mp4",
+    );
   });
 });

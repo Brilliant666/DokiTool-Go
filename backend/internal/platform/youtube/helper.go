@@ -178,6 +178,22 @@ func (h *Helper) SetCacheTTL(ttl time.Duration) {
 	h.mu.Unlock()
 }
 
+// HasCachedContext reports whether a non-expired player context entry is
+// currently cached in memory and can be served without upstream or Deno work.
+func (h *Helper) HasCachedContext() bool {
+	if h == nil {
+		return false
+	}
+	now := h.now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.activeID == "" {
+		return false
+	}
+	existing, ok := h.cache[h.activeID]
+	return ok && now.Before(existing.ExpiresAt)
+}
+
 // Context implements GET /api/youtube/context?schema_version=1.0.
 func (h *Helper) Context(ctx context.Context) (unified.Object, int) {
 	if h == nil || h.sandbox == nil || h.executor == nil {
@@ -225,12 +241,31 @@ func (h *Helper) ensureActivePlayer(ctx context.Context) (*playerCacheEntry, err
 	h.refreshCall = call
 	h.mu.Unlock()
 
+	var (
+		entry    *playerCacheEntry
+		err      error
+		finished bool
+	)
+	defer func() {
+		h.mu.Lock()
+		if !finished && err == nil {
+			err = errors.New("youtube player refresh aborted unexpectedly")
+		}
+		call.entry = entry
+		call.err = err
+		if h.refreshCall == call {
+			h.refreshCall = nil
+		}
+		close(call.done)
+		h.mu.Unlock()
+	}()
+
 	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 35*time.Second)
 	defer cancel()
 
-	entry, err := h.refreshActivePlayer(refreshCtx)
-	h.mu.Lock()
+	entry, err = h.refreshActivePlayer(refreshCtx)
 	if err != nil {
+		h.mu.Lock()
 		now = h.now()
 		if h.activeID != "" {
 			if stale, ok := h.cache[h.activeID]; ok && !now.After(stale.StaleUntil) {
@@ -246,17 +281,14 @@ func (h *Helper) ensureActivePlayer(ctx context.Context) (*playerCacheEntry, err
 				err = nil
 			}
 		}
+		h.mu.Unlock()
 	}
-	call.entry = entry
-	call.err = err
-	h.refreshCall = nil
-	close(call.done)
-	h.mu.Unlock()
+	finished = true
 
-	if err := ctx.Err(); err != nil && call.entry == nil {
-		return nil, err
+	if ctxErr := ctx.Err(); ctxErr != nil && entry == nil {
+		return nil, ctxErr
 	}
-	return call.entry, call.err
+	return entry, err
 }
 
 func (h *Helper) refreshActivePlayer(ctx context.Context) (*playerCacheEntry, error) {
@@ -397,19 +429,47 @@ func (h *Helper) fetchPlayerJS(ctx context.Context, playerID string) (string, in
 type finalizeRequest struct {
 	VideoID         string                `json:"video_id"`
 	PlayerID        string                `json:"player_id"`
-	Title           *string               `json:"title"`
-	Author          *string               `json:"author"`
-	DurationSeconds *int64                `json:"duration_seconds"`
-	Thumbnail       *string               `json:"thumbnail"`
+	Title           json.RawMessage       `json:"title"`
+	Author          json.RawMessage       `json:"author"`
+	DurationSeconds json.RawMessage       `json:"duration_seconds"`
+	Thumbnail       json.RawMessage       `json:"thumbnail"`
 	Formats         []finalizeFormatInput `json:"formats"`
 	AdaptiveFormats []finalizeFormatInput `json:"adaptiveFormats"`
+}
+
+func parseOptionalJSONString(raw json.RawMessage) (string, bool) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] != '"' {
+		return "", false
+	}
+	var s string
+	if err := json.Unmarshal(trimmed, &s); err != nil {
+		return "", false
+	}
+	return s, true
+}
+
+func parseOptionalDurationSeconds(raw json.RawMessage) *float64 {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] == '"' {
+		return nil
+	}
+	var n int64
+	if err := json.Unmarshal(trimmed, &n); err != nil {
+		return nil
+	}
+	if n <= 0 || n > 86400*365 {
+		return nil
+	}
+	dur := float64(n)
+	return &dur
 }
 
 func sanitizeFinalizeText(raw string, maxRunes int) string {
 	var b strings.Builder
 	b.Grow(len(raw))
 	for _, r := range raw {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			continue
 		}
 		b.WriteRune(r)
@@ -573,33 +633,23 @@ func (h *Helper) Finalize(ctx context.Context, body []byte, debug bool) (unified
 	}
 
 	resolvedTitle := videoID
-	if req.Title != nil {
-		if cleaned := sanitizeFinalizeText(*req.Title, MaxFinalizeTitleRunes); cleaned != "" {
+	if rawTitle, ok := parseOptionalJSONString(req.Title); ok {
+		if cleaned := sanitizeFinalizeText(rawTitle, MaxFinalizeTitleRunes); cleaned != "" {
 			resolvedTitle = cleaned
 		}
 	}
 
 	resolvedAuthor := ""
-	if req.Author != nil {
-		resolvedAuthor = sanitizeFinalizeText(*req.Author, MaxFinalizeTitleRunes)
+	if rawAuthor, ok := parseOptionalJSONString(req.Author); ok {
+		resolvedAuthor = sanitizeFinalizeText(rawAuthor, MaxFinalizeTitleRunes)
 	}
 
-	var resolvedDuration *float64
-	if req.DurationSeconds != nil {
-		if *req.DurationSeconds <= 0 || *req.DurationSeconds > 86400*365 {
-			return unified.ContractError("INVALID_INPUT", "无效的 duration_seconds 参数", false), http.StatusBadRequest
-		}
-		dur := float64(*req.DurationSeconds)
-		resolvedDuration = &dur
-	}
+	resolvedDuration := parseOptionalDurationSeconds(req.DurationSeconds)
 
 	resolvedThumbnail := ""
-	if req.Thumbnail != nil {
-		thumb := strings.TrimSpace(*req.Thumbnail)
-		if thumb != "" {
-			if !AllowYouTubeThumbnailURL(thumb) {
-				return unified.ContractError("INVALID_INPUT", "缩略图地址不在允许的白名单内", false), http.StatusBadRequest
-			}
+	if rawThumb, ok := parseOptionalJSONString(req.Thumbnail); ok {
+		thumb := strings.TrimSpace(rawThumb)
+		if thumb != "" && AllowYouTubeThumbnailURL(thumb) {
 			resolvedThumbnail = thumb
 		}
 	}

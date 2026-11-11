@@ -16,6 +16,7 @@ import (
 type stubYouTubeHelper struct {
 	ctxPayload unified.Object
 	ctxStatus  int
+	cached     bool
 	finPayload unified.Object
 	finStatus  int
 	lastBody   []byte
@@ -24,6 +25,10 @@ type stubYouTubeHelper struct {
 
 func (s *stubYouTubeHelper) Context(context.Context) (unified.Object, int) {
 	return s.ctxPayload, s.ctxStatus
+}
+
+func (s *stubYouTubeHelper) HasCachedContext() bool {
+	return s.cached
 }
 
 func (s *stubYouTubeHelper) Finalize(_ context.Context, body []byte, debug bool) (unified.Object, int) {
@@ -163,7 +168,9 @@ func TestYouTubeHelperRoutesEnabledAndParseAdmission(t *testing.T) {
 		t.Fatalf("oversized finalize body status = %d, want 400", rec.Code)
 	}
 
-	// Parse admission pool enforcement
+	// Parse admission pool enforcement:
+	// 1) Cold cache (HasCachedContext() == false): GET /api/youtube/context consumes a Parse token,
+	//    so an immediate POST /api/youtube/finalize with ClientBurst=1 hits 429.
 	cfg := DefaultAdmissionConfig()
 	cfg.Parse.ClientBurst = 1
 	cfg.Parse.ClientRPS = 0.1
@@ -172,12 +179,13 @@ func TestYouTubeHelperRoutesEnabledAndParseAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	stub.cached = false
 	req1 := httptest.NewRequest(http.MethodGet, "/api/youtube/context?schema_version=1.0", nil)
 	req1.RemoteAddr = "203.0.113.10:12345"
 	rec1 := httptest.NewRecorder()
 	entry.ServeHTTP(rec1, req1)
 	if rec1.Code != http.StatusOK {
-		t.Fatalf("first request status = %d, want 200", rec1.Code)
+		t.Fatalf("cold context request status = %d, want 200", rec1.Code)
 	}
 
 	req2 := httptest.NewRequest(http.MethodPost, "/api/youtube/finalize?schema_version=1.0", strings.NewReader(`{}`))
@@ -185,6 +193,34 @@ func TestYouTubeHelperRoutesEnabledAndParseAdmission(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	entry.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusTooManyRequests {
-		t.Fatalf("second request sharing Parse admission pool status = %d, want 429", rec2.Code)
+		t.Fatalf("finalize after cold context status = %d, want 429", rec2.Code)
+	}
+
+	// 2) Warm cache (HasCachedContext() == true): GET /api/youtube/context uses Catalog budget
+	//    instead of consuming a Parse token, so one full YouTube parse (context + finalize)
+	//    consumes only 1 Parse token and succeeds under Parse.ClientBurst=1.
+	stub.cached = true
+	req3 := httptest.NewRequest(http.MethodGet, "/api/youtube/context?schema_version=1.0", nil)
+	req3.RemoteAddr = "203.0.113.11:12345"
+	rec3 := httptest.NewRecorder()
+	entry.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("warm context request status = %d, want 200", rec3.Code)
+	}
+
+	req4 := httptest.NewRequest(http.MethodPost, "/api/youtube/finalize?schema_version=1.0", strings.NewReader(`{}`))
+	req4.RemoteAddr = "203.0.113.11:12345"
+	rec4 := httptest.NewRecorder()
+	entry.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusOK {
+		t.Fatalf("finalize after warm context status = %d, want 200", rec4.Code)
+	}
+
+	req5 := httptest.NewRequest(http.MethodPost, "/api/youtube/finalize?schema_version=1.0", strings.NewReader(`{}`))
+	req5.RemoteAddr = "203.0.113.11:12345"
+	rec5 := httptest.NewRecorder()
+	entry.ServeHTTP(rec5, req5)
+	if rec5.Code != http.StatusTooManyRequests {
+		t.Fatalf("second finalize after warm context status = %d, want 429", rec5.Code)
 	}
 }

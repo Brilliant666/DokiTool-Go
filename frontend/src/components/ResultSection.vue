@@ -3068,6 +3068,35 @@ onUnmounted(() => {
   border-radius: .5rem;
   box-shadow: 0 24px 64px rgba(0,0,0,.5);
 }
+.rs-modal > .rs-btn {
+  border-radius: var(--r-lg, .75rem);
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .rs-modal {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 4rem 3.25rem 3.25rem;
+    box-sizing: border-box;
+  }
+  .rs-modal-body {
+    max-width: 100%;
+    max-height: calc(100vh - 11.5rem);
+    max-height: calc(100dvh - 11.5rem);
+    padding: 0;
+    min-height: 0;
+  }
+  .rs-modal-img {
+    max-width: 100%;
+    max-height: calc(100vh - 11.5rem);
+    max-height: calc(100dvh - 11.5rem);
+  }
+  .rs-modal > .rs-btn {
+    width: auto;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+}
 
 .rs-modal-pager {
   position: absolute;

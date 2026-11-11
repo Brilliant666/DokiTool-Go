@@ -43,7 +43,18 @@ export function mediaExtension(
     "video/webm": "webm",
   };
   const mimeType = metadata?.mime_type || observedMimeType || "";
-  return extensions[mimeType.split(";")[0].trim().toLowerCase()] || "bin";
+  const byMime = extensions[mimeType.split(";")[0].trim().toLowerCase()];
+  if (byMime) return byMime;
+  const containers: Record<string, string> = {
+    mp4: "mp4",
+    m4a: "m4a",
+    mp3: "mp3",
+    webm: "webm",
+    mov: "mov",
+    mkv: "mkv",
+  };
+  const container = (metadata?.container || "").trim().toLowerCase();
+  return containers[container] || "bin";
 }
 export async function declaredSegments(
   delivery: LeafDelivery,

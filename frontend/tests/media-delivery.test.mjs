@@ -43,4 +43,5 @@ test('extensions follow metadata and delivery output rather than opaque signed f
   assert.equal(delivery.mediaExtension(undefined),'bin');
   assert.equal(delivery.mediaExtension(undefined,undefined,'Video/MP4; codecs=avc1'),'mp4');
   assert.equal(delivery.mediaExtension({extension:'mov'},undefined,'video/mp4'),'mov');
+  assert.equal(delivery.mediaExtension({container:'mp4'}),'mp4');
 });
