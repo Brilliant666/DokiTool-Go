@@ -2,11 +2,14 @@ package x
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
@@ -673,5 +676,404 @@ func TestXSourceIdentityPreservedAcrossSignatureRenewal(t *testing.T) {
 	}
 	if unified.Str(def1["source_id"]) == unified.Str(defDiff["source_id"]) {
 		t.Fatalf("expected X source_id to change when non-credential query param (tag) changes")
+	}
+}
+
+type fakeXFetcher struct {
+	fn func(context.Context, fetch.Request) (fetch.Response, error)
+}
+
+func (f fakeXFetcher) Do(ctx context.Context, req fetch.Request) (fetch.Response, error) {
+	return f.fn(ctx, req)
+}
+
+func TestXSyndicationTokenAndURLAllowlists(t *testing.T) {
+	tok1, ok1 := SyndicationToken("1790637656616943991")
+	if !ok1 || tok1 == "" || strings.ContainsAny(tok1, "0.") {
+		t.Fatalf("SyndicationToken(1790637656616943991) = (%q, %v), expected non-empty base36 without 0 or .", tok1, ok1)
+	}
+	tok2, ok2 := SyndicationToken("1546621144358391808")
+	if !ok2 || tok2 == "" || tok2 == tok1 {
+		t.Fatalf("SyndicationToken(1546621144358391808) = (%q, %v), expected distinct valid token", tok2, ok2)
+	}
+	for _, invalidID := range []string{"", "0", "0123", "abc", "-1", "123456789012345678901"} {
+		if _, ok := SyndicationToken(invalidID); ok {
+			t.Fatalf("SyndicationToken(%q) unexpectedly succeeded", invalidID)
+		}
+	}
+
+	// Syndication outbound host allowlist: ONLY https://cdn.syndication.twimg.com/tweet-result
+	validSyndication := []string{
+		"https://cdn.syndication.twimg.com/tweet-result?id=1546621144358391808&token=" + tok2,
+		"https://cdn.syndication.twimg.com:443/tweet-result?id=1&token=a",
+	}
+	for _, u := range validSyndication {
+		if !AllowedSyndicationURL(u) {
+			t.Fatalf("AllowedSyndicationURL(%q) = false, want true", u)
+		}
+	}
+	invalidSyndication := []string{
+		"http://cdn.syndication.twimg.com/tweet-result?id=1&token=a",
+		"https://cdn.syndication.twimg.com:8443/tweet-result?id=1&token=a",
+		"https://user:pass@cdn.syndication.twimg.com/tweet-result?id=1&token=a",
+		"https://sub.cdn.syndication.twimg.com/tweet-result?id=1&token=a",
+		"https://cdn.syndication.twimg.com.evil.example/tweet-result?id=1&token=a",
+		"https://cdn.syndication.twimg.com./tweet-result?id=1&token=a",
+		"https://syndication.twimg.com/tweet-result?id=1&token=a",
+		"https://pbs.twimg.com/tweet-result?id=1&token=a",
+		"https://cdn.syndication.twimg.com/widgets/tweet",
+	}
+	for _, u := range invalidSyndication {
+		if AllowedSyndicationURL(u) {
+			t.Fatalf("AllowedSyndicationURL(%q) = true, want false", u)
+		}
+	}
+
+	// Photo URL allowlist & name=orig normalization: ONLY https://pbs.twimg.com/media/<key>
+	positivePhotos := []struct {
+		raw     string
+		wantURL string
+		wantExt string
+	}{
+		{
+			raw:     "https://pbs.twimg.com/media/FXazugRWIAQZmml.jpg",
+			wantURL: "https://pbs.twimg.com/media/FXazugRWIAQZmml?format=jpg&name=orig",
+			wantExt: "jpg",
+		},
+		{
+			raw:     "https://pbs.twimg.com:443/media/DGghkJwUwAAM42D?format=jpeg&name=small",
+			wantURL: "https://pbs.twimg.com/media/DGghkJwUwAAM42D?format=jpg&name=orig",
+			wantExt: "jpg",
+		},
+		{
+			raw:     "https://pbs.twimg.com/media/AbC_123-xyz.png?name=large",
+			wantURL: "https://pbs.twimg.com/media/AbC_123-xyz?format=png&name=orig",
+			wantExt: "png",
+		},
+		{
+			raw:     "https://pbs.twimg.com/media/WebpKey99?format=webp",
+			wantURL: "https://pbs.twimg.com/media/WebpKey99?format=webp&name=orig",
+			wantExt: "webp",
+		},
+	}
+	for _, tc := range positivePhotos {
+		gotURL, gotExt, ok := NormalizePhotoURL(tc.raw)
+		if !ok || gotURL != tc.wantURL || gotExt != tc.wantExt {
+			t.Fatalf("NormalizePhotoURL(%q) = (%q, %q, %v), want (%q, %q, true)",
+				tc.raw, gotURL, gotExt, ok, tc.wantURL, tc.wantExt)
+		}
+	}
+
+	negativePhotos := []string{
+		"",
+		"http://pbs.twimg.com/media/FXazugRWIAQZmml.jpg",
+		"https://pbs.twimg.com:8443/media/FXazugRWIAQZmml.jpg",
+		"https://pbs.twimg.com:80/media/FXazugRWIAQZmml.jpg",
+		"https://user:secret@pbs.twimg.com/media/FXazugRWIAQZmml.jpg",
+		"https://user@pbs.twimg.com/media/FXazugRWIAQZmml.jpg",
+		"https://pbs.twimg.com.evil.example/media/FXazugRWIAQZmml.jpg",
+		"https://sub.pbs.twimg.com/media/FXazugRWIAQZmml.jpg",
+		"https://notpbs.twimg.com/media/FXazugRWIAQZmml.jpg",
+		"https://pbs-twimg.com/media/FXazugRWIAQZmml.jpg",
+		"https://pbs.twimg.com./media/FXazugRWIAQZmml.jpg",
+		"https://video.twimg.com/media/FXazugRWIAQZmml.jpg",
+		"https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/thumb.jpg",
+		"https://pbs.twimg.com/profile_images/123/avatar.jpg",
+		"https://pbs.twimg.com/media/",
+		"https://pbs.twimg.com/media/FXazugRWIAQZmml/extra.jpg",
+		"https://pbs.twimg.com/media/..%2fsecret.jpg",
+		"https://pbs.twimg.com/media/FXazugRWIAQZmml.mp4",
+		"https://pbs.twimg.com/media/FXazugRWIAQZmml#frag",
+	}
+	for _, raw := range negativePhotos {
+		if gotURL, _, ok := NormalizePhotoURL(raw); ok {
+			t.Fatalf("NormalizePhotoURL(%q) unexpectedly succeeded with %q", raw, gotURL)
+		}
+	}
+}
+
+func TestParseXPurePhotosMixedAndPhotoIndexSelection(t *testing.T) {
+	const now int64 = 1762300800
+	const tweetID = "1546621144358391808"
+
+	fourPhotoSyndicationBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Four original photos in one X post\nSecond line https://t.co/AbCdEf1234",
+		"user":       map[string]any{"screen_name": "ignored_field", "secret": "never_read"},
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/PhotoKeyOne.jpg", "width": 2048, "height": 1536},
+			{"url": "https://pbs.twimg.com/media/PhotoKeyTwo.png", "width": 1920, "height": 1080},
+			{"url": "https://pbs.twimg.com/media/PhotoKeyThree.webp", "width": 1440, "height": 1800},
+			{"url": "https://pbs.twimg.com/media/PhotoKeyFour.jpg", "width": 1200, "height": 1200},
+		},
+	})
+
+	// 1. Pure 4-photo tweet: yt-dlp reports "No video could be found", syndication returns 4 name=orig images + album group.
+	purePhotoParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return nil, &ytengine.Error{
+					Code:      ytengine.CodeContentUnavailable,
+					Message:   "未找到可用的视频或该推文已不可访问",
+					Retryable: false,
+				}
+			},
+		},
+		nil,
+		fakeXFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				if req.Policy.AllowedURL == nil || !req.Policy.AllowedURL(req.URL) {
+					t.Fatalf("syndication request failed AllowedURL policy: %s", req.URL)
+				}
+				if req.Policy.FollowRedirects {
+					t.Fatalf("expected FollowRedirects=false on syndication request")
+				}
+				return fetch.Response{StatusCode: http.StatusOK, Body: fourPhotoSyndicationBody, URL: req.URL}, nil
+			},
+		},
+	)
+
+	pureEnv, err := purePhotoParser.Parse(context.Background(), "https://x.com/NASA/status/"+tweetID, now)
+	if err != nil {
+		t.Fatalf("pure-photo Parse failed: %v", err)
+	}
+	for _, debug := range []bool{false, true} {
+		view := unified.PublicView(pureEnv, debug, now)
+		if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("pure-photo ValidateEnvelopeAt(debug=%v) failed: %v", debug, err)
+		}
+		rawBytes, _ := unified.Encode(view)
+		if strings.Contains(string(rawBytes), "never_read") || strings.Contains(string(rawBytes), "ignored_field") {
+			t.Fatalf("unread syndication fields leaked into envelope: %s", string(rawBytes))
+		}
+		data := unified.Map(view["data"])
+		if unified.Str(data["title"]) != "Four original photos in one X post" {
+			t.Fatalf("unexpected title: %q", unified.Str(data["title"]))
+		}
+		items := unified.Slice(data["items"])
+		if len(items) != 4 {
+			t.Fatalf("expected 4 image items, got %d", len(items))
+		}
+		wantURLs := []string{
+			"https://pbs.twimg.com/media/PhotoKeyOne?format=jpg&name=orig",
+			"https://pbs.twimg.com/media/PhotoKeyTwo?format=png&name=orig",
+			"https://pbs.twimg.com/media/PhotoKeyThree?format=webp&name=orig",
+			"https://pbs.twimg.com/media/PhotoKeyFour?format=jpg&name=orig",
+		}
+		for i, wantURL := range wantURLs {
+			it := unified.Map(items[i])
+			if unified.Str(it["type"]) != "image" {
+				t.Fatalf("item[%d] type=%q, want image", i, unified.Str(it["type"]))
+			}
+			def := unified.Map(it["default"])
+			if unified.Str(def["url"]) != wantURL {
+				t.Fatalf("item[%d] default.url=%q, want %q", i, unified.Str(def["url"]), wantURL)
+			}
+		}
+		groups := unified.Slice(data["groups"])
+		if len(groups) != 1 || unified.Str(unified.Map(groups[0])["kind"]) != "album" || len(unified.Slice(unified.Map(groups[0])["item_ids"])) != 4 {
+			t.Fatalf("expected album group of 4 image items, got %+v", groups)
+		}
+	}
+
+	// 2. /photo/<N> only returns the N-th photo without spawning yt-dlp.
+	var ytCalled bool
+	photoIndexParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				ytCalled = true
+				return nil, errors.New("should not call yt-dlp for /photo/N")
+			},
+		},
+		nil,
+		fakeXFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: fourPhotoSyndicationBody, URL: req.URL}, nil
+			},
+		},
+	)
+	photo3Env, err := photoIndexParser.Parse(context.Background(), "https://x.com/NASA/status/"+tweetID+"/photo/3", now)
+	if err != nil {
+		t.Fatalf("/photo/3 Parse failed: %v", err)
+	}
+	if ytCalled {
+		t.Fatalf("expected /photo/3 to bypass yt-dlp and use Go fetch directly")
+	}
+	photo3View := unified.PublicView(photo3Env, false, now)
+	if err := unified.ValidateEnvelopeAt(photo3View, now); err != nil {
+		t.Fatalf("/photo/3 ValidateEnvelopeAt failed: %v", err)
+	}
+	photo3Items := unified.Slice(unified.Map(photo3View["data"])["items"])
+	if len(photo3Items) != 1 {
+		t.Fatalf("expected /photo/3 to return exactly 1 item, got %d", len(photo3Items))
+	}
+	if got := unified.Str(unified.Map(unified.Map(photo3Items[0])["default"])["url"]); got != "https://pbs.twimg.com/media/PhotoKeyThree?format=webp&name=orig" {
+		t.Fatalf("expected 3rd photo URL on /photo/3, got %q", got)
+	}
+
+	// Requesting /photo/4 when tweet only has 2 photos returns CONTENT_UNAVAILABLE.
+	twoPhotoBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Two photos",
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/PhotoKeyOne.jpg", "width": 1000, "height": 1000},
+			{"url": "https://pbs.twimg.com/media/PhotoKeyTwo.jpg", "width": 1000, "height": 1000},
+		},
+	})
+	outOfBoundsParser := NewWithFetcher(
+		&stubExtractor{enabled: true},
+		nil,
+		fakeXFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: twoPhotoBody, URL: req.URL}, nil
+			},
+		},
+	)
+	oobEnv, err := outOfBoundsParser.Parse(context.Background(), "https://x.com/NASA/status/"+tweetID+"/photo/4", now)
+	if err != nil || unified.Str(oobEnv["code"]) != "CONTENT_UNAVAILABLE" {
+		t.Fatalf("expected CONTENT_UNAVAILABLE on out-of-bounds /photo/4, got %+v (err=%v)", oobEnv, err)
+	}
+
+	// 3. Mixed tweet (1 video + 2 photos): video stays first as default_item_id, photos appended after.
+	mixedSyndicationBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Mixed video and photos",
+		"video":      map[string]any{"durationMs": 8000},
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/MixedImg1.jpg", "width": 1600, "height": 900},
+			{"url": "https://pbs.twimg.com/media/MixedImg2.png", "width": 1200, "height": 1600},
+		},
+		"mediaDetails": []map[string]any{
+			{"type": "video", "media_url_https": "https://pbs.twimg.com/ext_tw_video_thumb/999/pu/img/thumb.jpg"},
+			{"type": "photo", "media_url_https": "https://pbs.twimg.com/media/MixedImg1.jpg", "original_info": map[string]any{"width": 1600, "height": 900}},
+			{"type": "photo", "media_url_https": "https://pbs.twimg.com/media/MixedImg2.png", "original_info": map[string]any{"width": 1200, "height": 1600}},
+		},
+	})
+	mixedParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return &ytengine.Info{
+					ID:        "999",
+					DisplayID: tweetID,
+					Title:     "Mixed Post",
+					Duration:  float64Ptr(8.0),
+					Formats: []ytengine.Format{
+						{
+							FormatID: "http-2176",
+							URL:      "https://video.twimg.com/ext_tw_video/999/pu/vid/1280x720/mixed720.mp4?tag=12",
+							Ext:      "mp4",
+							Protocol: "https",
+							Width:    int64Ptr(1280),
+							Height:   int64Ptr(720),
+							VCodec:   "avc1.640020",
+							ACodec:   "mp4a.40.2",
+						},
+					},
+				}, nil
+			},
+		},
+		nil,
+		fakeXFetcher{
+			fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: mixedSyndicationBody, URL: req.URL}, nil
+			},
+		},
+	)
+	mixedEnv, err := mixedParser.Parse(context.Background(), "https://x.com/NASA/status/"+tweetID, now)
+	if err != nil {
+		t.Fatalf("mixed tweet Parse failed: %v", err)
+	}
+	mixedView := unified.PublicView(mixedEnv, false, now)
+	if err := unified.ValidateEnvelopeAt(mixedView, now); err != nil {
+		t.Fatalf("mixed tweet ValidateEnvelopeAt failed: %v", err)
+	}
+	mixedData := unified.Map(mixedView["data"])
+	mixedItems := unified.Slice(mixedData["items"])
+	if len(mixedItems) != 3 {
+		t.Fatalf("expected 3 items (1 video + 2 appended photos) in mixed tweet, got %d", len(mixedItems))
+	}
+	if unified.Str(unified.Map(mixedItems[0])["type"]) != "video" ||
+		unified.Str(unified.Map(mixedItems[1])["type"]) != "image" ||
+		unified.Str(unified.Map(mixedItems[2])["type"]) != "image" {
+		t.Fatalf("expected [video, image, image] ordering, got %+v", mixedItems)
+	}
+	if unified.Str(mixedData["default_item_id"]) != unified.Str(unified.Map(mixedItems[0])["id"]) {
+		t.Fatalf("expected video item to remain default_item_id in mixed tweet")
+	}
+	mixedGroups := unified.Slice(mixedData["groups"])
+	if len(mixedGroups) != 1 || len(unified.Slice(unified.Map(mixedGroups[0])["item_ids"])) != 2 {
+		t.Fatalf("expected album group with the 2 appended image items, got %+v", mixedGroups)
+	}
+}
+
+func TestXSyndicationAbnormalAndOversizedResponses(t *testing.T) {
+	const now int64 = 1762300800
+	const tweetURL = "https://x.com/NASA/status/1546621144358391808"
+
+	cases := []struct {
+		name     string
+		fetchFn  func(context.Context, fetch.Request) (fetch.Response, error)
+		wantCode string
+	}{
+		{
+			name: "oversized-body-exceeds-limit",
+			fetchFn: func(context.Context, fetch.Request) (fetch.Response, error) {
+				return fetch.Response{}, fetch.ErrLimit
+			},
+			wantCode: "UPSTREAM_INVALID_RESPONSE",
+		},
+		{
+			name: "malformed-json-body",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: []byte(`<html>not json</html>`), URL: req.URL}, nil
+			},
+			wantCode: "UPSTREAM_INVALID_RESPONSE",
+		},
+		{
+			name: "empty-200-body",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: nil, URL: req.URL}, nil
+			},
+			wantCode: "UPSTREAM_INVALID_RESPONSE",
+		},
+		{
+			name: "not-found-404-preserves-content-unavailable",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusNotFound, Body: []byte(`not found`), URL: req.URL}, nil
+			},
+			wantCode: "CONTENT_UNAVAILABLE",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewWithFetcher(
+				&stubExtractor{
+					enabled: true,
+					extract: func(context.Context, string) (*ytengine.Info, error) {
+						return nil, &ytengine.Error{
+							Code:      ytengine.CodeContentUnavailable,
+							Message:   "未找到可用的视频或该推文已不可访问",
+							Retryable: false,
+						}
+					},
+				},
+				nil,
+				fakeXFetcher{fn: tc.fetchFn},
+			)
+			env, err := p.Parse(context.Background(), tweetURL, now)
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+				t.Fatalf("ValidateEnvelopeAt failed on error envelope: %v", err)
+			}
+			if got := unified.Str(env["code"]); got != tc.wantCode {
+				t.Fatalf("got code=%q, want %q (env=%+v)", got, tc.wantCode, env)
+			}
+		})
 	}
 }

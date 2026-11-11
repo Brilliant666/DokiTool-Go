@@ -28,21 +28,27 @@ import (
 
 var (
 	shortcodePattern        = regexp.MustCompile(`^[A-Za-z0-9_-]{5,32}$`)
+	privateShortcodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{33,80}$`)
+	storySegmentPattern     = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 	embedContextJSONPattern = regexp.MustCompile(`"contextJSON"\s*:\s*("(?:\\.|[^"\\])*")`)
 	embedVideoURLPattern    = regexp.MustCompile(`"video_url"\s*:\s*("(?:\\.|[^"\\])*")`)
-	embedImageTagPattern    = regexp.MustCompile(`(?is)<img[^>]+class="[^"]*EmbeddedMediaImage[^"]*"[^>]+src="([^"]+)"`)
-	embedImageTagAltPattern = regexp.MustCompile(`(?is)<img[^>]+src="([^"]+)"[^>]+class="[^"]*EmbeddedMediaImage[^"]*"`)
+	embedImgElementPattern  = regexp.MustCompile(`(?is)<img\b[^>]*class="[^"]*EmbeddedMediaImage[^"]*"[^>]*>`)
+	embedSrcAttrPattern     = regexp.MustCompile(`(?is)\bsrc="([^"]+)"`)
+	embedSrcsetAttrPattern  = regexp.MustCompile(`(?is)\bsrcset="([^"]+)"`)
 	instagramEdgeHostRegex  = regexp.MustCompile(`^(?:scontent|instagram)[a-z0-9.-]*\.(?:cdninstagram\.com|fbcdn\.net)$`)
+
+	errInstagramLoginRequired = errors.New("instagram login required")
 )
 
 const (
-	instagramAppID      = "936619743392459"
-	instagramASBDID     = "129477"
-	instagramDefaultLSD = "AVqbxe3J_YA"
-	instagramGraphDocID = "8845758582119845"
-	nativeFetchTimeout  = 10 * time.Second
-	nativeMaxBodyBytes  = 2 << 20 // 2 MiB
-	maxCarouselEntries  = 10
+	instagramAppID               = "936619743392459"
+	instagramASBDID              = "129477"
+	instagramDefaultLSD          = "AVqbxe3J_YA"
+	instagramGraphDocID          = "8845758582119845"
+	instagramLoginBlockedMessage = "需要登录，暂不支持"
+	nativeFetchTimeout           = 10 * time.Second
+	nativeMaxBodyBytes           = 2 << 20 // 2 MiB
+	maxCarouselEntries           = 10
 )
 
 // Parser adapts yt-dlp -J metadata and anonymous native Instagram responses
@@ -136,6 +142,48 @@ func ExtractPostTarget(raw string) (string, string, bool) {
 	}
 	canonicalURL := "https://www.instagram.com/" + kind + "/" + shortcode + "/"
 	return shortcode, canonicalURL, true
+}
+
+func requiresLoginInstagramURL(raw string) bool {
+	if unified.MediaURL(raw) == "" || len(raw) > 2048 {
+		return false
+	}
+	for _, r := range raw {
+		if r <= 0x20 || r >= 0x7f || r == '\\' {
+			return false
+		}
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil || u.Opaque != "" {
+		return false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return false
+	}
+	if port := u.Port(); port != "" {
+		n, err := strconv.Atoi(port)
+		if err != nil || (scheme == "https" && n != 443) || (scheme == "http" && n != 80) {
+			return false
+		}
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "instagram.com", "www.instagram.com", "m.instagram.com":
+	default:
+		return false
+	}
+
+	segments := splitNonEmptyPath(u.EscapedPath())
+	if len(segments) >= 2 && strings.EqualFold(segments[0], "stories") && storySegmentPattern.MatchString(segments[1]) {
+		return true
+	}
+	if len(segments) >= 2 && isInstagramPostKind(segments[0]) && privateShortcodePattern.MatchString(segments[1]) {
+		return true
+	}
+	if len(segments) >= 3 && isInstagramPostKind(segments[1]) && privateShortcodePattern.MatchString(segments[2]) {
+		return true
+	}
+	return false
 }
 
 func isInstagramPostKind(seg string) bool {
@@ -248,6 +296,9 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	}
 	shortcode, canonicalURL, ok := ExtractPostTarget(source)
 	if !ok {
+		if requiresLoginInstagramURL(source) {
+			return unified.ContractError("UPSTREAM_BLOCKED", instagramLoginBlockedMessage, false), nil
+		}
 		return unified.ContractError("INVALID_INPUT", "请输入有效的 Instagram 帖子或 Reels 链接", false), nil
 	}
 	engineReady := p != nil && p.engine != nil && p.engine.Enabled()
@@ -287,6 +338,20 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 			ytengine.PopulateMissingMP4Sizes(ctx, info, p.sizeProber, opts)
 			adapted := ytengine.AdaptInfo(info, opts, now)
 			if unified.Str(adapted["code"]) == "OK" {
+				if fetcherReady && !isReelOrTVCanonical(canonicalURL) {
+					ytItems := unified.Slice(unified.Map(adapted["data"])["items"])
+					if len(ytItems) < maxCarouselEntries {
+						if post, _, nativeOK := p.fetchNativePost(ctx, shortcode, false); nativeOK &&
+							len(post.Items) > 1 && (post.hasImage() || len(post.Items) > len(ytItems)) {
+							if merged := p.buildNativeEnvelopeWithYTVideos(ctx, post, ytItems, shortcode, source, now); unified.Str(merged["code"]) == "OK" {
+								return merged, nil
+							}
+						}
+						if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+							return nil, ctxErr
+						}
+					}
+				}
 				return adapted, nil
 			}
 			if !fetcherReady {
@@ -295,13 +360,20 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		}
 	}
 
+	var nativeLoginRequired bool
 	if fetcherReady {
-		if nativeEnv, ok := p.extractNative(ctx, shortcode, canonicalURL, source, now); ok {
+		nativeEnv, loginReq, nativeOK := p.extractNativeWithStatus(ctx, shortcode, canonicalURL, source, now)
+		if nativeOK {
 			return nativeEnv, nil
 		}
+		nativeLoginRequired = loginReq
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
 			return nil, ctxErr
 		}
+	}
+
+	if nativeLoginRequired || isInstagramLoginRequiredError(ytErr) {
+		return unified.ContractError("UPSTREAM_BLOCKED", instagramLoginBlockedMessage, false), nil
 	}
 
 	if ytErr != nil {
@@ -317,6 +389,35 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	return unified.ContractError("UPSTREAM_UNAVAILABLE", "当前平台解析服务暂不可用，请稍后重试", true), nil
 }
 
+func isInstagramLoginRequiredError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var engineErr *ytengine.Error
+	if !errors.As(err, &engineErr) {
+		return false
+	}
+	checkLoginPhrases := func(s string, includeGenericLogin bool) bool {
+		lower := strings.ToLower(s)
+		if strings.Contains(lower, "without being logged-in") ||
+			strings.Contains(lower, "empty media response") ||
+			strings.Contains(lower, "use --cookies") ||
+			strings.Contains(lower, "rate-limit reached or login required") ||
+			strings.Contains(lower, "instagram api is not granting access") ||
+			strings.Contains(lower, "private account") {
+			return true
+		}
+		if includeGenericLogin && (strings.Contains(lower, "login required") || strings.Contains(lower, "sign in")) {
+			return true
+		}
+		return false
+	}
+	if engineErr.Cause != nil && checkLoginPhrases(engineErr.Cause.Error(), true) {
+		return true
+	}
+	return checkLoginPhrases(engineErr.Message, false)
+}
+
 type nativeMediaItem struct {
 	ID       string
 	Kind     string // "video" or "image"
@@ -328,19 +429,20 @@ type nativeMediaItem struct {
 }
 
 type nativePost struct {
-	ID           string
-	Shortcode    string
-	Title        string
-	Description  string
-	AuthorID     string
-	AuthorName   string
-	AuthorAvatar string
-	CoverURL     string
-	Timestamp    int64
-	LikeCount    *int64
-	CommentCount *int64
-	ViewCount    *int64
-	Items        []nativeMediaItem
+	ID              string
+	Shortcode       string
+	Title           string
+	Description     string
+	AuthorID        string
+	AuthorName      string
+	AuthorAvatar    string
+	CoverURL        string
+	Timestamp       int64
+	LikeCount       *int64
+	CommentCount    *int64
+	ViewCount       *int64
+	FromContextJSON bool
+	Items           []nativeMediaItem
 }
 
 func (np *nativePost) hasVideo() bool {
@@ -355,26 +457,66 @@ func (np *nativePost) hasVideo() bool {
 	return false
 }
 
+func (np *nativePost) hasImage() bool {
+	if np == nil {
+		return false
+	}
+	for _, it := range np.Items {
+		if it.Kind == "image" && it.ImageURL != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Parser) extractNative(ctx context.Context, shortcode, canonicalURL, sourceURL string, now int64) (unified.Object, bool) {
+	env, _, ok := p.extractNativeWithStatus(ctx, shortcode, canonicalURL, sourceURL, now)
+	return env, ok
+}
+
+func (p *Parser) extractNativeWithStatus(ctx context.Context, shortcode, canonicalURL, sourceURL string, now int64) (unified.Object, bool, bool) {
 	needVideo := isReelOrTVCanonical(canonicalURL)
+	post, loginReq, ok := p.fetchNativePost(ctx, shortcode, needVideo)
+	if !ok || post == nil || len(post.Items) == 0 {
+		return nil, loginReq, false
+	}
+	if env := p.buildNativeEnvelope(ctx, post, shortcode, sourceURL, now); unified.Str(env["code"]) == "OK" {
+		return env, false, true
+	}
+	return nil, loginReq, false
+}
+
+func (p *Parser) fetchNativePost(ctx context.Context, shortcode string, needVideo bool) (*nativePost, bool, bool) {
+	var loginReq bool
 
 	// Tier 1: Captioned Embed endpoint (GET /p/{shortcode}/embed/captioned/)
-	if post, err := p.fetchEmbedCaptioned(ctx, shortcode); err == nil && post != nil && len(post.Items) > 0 {
-		if !needVideo || post.hasVideo() {
-			if env := p.buildNativeEnvelope(ctx, post, shortcode, sourceURL, now); unified.Str(env["code"]) == "OK" {
-				return env, true
-			}
+	embedPost, embedErr := p.fetchEmbedCaptioned(ctx, shortcode)
+	if errors.Is(embedErr, errInstagramLoginRequired) {
+		loginReq = true
+	}
+	if embedErr == nil && embedPost != nil && len(embedPost.Items) > 0 {
+		if embedPost.FromContextJSON && (!needVideo || embedPost.hasVideo()) {
+			return embedPost, false, true
 		}
 	}
 
 	// Tier 2: Anonymous GraphQL endpoint (POST /api/graphql PolarisPostActionLoadPostQueryQuery)
-	if post, err := p.fetchAnonymousGraphQL(ctx, shortcode); err == nil && post != nil && len(post.Items) > 0 {
-		if env := p.buildNativeEnvelope(ctx, post, shortcode, sourceURL, now); unified.Str(env["code"]) == "OK" {
-			return env, true
+	// Invoked when Embed lacked contextJSON (e.g., single-image post missing width/height/caption
+	// or Reel poster-only fallback) or failed altogether.
+	gqlPost, gqlErr := p.fetchAnonymousGraphQL(ctx, shortcode)
+	if gqlErr == nil && gqlPost != nil && len(gqlPost.Items) > 0 {
+		if !needVideo || gqlPost.hasVideo() || embedPost == nil {
+			return gqlPost, false, true
 		}
 	}
+	if errors.Is(gqlErr, errInstagramLoginRequired) {
+		loginReq = true
+	}
 
-	return nil, false
+	if embedErr == nil && embedPost != nil && len(embedPost.Items) > 0 && (!needVideo || embedPost.hasVideo()) {
+		return embedPost, false, true
+	}
+	return nil, loginReq, false
 }
 
 func (p *Parser) fetchEmbedCaptioned(ctx context.Context, shortcode string) (*nativePost, error) {
@@ -456,6 +598,7 @@ func parseInstagramEmbedHTML(rawHTML, shortcode string) (*nativePost, error) {
 			if err := json.Unmarshal([]byte(decodedContext), &root); err == nil {
 				if mediaNode := extractEmbedMediaNode(root); mediaNode != nil {
 					if post, err := parseGraphMediaNode(mediaNode, shortcode); err == nil && len(post.Items) > 0 {
+						post.FromContextJSON = true
 						return post, nil
 					}
 				}
@@ -463,20 +606,9 @@ func parseInstagramEmbedHTML(rawHTML, shortcode string) (*nativePost, error) {
 		}
 	}
 
-	// Fallback: direct regex extraction of video_url / EmbeddedMediaImage from Embed HTML
+	// Fallback: direct extraction of video_url / EmbeddedMediaImage (preferring highest srcset candidate)
 	var items []nativeMediaItem
-	var coverURL string
-	if m := embedImageTagPattern.FindStringSubmatch(rawHTML); len(m) == 2 {
-		imgURL := html.UnescapeString(strings.TrimSpace(m[1]))
-		if clean := ytengine.SanitizeMediaURL(imgURL, AllowedMediaURL); clean != "" {
-			coverURL = clean
-		}
-	} else if m := embedImageTagAltPattern.FindStringSubmatch(rawHTML); len(m) == 2 {
-		imgURL := html.UnescapeString(strings.TrimSpace(m[1]))
-		if clean := ytengine.SanitizeMediaURL(imgURL, AllowedMediaURL); clean != "" {
-			coverURL = clean
-		}
-	}
+	coverURL := extractBestEmbeddedMediaImageURL(rawHTML)
 
 	if m := embedVideoURLPattern.FindStringSubmatch(rawHTML); len(m) == 2 {
 		var rawVideoURL string
@@ -500,6 +632,12 @@ func parseInstagramEmbedHTML(rawHTML, shortcode string) (*nativePost, error) {
 		})
 	}
 	if len(items) == 0 {
+		lowerHTML := strings.ToLower(rawHTML)
+		if strings.Contains(lowerHTML, "this account is private") ||
+			strings.Contains(lowerHTML, "log in to watch") ||
+			strings.Contains(lowerHTML, "log in to continue") {
+			return nil, errInstagramLoginRequired
+		}
 		return nil, errors.New("no media found in embed html")
 	}
 	return &nativePost{
@@ -509,6 +647,47 @@ func parseInstagramEmbedHTML(rawHTML, shortcode string) (*nativePost, error) {
 		CoverURL:  coverURL,
 		Items:     items,
 	}, nil
+}
+
+func extractBestEmbeddedMediaImageURL(rawHTML string) string {
+	tag := embedImgElementPattern.FindString(rawHTML)
+	if tag == "" {
+		return ""
+	}
+	var srcURL string
+	if m := embedSrcAttrPattern.FindStringSubmatch(tag); len(m) == 2 {
+		rawSrc := html.UnescapeString(strings.TrimSpace(m[1]))
+		srcURL = ytengine.SanitizeMediaURL(rawSrc, AllowedMediaURL)
+	}
+	if m := embedSrcsetAttrPattern.FindStringSubmatch(tag); len(m) == 2 {
+		rawSrcset := html.UnescapeString(m[1])
+		var bestURL string
+		var bestW int64
+		for _, part := range strings.Split(rawSrcset, ",") {
+			fields := strings.Fields(strings.TrimSpace(part))
+			if len(fields) == 0 {
+				continue
+			}
+			clean := ytengine.SanitizeMediaURL(fields[0], AllowedMediaURL)
+			if clean == "" {
+				continue
+			}
+			var w int64
+			if len(fields) >= 2 && strings.HasSuffix(strings.ToLower(fields[1]), "w") {
+				if parsed, err := strconv.ParseInt(strings.TrimSuffix(strings.ToLower(fields[1]), "w"), 10, 64); err == nil && parsed > 0 {
+					w = parsed
+				}
+			}
+			if bestURL == "" || w > bestW {
+				bestW = w
+				bestURL = clean
+			}
+		}
+		if bestURL != "" {
+			return bestURL
+		}
+	}
+	return srcURL
 }
 
 func extractEmbedMediaNode(root map[string]any) map[string]any {
@@ -545,6 +724,13 @@ func parseInstagramGraphQLJSON(body []byte, shortcode string) (*nativePost, erro
 	for _, key := range []string{"xdt_shortcode_media", "shortcode_media"} {
 		if node, ok := data[key].(map[string]any); ok && node != nil {
 			return parseGraphMediaNode(node, shortcode)
+		}
+	}
+	if _, hasErrors := root["errors"]; !hasErrors {
+		for _, key := range []string{"xdt_shortcode_media", "shortcode_media"} {
+			if val, exists := data[key]; exists && val == nil {
+				return nil, errInstagramLoginRequired
+			}
 		}
 	}
 	return nil, errors.New("missing shortcode_media node")
@@ -618,31 +804,38 @@ func parseSingleMediaNode(node map[string]any, defaultID string) (nativeMediaIte
 	if id == "" {
 		id = defaultID
 	}
-	width, height := extractDimensions(node)
-	displayURL := extractBestDisplayURL(node)
+	nodeW, nodeH := extractDimensions(node)
+	displayURL, imgW, imgH := extractBestImageCandidate(node)
 	videoURL := ytengine.SanitizeMediaURL(html.UnescapeString(strField(node, "video_url")), AllowedMediaURL)
 	typename := strings.ToLower(strField(node, "__typename"))
 	isVideo, _ := node["is_video"].(bool)
 	dur := floatField(node, "video_duration")
 
 	if (videoURL != "") && (isVideo || strings.Contains(typename, "video") || videoURL != "") {
+		vw, vh := nodeW, nodeH
+		if vw <= 0 || vh <= 0 {
+			vw, vh = imgW, imgH
+		}
 		return nativeMediaItem{
 			ID:       id,
 			Kind:     "video",
 			VideoURL: videoURL,
 			ImageURL: displayURL,
-			Width:    width,
-			Height:   height,
+			Width:    vw,
+			Height:   vh,
 			Duration: dur,
 		}, true
 	}
 	if displayURL != "" {
+		if imgW <= 0 || imgH <= 0 {
+			imgW, imgH = nodeW, nodeH
+		}
 		return nativeMediaItem{
 			ID:       id,
 			Kind:     "image",
 			ImageURL: displayURL,
-			Width:    width,
-			Height:   height,
+			Width:    imgW,
+			Height:   imgH,
 		}, true
 	}
 	return nativeMediaItem{}, false
@@ -684,36 +877,71 @@ func extractSidecarChildren(node map[string]any) []map[string]any {
 }
 
 func extractBestDisplayURL(node map[string]any) string {
-	for _, key := range []string{"display_url", "display_src", "thumbnail_src"} {
-		if raw := html.UnescapeString(strField(node, key)); raw != "" {
-			if clean := ytengine.SanitizeMediaURL(raw, AllowedMediaURL); clean != "" {
-				return clean
-			}
+	bestURL, _, _ := extractBestImageCandidate(node)
+	return bestURL
+}
+
+// extractBestImageCandidate selects the highest pixel-area candidate across
+// display_resources, image_versions2.candidates, and display_url/display_src/thumbnail_src.
+// Strict > comparison preserves uncropped aspect ratios (e.g. 1080x1350 over trailing 1080x1080).
+func extractBestImageCandidate(node map[string]any) (string, int64, int64) {
+	var bestURL string
+	var bestW, bestH, bestArea int64
+
+	consider := func(rawURL string, w, h int64) {
+		clean := ytengine.SanitizeMediaURL(html.UnescapeString(rawURL), AllowedMediaURL)
+		if clean == "" {
+			return
+		}
+		var area int64
+		if w > 0 && h > 0 {
+			area = w * h
+		}
+		if bestURL == "" || area > bestArea {
+			bestURL = clean
+			bestW = w
+			bestH = h
+			bestArea = area
 		}
 	}
+
 	if resList, ok := node["display_resources"].([]any); ok {
-		var bestURL string
-		var bestWidth int64
 		for _, r := range resList {
 			rm, ok := r.(map[string]any)
 			if !ok {
 				continue
 			}
-			src := ytengine.SanitizeMediaURL(html.UnescapeString(strField(rm, "src")), AllowedMediaURL)
-			if src == "" {
-				continue
-			}
-			w := int64Field(rm, "config_width", "width")
-			if bestURL == "" || w >= bestWidth {
-				bestWidth = w
-				bestURL = src
-			}
-		}
-		if bestURL != "" {
-			return bestURL
+			consider(
+				strField(rm, "src", "url"),
+				int64Field(rm, "config_width", "width"),
+				int64Field(rm, "config_height", "height"),
+			)
 		}
 	}
-	return ""
+	if iv2, ok := node["image_versions2"].(map[string]any); ok {
+		if cands, ok := iv2["candidates"].([]any); ok {
+			for _, c := range cands {
+				cm, ok := c.(map[string]any)
+				if !ok {
+					continue
+				}
+				consider(
+					strField(cm, "url", "src"),
+					int64Field(cm, "width", "config_width"),
+					int64Field(cm, "height", "config_height"),
+				)
+			}
+		}
+	}
+	nodeW, nodeH := extractDimensions(node)
+	for _, key := range []string{"display_url", "display_src", "thumbnail_src"} {
+		consider(strField(node, key), nodeW, nodeH)
+	}
+
+	if (bestW <= 0 || bestH <= 0) && nodeW > 0 && nodeH > 0 {
+		bestW, bestH = nodeW, nodeH
+	}
+	return bestURL, bestW, bestH
 }
 
 func extractDimensions(node map[string]any) (int64, int64) {
@@ -843,13 +1071,25 @@ func optionalDirectIntField(m map[string]any, keys ...string) *int64 {
 }
 
 func (p *Parser) buildNativeEnvelope(ctx context.Context, post *nativePost, shortcode, sourceURL string, now int64) unified.Object {
+	return p.buildNativeEnvelopeWithYTVideos(ctx, post, nil, shortcode, sourceURL, now)
+}
+
+func (p *Parser) buildNativeEnvelopeWithYTVideos(ctx context.Context, post *nativePost, ytVideos unified.Array, shortcode, sourceURL string, now int64) unified.Object {
 	if post == nil || len(post.Items) == 0 {
 		return unified.ContractError("NO_MEDIA", "该内容未包含可解析的媒体", false)
 	}
 
+	nativeVideoCount := 0
+	for _, entry := range post.Items {
+		if entry.Kind == "video" && entry.VideoURL != "" {
+			nativeVideoCount++
+		}
+	}
+	useYTVideoVariants := len(ytVideos) > 0 && len(ytVideos) == nativeVideoCount
+	ytVideoCursor := 0
+
 	items := make(unified.Array, 0, len(post.Items))
 	imageItemIDs := make(unified.Array, 0, len(post.Items))
-	total := len(post.Items)
 
 	for idx, entry := range post.Items {
 		position := idx + 1
@@ -861,68 +1101,74 @@ func (p *Parser) buildNativeEnvelope(ctx context.Context, post *nativePost, shor
 				entryKey = strconv.Itoa(position)
 			}
 		}
-		itemTitle := post.Title
-		if total > 1 {
-			itemTitle = fmt.Sprintf("%s #%d", post.Title, position)
-		}
 
 		if entry.Kind == "video" && entry.VideoURL != "" {
 			cleanVideoURL := ytengine.SanitizeMediaURL(entry.VideoURL, AllowedMediaURL)
 			if cleanVideoURL == "" {
 				continue
 			}
-			rawSource := unified.Object{
-				"url": cleanVideoURL,
-				"private_source_identity": unified.PHPIdentityJSON(unified.Array{
-					"instagram-native-video",
-					shortcode,
-					entryKey,
-					canonicalInstagramCDNIdentity(cleanVideoURL),
-				}, true),
-			}
-			if p.sizeProber != nil {
-				if sz, ok := p.sizeProber(ctx, cleanVideoURL); ok && sz > 0 {
-					rawSource["size_bytes"] = sz
-				}
-			}
-			sources := unified.Sources(unified.Array{rawSource}, now)
-			if len(sources) == 0 {
-				continue
-			}
-			meta := unified.Object{
-				"evidence":  "upstream",
-				"container": "mp4",
-				"extension": "mp4",
-				"mime_type": "video/mp4",
-			}
-			label := "默认画质"
-			if entry.Width > 0 && entry.Height > 0 {
-				meta["width"] = entry.Width
-				meta["height"] = entry.Height
-				minEdge := entry.Width
-				if entry.Height < minEdge {
-					minEdge = entry.Height
-				}
-				label = strconv.FormatInt(minEdge, 10) + "p"
-			}
-			variantID := "v-" + shortHash("instagram:native-video:"+shortcode+":"+entryKey)
-			variant := unified.Object{
-				"id":       variantID,
-				"label":    label,
-				"metadata": meta,
-				"delivery": unified.Object{
-					"kind":    "file",
-					"sources": sources,
-				},
-			}
 			itemID := "video-" + shortHash("instagram:item:"+shortcode+":"+entryKey)
+			var variants unified.Array
+			if useYTVideoVariants && ytVideoCursor < len(ytVideos) {
+				ytItem := unified.Map(ytVideos[ytVideoCursor])
+				ytVideoCursor++
+				if ytVars := unified.Slice(ytItem["variants"]); len(ytVars) > 0 {
+					variants = unified.CloneValue(ytVars).(unified.Array)
+				}
+			}
+			if len(variants) == 0 {
+				rawSource := unified.Object{
+					"url": cleanVideoURL,
+					"private_source_identity": unified.PHPIdentityJSON(unified.Array{
+						"instagram-native-video",
+						shortcode,
+						entryKey,
+						canonicalInstagramCDNIdentity(cleanVideoURL),
+					}, true),
+				}
+				if p.sizeProber != nil {
+					if sz, ok := p.sizeProber(ctx, cleanVideoURL); ok && sz > 0 {
+						rawSource["size_bytes"] = sz
+					}
+				}
+				sources := unified.Sources(unified.Array{rawSource}, now)
+				if len(sources) == 0 {
+					continue
+				}
+				meta := unified.Object{
+					"evidence":  "upstream",
+					"container": "mp4",
+					"extension": "mp4",
+					"mime_type": "video/mp4",
+				}
+				label := "默认画质"
+				if entry.Width > 0 && entry.Height > 0 {
+					meta["width"] = entry.Width
+					meta["height"] = entry.Height
+					minEdge := entry.Width
+					if entry.Height < minEdge {
+						minEdge = entry.Height
+					}
+					label = strconv.FormatInt(minEdge, 10) + "p"
+				}
+				variantID := "v-" + shortHash("instagram:native-video:"+shortcode+":"+entryKey)
+				variant := unified.Object{
+					"id":       variantID,
+					"label":    label,
+					"metadata": meta,
+					"delivery": unified.Object{
+						"kind":    "file",
+						"sources": sources,
+					},
+				}
+				variants = unified.Array{variant}
+			}
 			item := unified.Object{
 				"id":          itemID,
 				"type":        "video",
 				"index":       int64(position),
 				"default":     nil,
-				"title":       itemTitle,
-				"variants":    unified.Array{variant},
+				"variants":    variants,
 				"resolve_url": unified.ResolveURL(sourceURL, itemID),
 			}
 			if entry.Duration > 0 {
@@ -982,7 +1228,6 @@ func (p *Parser) buildNativeEnvelope(ctx context.Context, post *nativePost, shor
 				"type":        "image",
 				"index":       int64(position),
 				"default":     nil,
-				"title":       itemTitle,
 				"variants":    unified.Array{variant},
 				"resolve_url": unified.ResolveURL(sourceURL, itemID),
 			}

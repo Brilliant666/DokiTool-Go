@@ -203,6 +203,7 @@
     "backend/internal/platform/x/parser.go",
     "backend/internal/platform/x/parser_test.go",
     "backend/internal/platform/x/probe.go",
+    "backend/internal/platform/x/syndication.go",
     "backend/internal/platform/xiaohongshu/baseline_test.go",
     "backend/internal/platform/xiaohongshu/formatter.go",
     "backend/internal/platform/xiaohongshu/json.go",

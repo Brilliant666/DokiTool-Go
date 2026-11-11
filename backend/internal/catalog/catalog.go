@@ -29,7 +29,7 @@ func XPlatform() unified.Object {
 		"name":         "X",
 		"site_url":     "https://x.com/",
 		"icon":         "x",
-		"capabilities": unified.Array{"video"},
+		"capabilities": unified.Array{"video", "image"},
 		"domains":      unified.Array{"x.com", "twitter.com"},
 	}
 }
@@ -53,7 +53,7 @@ func InstagramPlatform() unified.Object {
 		"name":         "Instagram",
 		"site_url":     "https://www.instagram.com/",
 		"icon":         "instagram",
-		"capabilities": unified.Array{"video"},
+		"capabilities": unified.Array{"video", "image"},
 		"domains":      unified.Array{"instagram.com"},
 	}
 }

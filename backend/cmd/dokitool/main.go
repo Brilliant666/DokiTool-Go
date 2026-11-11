@@ -302,7 +302,7 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 			return err
 		}
 		xEngine := baseEngine.WithTargetPolicy(x.AllowedTargetURL, x.AllowedOutboundHost)
-		adapters["x"] = x.NewWithSizeProber(xEngine, x.NewSizeProber(executor))
+		adapters["x"] = x.NewWithSizeProber(xEngine, x.NewSizeProber(executor)).WithFetcher(executor)
 	}
 	if ytEnabled {
 		if err := c.Register(catalog.YouTubePlatform()); err != nil {
