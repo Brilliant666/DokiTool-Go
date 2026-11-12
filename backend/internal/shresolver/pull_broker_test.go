@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -228,5 +231,256 @@ func TestPullControlRejectsUnauthorizedAndInvalidBodies(t *testing.T) {
 	}
 	if err := <-done; err == nil {
 		t.Fatal("unsafe candidate passed response validation")
+	}
+}
+
+type delayedReader struct {
+	first []byte
+	rest  []byte
+	delay time.Duration
+	step  int
+}
+
+func (r *delayedReader) Read(p []byte) (int, error) {
+	switch r.step {
+	case 0:
+		r.step = 1
+		return copy(p, r.first), nil
+	case 1:
+		r.step = 2
+		time.Sleep(r.delay)
+		return copy(p, r.rest), nil
+	default:
+		return 0, io.EOF
+	}
+}
+
+func TestSlowResultTimeoutDoesNotPoisonKeepAliveClaim(t *testing.T) {
+	b := pullTestBroker(t)
+	srv := httptest.NewUnstartedServer(b)
+	srv.Config.ReadHeaderTimeout = 5 * time.Second
+	srv.Config.WriteTimeout = 50 * time.Second
+	srv.Config.IdleTimeout = 60 * time.Second
+	srv.Start()
+	defer srv.Close()
+
+	var dials atomic.Int32
+	tr := &http.Transport{
+		MaxConnsPerHost:     1,
+		MaxIdleConnsPerHost: 1,
+		DisableKeepAlives:   false,
+		ForceAttemptHTTP2:   false,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dials.Add(1)
+			return (&net.Dialer{}).DialContext(ctx, network, addr)
+		},
+	}
+	defer tr.CloseIdleConnections()
+	client := &http.Client{Transport: tr}
+
+	// 1. Send a result request whose body read exceeds the 3s read deadline,
+	//    then finishes sending the remaining bytes on the same connection.
+	first := []byte(`{"task_id":"`)
+	rest := []byte(`00000000000000000000000000000000","attempt_id":"00000000000000000000000000000000","result":null}`)
+	req1, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+ResultPath, &delayedReader{
+		first: first,
+		rest:  rest,
+		delay: 3200 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req1.ContentLength = int64(len(first) + len(rest))
+	req1.Header.Set("Authorization", "Bearer "+wireToken)
+	req1.Header.Set("Content-Type", "application/json")
+	res1, err := client.Do(req1)
+	if err != nil {
+		t.Fatalf("result request error: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, res1.Body)
+	res1.Body.Close()
+	if res1.StatusCode != http.StatusBadRequest {
+		t.Fatalf("slow result status = %d, want 400", res1.StatusCode)
+	}
+
+	// 2. Send claim through the same single-connection keep-alive client.
+	//    Without the fix, the poisoned connection is reused and claim returns 204 immediately.
+	type claimOutcome struct {
+		res     *http.Response
+		body    []byte
+		err     error
+		elapsed time.Duration
+	}
+	claimCtx, cancelClaim := context.WithCancel(t.Context())
+	defer cancelClaim()
+	claimCh := make(chan claimOutcome, 1)
+	go func() {
+		req2, reqErr := http.NewRequestWithContext(claimCtx, http.MethodPost, srv.URL+ClaimPath, nil)
+		if reqErr != nil {
+			claimCh <- claimOutcome{err: reqErr}
+			return
+		}
+		req2.Header.Set("Authorization", "Bearer "+wireToken)
+		start := time.Now()
+		res2, doErr := client.Do(req2)
+		elapsed := time.Since(start)
+		var body []byte
+		if doErr == nil {
+			body, doErr = io.ReadAll(res2.Body)
+			res2.Body.Close()
+		}
+		claimCh <- claimOutcome{res: res2, body: body, err: doErr, elapsed: elapsed}
+	}()
+
+	select {
+	case early := <-claimCh:
+		if early.err != nil {
+			t.Fatalf("claim failed early (%v) after %v", early.err, early.elapsed)
+		}
+		t.Fatalf("claim returned HTTP %d immediately in %v (dials=%d) instead of waiting for work",
+			early.res.StatusCode, early.elapsed, dials.Load())
+	case <-time.After(250 * time.Millisecond):
+	}
+
+	// net/http ReadResponse strips Header["Connection"] and sets Response.Close = true when "Connection: close" is on the wire.
+	if !res1.Close {
+		t.Fatalf("slow result did not send Connection: close (res1.Close=%v)", res1.Close)
+	}
+	if got := dials.Load(); got != 2 {
+		t.Fatalf("expected second dial after slow result closed conn #1, got dials=%d", got)
+	}
+	waitForPullWaiter(t, b)
+
+	// 3. Dispatch a real job on connection #2, post a valid receipt on connection #2,
+	//    and verify a subsequent >3s claim on connection #2 is unaffected by receive's deadline.
+	resolveDone := make(chan error, 1)
+	go func() {
+		_, rErr := b.ResolveOriginal(t.Context(), wireVideo)
+		resolveDone <- rErr
+	}()
+	claimed := <-claimCh
+	if claimed.err != nil || claimed.res.StatusCode != http.StatusOK {
+		t.Fatalf("claim outcome: err=%v res=%v", claimed.err, claimed.res)
+	}
+	var job PullJob
+	if err := json.Unmarshal(claimed.body, &job); err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(goodResponse())
+	receiptBody, _ := json.Marshal(PullResult{PullJob: job, Result: payload})
+	req3, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+ResultPath, bytes.NewReader(receiptBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req3.Header.Set("Authorization", "Bearer "+wireToken)
+	req3.Header.Set("Content-Type", "application/json")
+	res3, err := client.Do(req3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res3.Body)
+	res3.Body.Close()
+	if res3.StatusCode != http.StatusNoContent || res3.Close {
+		t.Fatalf("normal receipt status=%d close=%v", res3.StatusCode, res3.Close)
+	}
+	if err := <-resolveDone; err != nil {
+		t.Fatal(err)
+	}
+
+	// Connection #2 must remain reused (dials==2) and have no leftover 3s read deadline.
+	holdCtx, cancelHold := context.WithTimeout(t.Context(), 3400*time.Millisecond)
+	defer cancelHold()
+	req4, err := http.NewRequestWithContext(holdCtx, http.MethodPost, srv.URL+ClaimPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req4.Header.Set("Authorization", "Bearer "+wireToken)
+	res4, err := client.Do(req4)
+	if err == nil {
+		res4.Body.Close()
+		t.Fatalf("follow-up claim ended early with HTTP %d (leftover read deadline?)", res4.StatusCode)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("follow-up claim error = %v, want context.DeadlineExceeded", err)
+	}
+	if got := dials.Load(); got != 2 {
+		t.Fatalf("healthy keep-alive connection was not reused across receipt+claim: dials=%d, want 2", got)
+	}
+}
+
+func TestPullClaimCanceledContextClosesConnection(t *testing.T) {
+	b := pullTestBroker(t)
+	canceledCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+	rec := pullTestRequest(b, canceledCtx, ClaimPath, wireToken, nil)
+	if rec.Code != http.StatusNoContent || rec.Header().Get("Connection") != "close" {
+		t.Fatalf("canceled claim: code=%d Connection=%q, want 204 with Connection: close", rec.Code, rec.Header().Get("Connection"))
+	}
+
+	// End-to-end HTTP/1.1 keep-alive recovery when the first connection's context is already canceled.
+	var connSeq atomic.Int32
+	srv := httptest.NewUnstartedServer(b)
+	srv.Config.ConnContext = func(ctx context.Context, _ net.Conn) context.Context {
+		if connSeq.Add(1) == 1 {
+			c, stop := context.WithCancel(ctx)
+			stop()
+			return c
+		}
+		return ctx
+	}
+	srv.Start()
+	defer srv.Close()
+
+	var dials atomic.Int32
+	tr := &http.Transport{
+		MaxConnsPerHost:     1,
+		MaxIdleConnsPerHost: 1,
+		DisableKeepAlives:   false,
+		ForceAttemptHTTP2:   false,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dials.Add(1)
+			return (&net.Dialer{}).DialContext(ctx, network, addr)
+		},
+	}
+	defer tr.CloseIdleConnections()
+	client := &http.Client{Transport: tr}
+
+	req1, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+ClaimPath, nil)
+	req1.Header.Set("Authorization", "Bearer "+wireToken)
+	res1, err := client.Do(req1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res1.Body.Close()
+	if res1.StatusCode != http.StatusNoContent || !res1.Close {
+		t.Fatalf("claim on poisoned conn #1: status=%d Close=%v", res1.StatusCode, res1.Close)
+	}
+
+	// Next claim on the same single-connection client must dial conn #2, wait the normal 15s PullWait,
+	// return 204 without Connection: close, and keep conn #2 reusable.
+	start := time.Now()
+	req2, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+ClaimPath, nil)
+	req2.Header.Set("Authorization", "Bearer "+wireToken)
+	res2, err := client.Do(req2)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusNoContent || res2.Close || elapsed < PullWait-500*time.Millisecond {
+		t.Fatalf("normal 15s claim timeout: status=%d Close=%v elapsed=%v", res2.StatusCode, res2.Close, elapsed)
+	}
+
+	holdCtx, cancelHold := context.WithTimeout(t.Context(), 250*time.Millisecond)
+	defer cancelHold()
+	req3, _ := http.NewRequestWithContext(holdCtx, http.MethodPost, srv.URL+ClaimPath, nil)
+	req3.Header.Set("Authorization", "Bearer "+wireToken)
+	res3, err := client.Do(req3)
+	if err == nil {
+		res3.Body.Close()
+		t.Fatalf("follow-up claim on conn #2 returned HTTP %d instead of waiting", res3.StatusCode)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) || dials.Load() != 2 {
+		t.Fatalf("conn #2 reuse after normal 15s timeout: err=%v dials=%d, want DeadlineExceeded and dials=2", err, dials.Load())
 	}
 }

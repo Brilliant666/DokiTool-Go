@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -167,6 +168,7 @@ func (w *PullWorker) runOnce(ctx context.Context) (bool, error) {
 
 func (w *PullWorker) Run(ctx context.Context) error {
 	backoff := time.Second
+	fastEmpty := 0
 	for ctx.Err() == nil {
 		start := time.Now()
 		delivered, err := w.runOnce(ctx)
@@ -178,7 +180,20 @@ func (w *PullWorker) Run(ctx context.Context) error {
 		}
 		if err == nil && (delivered || time.Since(start) >= PullWait/2) {
 			backoff = time.Second
+			fastEmpty = 0
 			continue
+		}
+		if err == nil && !delivered && time.Since(start) < time.Second {
+			fastEmpty++
+			if fastEmpty >= 3 {
+				fastEmpty = 0
+				if closer, ok := w.control.(interface{ CloseIdleConnections() }); ok {
+					closer.CloseIdleConnections()
+				}
+				log.Print("shanghai-resolver: consecutive fast empty 204 claims; closing idle connections")
+			}
+		} else {
+			fastEmpty = 0
 		}
 		timer := time.NewTimer(backoff)
 		select {
