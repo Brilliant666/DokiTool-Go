@@ -1277,10 +1277,19 @@ func classifyContextErr(err error) *Error {
 func classifyStderr(stderrText string, runErr error) *Error {
 	lower := strings.ToLower(stderrText)
 	switch {
-	case strings.Contains(lower, "upstream blocked by outbound security policy"):
+	case strings.Contains(lower, "upstream blocked by outbound security policy") ||
+		strings.Contains(lower, "tunnel connection failed: 403"):
 		return &Error{
 			Code:      CodeUpstreamBlocked,
 			Message:   "目标地址或重定向跳点超出安全出站边界，已拒绝访问",
+			Retryable: false,
+			Cause:     runErr,
+		}
+	case strings.Contains(lower, "unsupported url") ||
+		strings.Contains(lower, "no suitable extractor"):
+		return &Error{
+			Code:      CodeContentUnavailable,
+			Message:   "未找到可用的视频或该推文已不可访问",
 			Retryable: false,
 			Cause:     runErr,
 		}
