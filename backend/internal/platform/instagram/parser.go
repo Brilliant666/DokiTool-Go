@@ -32,9 +32,11 @@ var (
 	storySegmentPattern     = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 	embedContextJSONPattern = regexp.MustCompile(`"contextJSON"\s*:\s*("(?:\\.|[^"\\])*")`)
 	embedVideoURLPattern    = regexp.MustCompile(`"video_url"\s*:\s*("(?:\\.|[^"\\])*")`)
-	embedImgElementPattern  = regexp.MustCompile(`(?is)<img\b[^>]*class="[^"]*EmbeddedMediaImage[^"]*"[^>]*>`)
-	embedSrcAttrPattern     = regexp.MustCompile(`(?is)\bsrc="([^"]+)"`)
-	embedSrcsetAttrPattern  = regexp.MustCompile(`(?is)\bsrcset="([^"]+)"`)
+	embedImgElementPattern  = regexp.MustCompile(`(?is)<img\b[^>]*class=["'][^"']*EmbeddedMediaImage[^"']*["'][^>]*>`)
+	embedSrcAttrPattern     = regexp.MustCompile(`(?is)(?:^|[\s/])src=["']([^"']+)["']`)
+	embedSrcsetAttrPattern  = regexp.MustCompile(`(?is)(?:^|[\s/])srcset=["']([^"']+)["']`)
+	embedWidthAttrPattern   = regexp.MustCompile(`(?is)(?:^|[\s/])width\s*=\s*(?:"([0-9]+)"|'([0-9]+)'|([0-9]+)(?:[\s/>]|$))`)
+	embedHeightAttrPattern  = regexp.MustCompile(`(?is)(?:^|[\s/])height\s*=\s*(?:"([0-9]+)"|'([0-9]+)'|([0-9]+)(?:[\s/>]|$))`)
 	instagramEdgeHostRegex  = regexp.MustCompile(`^(?:scontent|instagram)[a-z0-9.-]*\.(?:cdninstagram\.com|fbcdn\.net)$`)
 
 	errInstagramLoginRequired = errors.New("instagram login required")
@@ -681,7 +683,7 @@ func parseInstagramEmbedHTML(rawHTML, shortcode string) (*nativePost, error) {
 
 	// Fallback: direct extraction of video_url / EmbeddedMediaImage (preferring highest srcset candidate)
 	var items []nativeMediaItem
-	coverURL := extractBestEmbeddedMediaImageURL(rawHTML)
+	coverURL, coverW, coverH := extractBestEmbeddedMediaImage(rawHTML)
 
 	if m := embedVideoURLPattern.FindStringSubmatch(rawHTML); len(m) == 2 {
 		var rawVideoURL string
@@ -702,6 +704,8 @@ func parseInstagramEmbedHTML(rawHTML, shortcode string) (*nativePost, error) {
 			ID:       shortcode,
 			Kind:     "image",
 			ImageURL: coverURL,
+			Width:    coverW,
+			Height:   coverH,
 		})
 	}
 	if len(items) == 0 {
@@ -722,11 +726,30 @@ func parseInstagramEmbedHTML(rawHTML, shortcode string) (*nativePost, error) {
 	}, nil
 }
 
-func extractBestEmbeddedMediaImageURL(rawHTML string) string {
+func parseEmbedIntAttr(tag string, pattern *regexp.Regexp) int64 {
+	m := pattern.FindStringSubmatch(tag)
+	if len(m) == 0 {
+		return 0
+	}
+	for _, group := range m[1:] {
+		if group == "" {
+			continue
+		}
+		if parsed, err := strconv.ParseInt(group, 10, 64); err == nil && parsed > 0 && parsed <= 100000 {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func extractBestEmbeddedMediaImage(rawHTML string) (string, int64, int64) {
 	tag := embedImgElementPattern.FindString(rawHTML)
 	if tag == "" {
-		return ""
+		return "", 0, 0
 	}
+	imgW := parseEmbedIntAttr(tag, embedWidthAttrPattern)
+	imgH := parseEmbedIntAttr(tag, embedHeightAttrPattern)
+
 	var srcURL string
 	if m := embedSrcAttrPattern.FindStringSubmatch(tag); len(m) == 2 {
 		rawSrc := html.UnescapeString(strings.TrimSpace(m[1]))
@@ -747,7 +770,7 @@ func extractBestEmbeddedMediaImageURL(rawHTML string) string {
 			}
 			var w int64
 			if len(fields) >= 2 && strings.HasSuffix(strings.ToLower(fields[1]), "w") {
-				if parsed, err := strconv.ParseInt(strings.TrimSuffix(strings.ToLower(fields[1]), "w"), 10, 64); err == nil && parsed > 0 {
+				if parsed, err := strconv.ParseInt(strings.TrimSuffix(strings.ToLower(fields[1]), "w"), 10, 64); err == nil && parsed > 0 && parsed <= 100000 {
 					w = parsed
 				}
 			}
@@ -757,10 +780,23 @@ func extractBestEmbeddedMediaImageURL(rawHTML string) string {
 			}
 		}
 		if bestURL != "" {
-			return bestURL
+			if bestW > 0 {
+				var resolvedH int64
+				if imgH > 0 && (imgW == bestW || (imgW == 0 && bestURL == srcURL)) {
+					resolvedH = imgH
+				}
+				return bestURL, bestW, resolvedH
+			}
+			if srcURL == "" || bestURL == srcURL {
+				return bestURL, imgW, imgH
+			}
+			return bestURL, 0, 0
 		}
 	}
-	return srcURL
+	if srcURL == "" {
+		return "", 0, 0
+	}
+	return srcURL, imgW, imgH
 }
 
 func extractEmbedMediaNode(root map[string]any) map[string]any {
@@ -1282,8 +1318,10 @@ func (p *Parser) buildNativeEnvelopeWithYTVideos(ctx context.Context, post *nati
 				"extension": ext,
 				"mime_type": mimeType,
 			}
-			if entry.Width > 0 && entry.Height > 0 {
+			if entry.Width > 0 {
 				meta["width"] = entry.Width
+			}
+			if entry.Height > 0 {
 				meta["height"] = entry.Height
 			}
 			variantID := "img-" + shortHash("instagram:native-image:"+shortcode+":"+entryKey)

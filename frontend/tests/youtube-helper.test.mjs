@@ -2431,4 +2431,381 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       "test4pm.exe.mp4",
     );
   });
+
+  test("split-save (分开保存) passes exact <title>_<quality>.<ext> filenames to download bridge and published userscript GM_download, and video-track retry does not duplicate audio", async () => {
+    const env = setupEnvironment();
+    const scriptPath = new URL(
+      "../public/helper/dokitool-youtube.user.js",
+      import.meta.url,
+    );
+    const scriptText = await readFile(scriptPath, "utf8");
+    const bridgeDownloads = [];
+    const gmDownloads = [];
+    let failNextMp4Once = false;
+
+    env.bus.addEventListener("dokitool:youtube-helper:request", (evt) => {
+      const detail =
+        typeof evt?.detail === "string" ? JSON.parse(evt.detail) : evt?.detail;
+      if (detail?.action === "download") {
+        bridgeDownloads.push({
+          url: detail.payload?.url,
+          filename: detail.payload?.filename,
+        });
+      }
+    });
+
+    const sandboxWindow = {
+      addEventListener: env.bus.addEventListener.bind(env.bus),
+      removeEventListener: env.bus.removeEventListener.bind(env.bus),
+      dispatchEvent: env.bus.dispatchEvent.bind(env.bus),
+      CustomEvent: globalThis.CustomEvent,
+      document: { defaultView: {} },
+    };
+
+    vm.runInNewContext(
+      scriptText,
+      {
+        window: sandboxWindow,
+        CustomEvent: globalThis.CustomEvent,
+        URL: globalThis.URL,
+        Blob: globalThis.Blob,
+        Object: globalThis.Object,
+        Array: globalThis.Array,
+        String: globalThis.String,
+        Number: globalThis.Number,
+        Boolean: globalThis.Boolean,
+        RegExp: globalThis.RegExp,
+        Math: globalThis.Math,
+        Date: globalThis.Date,
+        JSON: globalThis.JSON,
+        Promise: globalThis.Promise,
+        Error: globalThis.Error,
+        TypeError: globalThis.TypeError,
+        RangeError: globalThis.RangeError,
+        DOMException: globalThis.DOMException,
+        Symbol: globalThis.Symbol,
+        BigInt: globalThis.BigInt,
+        Map: globalThis.Map,
+        Set: globalThis.Set,
+        WeakMap: globalThis.WeakMap,
+        WeakSet: globalThis.WeakSet,
+        ArrayBuffer: globalThis.ArrayBuffer,
+        DataView: globalThis.DataView,
+        Int8Array: globalThis.Int8Array,
+        Uint8Array: globalThis.Uint8Array,
+        Uint8ClampedArray: globalThis.Uint8ClampedArray,
+        Int16Array: globalThis.Int16Array,
+        Uint16Array: globalThis.Uint16Array,
+        Int32Array: globalThis.Int32Array,
+        Uint32Array: globalThis.Uint32Array,
+        Float32Array: globalThis.Float32Array,
+        Float64Array: globalThis.Float64Array,
+        BigInt64Array: globalThis.BigInt64Array,
+        BigUint64Array: globalThis.BigUint64Array,
+        TextEncoder: globalThis.TextEncoder,
+        TextDecoder: globalThis.TextDecoder,
+        ReadableStream: globalThis.ReadableStream,
+        WritableStream: globalThis.WritableStream,
+        TransformStream: globalThis.TransformStream,
+        setTimeout: globalThis.setTimeout,
+        clearTimeout: globalThis.clearTimeout,
+        queueMicrotask: globalThis.queueMicrotask,
+        performance: globalThis.performance,
+        console: globalThis.console,
+        GM_xmlhttpRequest(details) {
+          details.onerror?.();
+          return {};
+        },
+        GM_download(details) {
+          gmDownloads.push({
+            url: details.url,
+            name: details.name,
+            mode: details.mode,
+            saveAs: details.saveAs,
+            anonymous: details.anonymous,
+          });
+          if (failNextMp4Once && String(details.name).endsWith(".mp4")) {
+            failNextMp4Once = false;
+            details.onerror?.({ error: "network_interrupted" });
+            return;
+          }
+          details.onprogress?.({ loaded: 10000, total: 10000 });
+          details.onload?.();
+        },
+      },
+      { filename: "dokitool-youtube.user.js" },
+    );
+
+    const itag137Url =
+      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlender1080p&itag=137&source=youtube&gir=yes&clen=10558182&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=CCC";
+    const itag313Url =
+      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlender2160p&itag=313&source=youtube&gir=yes&clen=32000000&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=DDD";
+    const itag140Url =
+      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlenderAudio&itag=140&source=youtube&gir=yes&clen=473790&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=EEE";
+    const itag251Url =
+      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlenderOpus&itag=251&source=youtube&gir=yes&clen=450000&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=FFF";
+
+    const blenderData = {
+      platform: "youtube",
+      content_id: "u2qFOq_rVBM",
+      source_url: "https://www.youtube.com/watch?v=u2qFOq_rVBM",
+      generated_at: "2026-11-12T00:00:00Z",
+      title: "THE DREAM - A Short Film Trailer I Blender",
+      author: { name: "Blender Studio", id: "blender" },
+      default_item_id: "video-u2qFOq_rVBM",
+      extra: { youtube_helper: { status: "ready", version: "1.2.0" } },
+      items: [
+        {
+          id: "video-u2qFOq_rVBM",
+          type: "video",
+          state: "ready",
+          title: "THE DREAM - A Short Film Trailer I Blender",
+          default: {
+            variant_id: "v-18",
+            source_id: "s-18",
+            url: itag18Url,
+            access: "direct",
+          },
+          variants: [
+            {
+              id: "v-313",
+              label: "2160p 4K (仅视频, 无音频)",
+              provenance: "original_endpoint",
+              metadata: {
+                width: 3840,
+                height: 2160,
+                fps: 24,
+                has_audio: false,
+                video_codec: "vp9",
+                container: "webm",
+                extension: "webm",
+                mime_type: "video/webm",
+                evidence: "upstream",
+              },
+              delivery: {
+                kind: "file",
+                sources: [
+                  {
+                    id: "s-313",
+                    url: itag313Url,
+                    access: "direct",
+                    size_bytes: 32000000,
+                  },
+                ],
+              },
+            },
+            {
+              id: "v-137",
+              label: "1080p (仅视频, 无音频)",
+              provenance: "original_endpoint",
+              metadata: {
+                width: 1920,
+                height: 1080,
+                fps: 24,
+                has_audio: false,
+                video_codec: "h264",
+                container: "mp4",
+                extension: "mp4",
+                mime_type: "video/mp4",
+                evidence: "upstream",
+              },
+              delivery: {
+                kind: "file",
+                sources: [
+                  {
+                    id: "s-137",
+                    url: itag137Url,
+                    access: "direct",
+                    size_bytes: 10558182,
+                  },
+                ],
+              },
+            },
+            {
+              id: "v-18",
+              label: "360p (含音频)",
+              provenance: "original_endpoint",
+              metadata: {
+                width: 640,
+                height: 360,
+                fps: 24,
+                has_audio: true,
+                video_codec: "h264",
+                audio_codec: "aac",
+                container: "mp4",
+                extension: "mp4",
+                mime_type: "video/mp4",
+                evidence: "upstream",
+              },
+              delivery: {
+                kind: "file",
+                sources: [
+                  {
+                    id: "s-18",
+                    url: itag18Url,
+                    access: "direct",
+                    size_bytes: 2158619,
+                  },
+                ],
+              },
+            },
+            {
+              id: "v-140",
+              label: "音轨 (M4A)",
+              provenance: "original_endpoint",
+              metadata: {
+                has_audio: true,
+                audio_codec: "aac",
+                container: "mp4",
+                extension: "m4a",
+                mime_type: "audio/mp4",
+                evidence: "upstream",
+              },
+              delivery: {
+                kind: "file",
+                sources: [
+                  {
+                    id: "s-140",
+                    url: itag140Url,
+                    access: "direct",
+                    size_bytes: 473790,
+                  },
+                ],
+              },
+            },
+            {
+              id: "v-251",
+              label: "音轨 (WebM)",
+              provenance: "original_endpoint",
+              metadata: {
+                has_audio: true,
+                audio_codec: "opus",
+                container: "webm",
+                extension: "webm",
+                mime_type: "audio/webm",
+                evidence: "upstream",
+              },
+              delivery: {
+                kind: "file",
+                sources: [
+                  {
+                    id: "s-251",
+                    url: itag251Url,
+                    access: "direct",
+                    size_bytes: 450000,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+      attachments: [],
+    };
+
+    env.store.setResult(blenderData);
+    env.selection.syncResult();
+
+    // 1. Primary 分开保存 on selected 1080p MP4 passes exact <title>_1080p.mp4 + <title>_audio.m4a
+    env.selection.choose({ variant_id: "v-137", source_id: "s-137" });
+    await env.downloader.downloadYouTubeSeparate();
+
+    assert.deepEqual(bridgeDownloads, [
+      {
+        url: itag137Url,
+        filename: "THE DREAM - A Short Film Trailer I Blender_1080p.mp4",
+      },
+      {
+        url: itag140Url,
+        filename: "THE DREAM - A Short Film Trailer I Blender_audio.m4a",
+      },
+    ]);
+    assert.deepEqual(gmDownloads, [
+      {
+        url: itag137Url,
+        name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4",
+        mode: undefined,
+        saveAs: false,
+        anonymous: true,
+      },
+      {
+        url: itag140Url,
+        name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.m4a",
+        mode: "native",
+        saveAs: false,
+        anonymous: true,
+      },
+    ]);
+    assert.equal(env.store.downloads.length, 2);
+    assert.equal(
+      env.store.downloads[0].filename,
+      "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4",
+    );
+    assert.equal(
+      env.store.downloads[1].filename,
+      "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.m4a",
+    );
+
+    // 2. Quality-row explicit choice 分开保存 for 2160p WebM while 360p is selected
+    env.store.downloads.splice(0);
+    bridgeDownloads.splice(0);
+    gmDownloads.splice(0);
+    env.selection.choose({ variant_id: "v-18", source_id: "s-18" });
+    await env.downloader.downloadYouTubeSeparate({
+      variant_id: "v-313",
+      source_id: "s-313",
+    });
+
+    assert.deepEqual(
+      bridgeDownloads.map((d) => d.filename),
+      [
+        "THE DREAM - A Short Film Trailer I Blender_2160p.webm",
+        "THE DREAM - A Short Film Trailer I Blender_audio.webm",
+      ],
+    );
+    assert.deepEqual(
+      gmDownloads.map((d) => ({ name: d.name, mode: d.mode })),
+      [
+        {
+          name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_2160p.webm",
+          mode: "native",
+        },
+        {
+          name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.webm",
+          mode: "native",
+        },
+      ],
+    );
+
+    // 3. Video-track retry retries ONLY the failed video track with <title>_1080p.mp4 without duplicating audio
+    env.store.downloads.splice(0);
+    bridgeDownloads.splice(0);
+    gmDownloads.splice(0);
+    failNextMp4Once = true;
+    env.selection.choose({ variant_id: "v-137", source_id: "s-137" });
+    await env.downloader.downloadYouTubeSeparate();
+
+    assert.equal(env.store.downloads.length, 2);
+    assert.equal(env.store.downloads[0].status, "failed");
+    assert.equal(env.store.downloads[1].status, "completed");
+
+    gmDownloads.splice(0);
+    await env.downloader.handleRetryDownload(env.store.downloads[0].id);
+
+    assert.equal(
+      env.store.downloads.length,
+      2,
+      "retrying video track must not spawn a duplicate audio task",
+    );
+    assert.equal(env.store.downloads[0].status, "completed");
+    assert.deepEqual(gmDownloads, [
+      {
+        url: itag137Url,
+        name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4",
+        mode: undefined,
+        saveAs: false,
+        anonymous: true,
+      },
+    ]);
+  });
 });

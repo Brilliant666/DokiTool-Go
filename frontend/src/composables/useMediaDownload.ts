@@ -1408,9 +1408,16 @@ export function useMediaDownload({
       error: null,
       refreshAvailable: false,
     });
-    videoRetries.set(videoTaskId, () =>
-      enqueueItem(snapshot, videoTaskId, false, { separateOnly: true }),
-    );
+    videoRetries.set(videoTaskId, async () => {
+      await downloadFile(
+        videoTarget.url,
+        videoFilename,
+        videoTaskId,
+        new AbortController(),
+        Date.now(),
+      );
+      return true;
+    });
     const videoPromise = downloadFile(
       videoTarget.url,
       videoFilename,
