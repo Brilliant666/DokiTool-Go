@@ -204,19 +204,26 @@ sleep 10
 		stderr        string
 		wantCode      ErrorCode
 		wantRetryable bool
+		wantMessage   string
 	}{
-		{"ERROR: [twitter] 123: HTTP Error 429: Too Many Requests", CodeRateLimited, true},
-		{"ERROR: [twitter] 123: No video could be found in this tweet", CodeContentUnavailable, false},
-		{"ERROR: [twitter] 123: Protected tweet; please sign in", CodeUpstreamBlocked, false},
-		{"ERROR: [generic] gen-ai-pose-image: Unable to download webpage: <urlopen error Tunnel connection failed: 403 Forbidden>", CodeUpstreamBlocked, false},
-		{"ERROR: Unsupported URL: https://github.com/wzc520pyfm/gen-ai-pose-image", CodeContentUnavailable, false},
-		{"ERROR: No suitable extractor found for URL https://github.com/wzc520pyfm/gen-ai-pose-image/issues/429?timeout=1", CodeContentUnavailable, false},
+		{"ERROR: [twitter] 123: HTTP Error 429: Too Many Requests", CodeRateLimited, true, ""},
+		{"ERROR: [twitter] 123: No video could be found in this tweet", CodeContentUnavailable, false, "未找到可用的媒体，或该内容已不可访问"},
+		{"ERROR: [twitter] 123: Protected tweet; please sign in", CodeUpstreamBlocked, false, ""},
+		{"ERROR: [generic] gen-ai-pose-image: Unable to download webpage: <urlopen error Tunnel connection failed: 403 Forbidden>", CodeUpstreamBlocked, false, ""},
+		{"ERROR: Unsupported URL: https://github.com/wzc520pyfm/gen-ai-pose-image", CodeContentUnavailable, false, "未找到可用的媒体，或该内容已不可访问"},
+		{"ERROR: No suitable extractor found for URL https://github.com/wzc520pyfm/gen-ai-pose-image/issues/429?timeout=1", CodeContentUnavailable, false, "未找到可用的媒体，或该内容已不可访问"},
 	}
 	for _, tc := range cases {
 		classified := classifyStderr(tc.stderr, errors.New("exit status 1"))
 		if classified.Code != tc.wantCode || classified.Retryable != tc.wantRetryable {
 			t.Fatalf("classifyStderr(%q) = (code=%s, retryable=%v), want (code=%s, retryable=%v)",
 				tc.stderr, classified.Code, classified.Retryable, tc.wantCode, tc.wantRetryable)
+		}
+		if tc.wantMessage != "" && classified.Message != tc.wantMessage {
+			t.Fatalf("classifyStderr(%q).Message = %q, want %q", tc.stderr, classified.Message, tc.wantMessage)
+		}
+		if strings.Contains(classified.Message, "推文") {
+			t.Fatalf("classifyStderr(%q).Message must be platform-neutral, got %q", tc.stderr, classified.Message)
 		}
 		errBin, errHashes := writeFakeYTDLP(t, "echo '"+tc.stderr+"' >&2\nexit 1")
 		errEng, err := New(Config{BinaryPath: errBin, AllowedHashes: errHashes})

@@ -1,7 +1,7 @@
 <script setup>
 import AppIcon from './AppIcon.vue'
-import { computed } from 'vue'
-import { platformTabs } from '../utils/platforms'
+import { computed, ref } from 'vue'
+import { groupedPlatformTabs } from '../utils/platforms'
 
 const props = defineProps({
   inputUrl: String,
@@ -66,7 +66,17 @@ const getContent = (locale) => content[locale] || content['zh-CN']
 
 const hasParseError = computed(() => Boolean(props.parseError))
 
-const getPlatformTabs = (locale) => platformTabs(locale)
+const showMorePlatforms = ref(false)
+const groupedTabs = computed(() => groupedPlatformTabs(props.locale || 'zh-CN'))
+const primaryPlatformTabs = computed(() => [
+  groupedTabs.value.allTab,
+  ...groupedTabs.value.popularTabs
+])
+const morePlatformTabs = computed(() => groupedTabs.value.moreTabs)
+const morePlatformCount = computed(() => morePlatformTabs.value.length)
+const isMorePlatformSelected = computed(() =>
+  morePlatformTabs.value.some((tab) => tab.key === props.currentPlatform)
+)
 
 const selectPlatform = (key) => {
   emit('select-platform', key)
@@ -107,8 +117,10 @@ const selectPlatform = (key) => {
       <div class="max-w-xl sm:max-w-2xl mx-auto">
         <div class="flex flex-wrap justify-center gap-2 mb-4">
           <button
-            v-for="tab in getPlatformTabs(locale)"
+            v-for="tab in primaryPlatformTabs"
             :key="tab.key"
+            type="button"
+            :data-platform-tab="tab.key"
             @click="selectPlatform(tab.key)"
             :disabled="!isReady || isLoading"
             :aria-pressed="currentPlatform === tab.key"
@@ -121,6 +133,47 @@ const selectPlatform = (key) => {
           >
             <AppIcon :class="['fas', tab.icon]"></AppIcon>
             <span>{{ tab.label }}</span>
+          </button>
+          <button
+            v-for="tab in morePlatformTabs"
+            v-show="showMorePlatforms"
+            :key="tab.key"
+            type="button"
+            :data-platform-tab="tab.key"
+            data-more-platform-tab
+            @click="selectPlatform(tab.key)"
+            :disabled="!isReady || isLoading"
+            :aria-pressed="currentPlatform === tab.key"
+            :class="[
+              'theme-colors px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5',
+              currentPlatform === tab.key
+                ? 'bg-indigo-600 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25'
+                : 'bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-slate-700 border border-indigo-200 dark:border-slate-700'
+            ]"
+          >
+            <AppIcon :class="['fas', tab.icon]"></AppIcon>
+            <span>{{ tab.label }}</span>
+          </button>
+          <button
+            v-if="morePlatformCount > 0"
+            type="button"
+            data-more-platforms-toggle
+            :disabled="!isReady || isLoading"
+            :aria-expanded="showMorePlatforms"
+            @click="showMorePlatforms = !showMorePlatforms"
+            :class="[
+              'theme-colors px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5',
+              !showMorePlatforms && isMorePlatformSelected
+                ? 'bg-indigo-600 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25'
+                : 'bg-slate-100 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+            ]"
+          >
+            <span>{{
+              showMorePlatforms
+                ? locale === 'en' ? 'Less' : '收起'
+                : locale === 'en' ? `More (${morePlatformCount})` : `更多平台 (${morePlatformCount})`
+            }}</span>
+            <AppIcon :class="['fas text-[10px]', showMorePlatforms ? 'fa-chevron-up' : 'fa-chevron-down']"></AppIcon>
           </button>
         </div>
 

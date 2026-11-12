@@ -3,9 +3,13 @@
 // userscript (Tampermonkey / Violentmonkey), the Vue frontend, and Node unit tests,
 // and can be packaged into a browser extension in the future.
 
-export const YOUTUBE_HELPER_VERSION = "1.2.0";
-export const MIN_YOUTUBE_HELPER_VERSION = "1.2.0";
+export const YOUTUBE_HELPER_VERSION = "1.3.0";
+export const MIN_YOUTUBE_HELPER_VERSION = "1.3.0";
 export const YOUTUBE_HELPER_SCRIPT_URL = "/helper/dokitool-youtube.user.js";
+export const YOUTUBE_OPFS_TEMP_PREFIX = "dokitool-yt-tmp-";
+export const YOUTUBE_FILE_PICKER_ID = "dokitool-youtube";
+export const DEFAULT_OPFS_CLEANUP_DELAY_MS = 15000;
+export const OPFS_QUOTA_HEADROOM_FACTOR = 1.2;
 
 export const DEFAULT_MUX_CHUNK_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_MUX_VIDEO_CONCURRENCY = 3;
@@ -600,6 +604,77 @@ function dispatchBridgeEvent(eventTarget, eventName, payloadObj) {
   }
 }
 
+const activeOpfsTempNames = new Set();
+let opfsTempCounter = 0;
+
+export async function cleanupLeftoverYouTubeOpfsTempFiles(options = {}) {
+  const storage =
+    options?.storage ??
+    options?.pageWindow?.navigator?.storage ??
+    (typeof navigator !== "undefined" ? navigator.storage : null);
+  if (!storage || typeof storage.getDirectory !== "function") {
+    return 0;
+  }
+  let root;
+  try {
+    root = await storage.getDirectory();
+  } catch {
+    return 0;
+  }
+  if (!root || typeof root.removeEntry !== "function") {
+    return 0;
+  }
+  const namesToRemove = [];
+  try {
+    if (typeof root.keys === "function") {
+      for await (const name of root.keys()) {
+        if (
+          typeof name === "string" &&
+          name.startsWith(YOUTUBE_OPFS_TEMP_PREFIX) &&
+          !activeOpfsTempNames.has(name)
+        ) {
+          namesToRemove.push(name);
+        }
+      }
+    } else if (typeof root.entries === "function") {
+      for await (const entry of root.entries()) {
+        const name = Array.isArray(entry) ? entry[0] : entry?.name;
+        if (
+          typeof name === "string" &&
+          name.startsWith(YOUTUBE_OPFS_TEMP_PREFIX) &&
+          !activeOpfsTempNames.has(name)
+        ) {
+          namesToRemove.push(name);
+        }
+      }
+    } else if (typeof root.values === "function") {
+      for await (const handle of root.values()) {
+        const name = handle?.name;
+        if (
+          typeof name === "string" &&
+          name.startsWith(YOUTUBE_OPFS_TEMP_PREFIX) &&
+          !activeOpfsTempNames.has(name)
+        ) {
+          namesToRemove.push(name);
+        }
+      }
+    }
+  } catch {
+    // Ignore directory iteration failures on restricted profiles
+  }
+  let removed = 0;
+  for (const name of namesToRemove) {
+    if (activeOpfsTempNames.has(name)) continue;
+    try {
+      await root.removeEntry(name);
+      removed += 1;
+    } catch {
+      // Ignore locked or already-removed entries
+    }
+  }
+  return removed;
+}
+
 export function createUserscriptController(options = {}) {
   const {
     gmXmlhttpRequest,
@@ -607,11 +682,13 @@ export function createUserscriptController(options = {}) {
     eventTarget = typeof window !== "undefined" ? window : globalThis,
     pageWindow = (typeof document !== "undefined" && document?.defaultView) ||
       (typeof window !== "undefined" ? window : globalThis),
+    opfsStorage = null,
     now = () => Date.now(),
     version = YOUTUBE_HELPER_VERSION,
     mediabunny = null,
     muxConfig = {},
     saveBuffer = null,
+    saveOpfsFile = null,
   } = options;
 
   let memoryVisitorCache = null;
@@ -631,26 +708,31 @@ export function createUserscriptController(options = {}) {
     return err;
   }
 
-  function ensureLocalWritableStream(rawWritable) {
-    if (!rawWritable || typeof rawWritable !== "object") return null;
-    if (
-      typeof WritableStream === "function" &&
-      rawWritable instanceof WritableStream
-    ) {
-      return rawWritable;
-    }
-    if (typeof WritableStream !== "function") {
-      return rawWritable;
+  function wrapLocalWritableStream(rawWritable) {
+    if (!rawWritable || typeof rawWritable !== "object") {
+      return { stream: null, forceAbort: async () => {} };
     }
     const hasGetWriter = typeof rawWritable.getWriter === "function";
     const hasWrite = typeof rawWritable.write === "function";
+    if (typeof WritableStream !== "function") {
+      return {
+        stream: rawWritable,
+        async forceAbort(reason) {
+          try {
+            await rawWritable.abort?.(reason);
+          } catch {
+            // Ignore
+          }
+        },
+      };
+    }
     if (!hasGetWriter && !hasWrite) {
-      return null;
+      return { stream: null, forceAbort: async () => {} };
     }
     let underlyingWriter = null;
-    return new WritableStream({
+    const stream = new WritableStream({
       start() {
-        if (hasGetWriter) {
+        if (hasGetWriter && !hasWrite) {
           underlyingWriter = rawWritable.getWriter();
         }
       },
@@ -664,6 +746,12 @@ export function createUserscriptController(options = {}) {
       async close() {
         if (underlyingWriter) {
           await underlyingWriter.close();
+          try {
+            underlyingWriter.releaseLock?.();
+          } catch {
+            // Ignore
+          }
+          underlyingWriter = null;
         } else if (typeof rawWritable.close === "function") {
           await rawWritable.close();
         }
@@ -671,11 +759,372 @@ export function createUserscriptController(options = {}) {
       async abort(reason) {
         if (underlyingWriter) {
           await underlyingWriter.abort(reason);
+          try {
+            underlyingWriter.releaseLock?.();
+          } catch {
+            // Ignore
+          }
+          underlyingWriter = null;
         } else if (typeof rawWritable.abort === "function") {
           await rawWritable.abort(reason);
         }
       },
     });
+    return {
+      stream,
+      async forceAbort(reason) {
+        try {
+          await stream.abort(reason);
+        } catch {
+          // Stream may be locked by StreamTarget or a manual writer
+        }
+        if (underlyingWriter) {
+          try {
+            await underlyingWriter.abort(reason);
+          } catch {
+            // Ignore
+          }
+          try {
+            underlyingWriter.releaseLock?.();
+          } catch {
+            // Ignore
+          }
+          underlyingWriter = null;
+        }
+        if (typeof rawWritable.abort === "function") {
+          try {
+            await rawWritable.abort(reason);
+          } catch {
+            // Ignore
+          }
+        } else if (typeof rawWritable.close === "function") {
+          try {
+            await rawWritable.close();
+          } catch {
+            // Ignore
+          }
+        }
+      },
+    };
+  }
+
+  function sanitizeOpfsTaskId(rawTaskId) {
+    if (typeof rawTaskId !== "string" && typeof rawTaskId !== "number") {
+      return "task";
+    }
+    const cleaned = String(rawTaskId)
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 64);
+    return cleaned || "task";
+  }
+
+  function resolveOpfsStorage() {
+    return (
+      opfsStorage ||
+      pageWindow?.navigator?.storage ||
+      (typeof navigator !== "undefined" ? navigator.storage : null)
+    );
+  }
+
+  async function openPickerSaveTarget({
+    cleanFilename,
+    mimeType,
+    fileDescription,
+    acceptExt,
+    cancelState,
+  }) {
+    if (typeof pageWindow?.showSaveFilePicker !== "function") {
+      return null;
+    }
+    try {
+      const fileHandle = await pageWindow.showSaveFilePicker({
+        id: YOUTUBE_FILE_PICKER_ID,
+        suggestedName: cleanFilename,
+        types: [
+          {
+            description: fileDescription,
+            accept: { [mimeType]: [acceptExt] },
+          },
+        ],
+      });
+      if (cancelState.aborted) throw makeUserCancelledError();
+      const rawWritable = await fileHandle.createWritable();
+      const wrapped = wrapLocalWritableStream(rawWritable);
+      if (!wrapped.stream) return null;
+      let finalized = false;
+      return {
+        mode: "stream_picker",
+        writable: wrapped.stream,
+        tempName: null,
+        async verifyResolvedSize() {
+          return true;
+        },
+        async finalizeAndSave() {
+          finalized = true;
+        },
+        async abortAndCleanup(reason) {
+          if (finalized) return;
+          await wrapped.forceAbort(reason);
+        },
+      };
+    } catch (pickerErr) {
+      if (
+        cancelState.aborted ||
+        pickerErr?.name === "AbortError" ||
+        pickerErr?.code === "USER_CANCELLED"
+      ) {
+        throw makeUserCancelledError();
+      }
+      return null;
+    }
+  }
+
+  async function openStreamingSaveTarget({
+    cleanFilename,
+    mimeType,
+    fileDescription,
+    acceptExt,
+    estimatedBytes,
+    taskId,
+    cancelState,
+  }) {
+    const storage = resolveOpfsStorage();
+    if (
+      storage &&
+      typeof storage.getDirectory === "function" &&
+      typeof storage.estimate === "function"
+    ) {
+      let quota = 0;
+      let usage = 0;
+      let opfsEligible = false;
+      try {
+        const est = await storage.estimate();
+        if (cancelState.aborted) throw makeUserCancelledError();
+        quota = Number(est?.quota);
+        usage = Math.max(0, Number(est?.usage ?? 0));
+        const remaining = quota - usage;
+        const required =
+          estimatedBytes > 0
+            ? Math.ceil(estimatedBytes * OPFS_QUOTA_HEADROOM_FACTOR)
+            : 64 * 1024 * 1024;
+        opfsEligible =
+          Number.isFinite(quota) && quota > 0 && remaining >= required;
+      } catch (estErr) {
+        if (
+          cancelState.aborted ||
+          estErr?.code === "USER_CANCELLED" ||
+          estErr?.name === "AbortError"
+        ) {
+          throw makeUserCancelledError();
+        }
+        opfsEligible = false;
+      }
+
+      if (opfsEligible) {
+        let opfsRoot = null;
+        const safeTask = sanitizeOpfsTaskId(taskId);
+        const tempName = `${YOUTUBE_OPFS_TEMP_PREFIX}${safeTask}-${now()}-${++opfsTempCounter}.part`;
+        activeOpfsTempNames.add(tempName);
+        try {
+          opfsRoot = await storage.getDirectory();
+          if (cancelState.aborted) throw makeUserCancelledError();
+          const fileHandle = await opfsRoot.getFileHandle(tempName, {
+            create: true,
+          });
+          if (cancelState.aborted) throw makeUserCancelledError();
+          const rawWritable = await fileHandle.createWritable();
+          const wrapped = wrapLocalWritableStream(rawWritable);
+          if (!wrapped.stream) {
+            throw new Error("OPFS writable unavailable");
+          }
+
+          let cleaned = false;
+          let streamClosedCleanly = false;
+          const cleanupImmediate = async (reason) => {
+            if (cleaned) return;
+            cleaned = true;
+            if (!streamClosedCleanly) {
+              await wrapped.forceAbort(reason);
+            }
+            try {
+              await opfsRoot.removeEntry(tempName);
+            } catch {
+              // Ignore if already removed
+            }
+            activeOpfsTempNames.delete(tempName);
+          };
+
+          if (cancelState.aborted) {
+            await cleanupImmediate();
+            throw makeUserCancelledError();
+          }
+
+          return {
+            mode: "opfs",
+            writable: wrapped.stream,
+            tempName,
+            async verifyResolvedSize(actualBytes) {
+              const remaining = quota - usage;
+              const required = Math.ceil(
+                Math.max(0, Number(actualBytes) || 0) *
+                  OPFS_QUOTA_HEADROOM_FACTOR,
+              );
+              if (remaining < required) {
+                await cleanupImmediate();
+                return false;
+              }
+              return true;
+            },
+            async finalizeAndSave() {
+              streamClosedCleanly = true;
+              if (cancelState.aborted) {
+                await cleanupImmediate();
+                throw makeUserCancelledError();
+              }
+              const file = await fileHandle.getFile();
+              if (!file || file.size === 0) {
+                await cleanupImmediate();
+                throw makeCodedError("MUX_EMPTY_OUTPUT", "输出文件为空");
+              }
+              const scaledDefaultDelayMs = Math.min(
+                180000,
+                Math.max(
+                  DEFAULT_OPFS_CLEANUP_DELAY_MS,
+                  Math.ceil(file.size / (25 * 1024 * 1024)) * 1000,
+                ),
+              );
+              const delayMs =
+                Number.isFinite(muxConfig.opfsCleanupDelayMs) &&
+                muxConfig.opfsCleanupDelayMs >= 0
+                  ? muxConfig.opfsCleanupDelayMs
+                  : scaledDefaultDelayMs;
+
+              if (typeof saveOpfsFile === "function") {
+                await saveOpfsFile(file, cleanFilename, mimeType, tempName);
+                const removeTemp = async () => {
+                  if (cleaned) return;
+                  cleaned = true;
+                  try {
+                    await opfsRoot.removeEntry(tempName);
+                  } catch {
+                    // Ignore
+                  }
+                  activeOpfsTempNames.delete(tempName);
+                };
+                if (delayMs === 0) {
+                  await removeTemp();
+                } else {
+                  const timer = setTimeout(() => {
+                    void removeTemp();
+                  }, delayMs);
+                  timer?.unref?.();
+                }
+                return;
+              }
+
+              const doc =
+                pageWindow?.document ||
+                (typeof document !== "undefined" ? document : null);
+              const URLObj = pageWindow?.URL || globalThis.URL;
+              if (
+                !doc ||
+                typeof doc.createElement !== "function" ||
+                typeof URLObj?.createObjectURL !== "function"
+              ) {
+                await cleanupImmediate();
+                throw makeCodedError(
+                  "SAVE_UNAVAILABLE",
+                  "当前环境无法触发 OPFS 文件下载",
+                );
+              }
+              const blobUrl = URLObj.createObjectURL(file);
+              try {
+                const anchor = doc.createElement("a");
+                anchor.href = blobUrl;
+                anchor.download = cleanFilename;
+                anchor.rel = "noopener";
+                anchor.style.display = "none";
+                (doc.body || doc.documentElement)?.appendChild?.(anchor);
+                anchor.click();
+                anchor.remove?.();
+              } catch (clickErr) {
+                try {
+                  URLObj.revokeObjectURL?.(blobUrl);
+                } catch {
+                  // Ignore
+                }
+                await cleanupImmediate();
+                throw clickErr;
+              }
+
+              const delayedCleanup = async () => {
+                if (cleaned) return;
+                cleaned = true;
+                try {
+                  URLObj.revokeObjectURL?.(blobUrl);
+                } catch {
+                  // Ignore
+                }
+                try {
+                  await opfsRoot.removeEntry(tempName);
+                } catch {
+                  // Ignore
+                }
+                activeOpfsTempNames.delete(tempName);
+              };
+              if (delayMs === 0) {
+                await delayedCleanup();
+              } else {
+                const timer = setTimeout(() => {
+                  void delayedCleanup();
+                }, delayMs);
+                timer?.unref?.();
+              }
+            },
+            abortAndCleanup: cleanupImmediate,
+          };
+        } catch (opfsErr) {
+          try {
+            await opfsRoot?.removeEntry?.(tempName);
+          } catch {
+            // Ignore
+          }
+          activeOpfsTempNames.delete(tempName);
+          if (
+            cancelState.aborted ||
+            opfsErr?.code === "USER_CANCELLED" ||
+            opfsErr?.name === "AbortError"
+          ) {
+            throw makeUserCancelledError();
+          }
+          // Non-abort OPFS initialization error -> fall through to showSaveFilePicker
+        }
+      }
+    }
+
+    const pickerTarget = await openPickerSaveTarget({
+      cleanFilename,
+      mimeType,
+      fileDescription,
+      acceptExt,
+      cancelState,
+    });
+    if (pickerTarget) {
+      return pickerTarget;
+    }
+
+    return {
+      mode: "memory_buffer",
+      writable: null,
+      tempName: null,
+      async verifyResolvedSize() {
+        return true;
+      },
+      async finalizeAndSave() {},
+      async abortAndCleanup() {},
+    };
   }
 
   function positiveSafeInt(val) {
@@ -861,37 +1310,18 @@ export function createUserscriptController(options = {}) {
     return sanitizePlayerApiResponse(parsed);
   }
 
-  function handleDownloadAction(requestId, payload) {
+  function runLegacyGmDownload(requestId, rawUrl, cleanFilename) {
     return new Promise((resolve, reject) => {
-      if (!payload || typeof payload !== "object") {
-        reject(new Error("下载请求参数无效"));
-        return;
-      }
-      const { url, filename } = payload;
-      if (!isValidGooglevideoPlaybackUrl(url)) {
-        reject(
-          new Error(
-            "拒绝下载：仅允许 https://*.googlevideo.com/videoplayback 地址",
-          ),
-        );
-        return;
-      }
-      const cleanName = sanitizeHelperFilename(filename);
-      if (!cleanName.ok) {
-        reject(new Error(`拒绝下载：${cleanName.error}`));
-        return;
-      }
       if (typeof gmDownload !== "function") {
         reject(new Error("GM_download 不可用"));
         return;
       }
-
-      const lowerName = cleanName.filename.toLowerCase();
+      const lowerName = cleanFilename.toLowerCase();
       const useNativeMode =
         lowerName.endsWith(".m4a") || lowerName.endsWith(".webm");
       const handle = gmDownload({
-        url: url.trim(),
-        name: cleanName.filename,
+        url: rawUrl.trim(),
+        name: cleanFilename,
         saveAs: false,
         anonymous: true,
         ...(useNativeMode ? { mode: "native" } : {}),
@@ -905,11 +1335,12 @@ export function createUserscriptController(options = {}) {
             loaded: Number.isFinite(loaded) && loaded > 0 ? loaded : 0,
             total: Number.isFinite(total) && total > 0 ? total : 0,
             percent,
+            mode: "gm_download",
           });
         },
         onload() {
           activeDownloads.delete(requestId);
-          resolve({ filename: cleanName.filename });
+          resolve({ filename: cleanFilename, mode: "gm_download" });
         },
         onerror(err) {
           activeDownloads.delete(requestId);
@@ -922,11 +1353,236 @@ export function createUserscriptController(options = {}) {
           reject(new Error("GM_download 保存超时"));
         },
       });
-
       if (handle && typeof handle.abort === "function") {
         activeDownloads.set(requestId, handle);
       }
     });
+  }
+
+  async function handleDownloadAction(requestId, payload) {
+    if (!payload || typeof payload !== "object") {
+      throw new Error("下载请求参数无效");
+    }
+    const { url, filename } = payload;
+    if (!isValidGooglevideoPlaybackUrl(url)) {
+      throw new Error(
+        "拒绝下载：仅允许 https://*.googlevideo.com/videoplayback 地址",
+      );
+    }
+    const cleanName = sanitizeHelperFilename(filename);
+    if (!cleanName.ok) {
+      throw new Error(`拒绝下载：${cleanName.error}`);
+    }
+
+    if (typeof gmXmlhttpRequest !== "function") {
+      return runLegacyGmDownload(requestId, url, cleanName.filename);
+    }
+
+    const lowerName = cleanName.filename.toLowerCase();
+    const acceptExt = lowerName.endsWith(".m4a")
+      ? ".m4a"
+      : lowerName.endsWith(".webm")
+        ? ".webm"
+        : ".mp4";
+    const mimeType =
+      acceptExt === ".m4a"
+        ? "audio/mp4"
+        : acceptExt === ".webm"
+          ? "video/webm"
+          : "video/mp4";
+    const fileDescription =
+      acceptExt === ".m4a"
+        ? "M4A Audio"
+        : acceptExt === ".webm"
+          ? "WebM Media"
+          : "MP4 Video";
+
+    const chunkSize =
+      positiveSafeInt(muxConfig.chunkSize) || DEFAULT_MUX_CHUNK_BYTES;
+    const concurrency =
+      acceptExt === ".m4a"
+        ? positiveSafeInt(muxConfig.audioConcurrency) ||
+          DEFAULT_MUX_AUDIO_CONCURRENCY
+        : positiveSafeInt(muxConfig.videoConcurrency) ||
+          DEFAULT_MUX_VIDEO_CONCURRENCY;
+    const maxRetries =
+      Number.isInteger(muxConfig.maxRetries) && muxConfig.maxRetries >= 0
+        ? muxConfig.maxRetries
+        : DEFAULT_MUX_MAX_RETRIES;
+    const retryBaseDelayMs =
+      Number.isFinite(muxConfig.retryBaseDelayMs) &&
+      muxConfig.retryBaseDelayMs >= 0
+        ? muxConfig.retryBaseDelayMs
+        : 500;
+    const chunkTimeoutMs = positiveSafeInt(muxConfig.chunkTimeoutMs) || 60000;
+    const maxBufferBytes =
+      positiveSafeInt(muxConfig.maxBufferBytes) || MAX_IN_MEMORY_MUX_BYTES;
+
+    const cancelState = {
+      aborted: false,
+      handles: new Set(),
+      abortListeners: new Set(),
+    };
+    let saveTarget = null;
+    let stream = null;
+    let streamWriter = null;
+
+    activeDownloads.set(requestId, {
+      abort() {
+        cancelState.aborted = true;
+        for (const h of Array.from(cancelState.handles)) {
+          try {
+            h?.abort?.();
+          } catch {
+            // Ignore
+          }
+        }
+        cancelState.handles.clear();
+        for (const fn of Array.from(cancelState.abortListeners)) {
+          try {
+            fn();
+          } catch {
+            // Ignore
+          }
+        }
+        cancelState.abortListeners.clear();
+      },
+    });
+
+    try {
+      const estSize = positiveSafeInt(payload.size) || extractUrlClen(url);
+      saveTarget = await openStreamingSaveTarget({
+        cleanFilename: cleanName.filename,
+        mimeType,
+        fileDescription,
+        acceptExt,
+        estimatedBytes: estSize,
+        taskId: payload.taskId || requestId,
+        cancelState,
+      });
+
+      const emitProgress = () => {
+        if (!stream || cancelState.aborted) return;
+        const total = stream.getKnownSize() || estSize;
+        const loaded = stream.getLoadedBytes();
+        const percent =
+          total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0;
+        dispatchBridgeEvent(eventTarget, YOUTUBE_HELPER_PROGRESS_EVENT, {
+          requestId,
+          loaded,
+          total,
+          percent,
+          mode: saveTarget?.mode,
+        });
+      };
+
+      stream = createChunkedGooglevideoSource(
+        url,
+        estSize,
+        {
+          chunkSize,
+          concurrency,
+          maxRetries,
+          maxCachedChunks: Math.max(2, concurrency + 1),
+          retryBaseDelayMs,
+          chunkTimeoutMs,
+          CustomSourceCtor: null,
+        },
+        cancelState,
+        emitProgress,
+      );
+
+      const totalBytes = await stream.ensureSize();
+      if (
+        saveTarget.mode === "opfs" &&
+        !(await saveTarget.verifyResolvedSize(totalBytes))
+      ) {
+        saveTarget =
+          (await openPickerSaveTarget({
+            cleanFilename: cleanName.filename,
+            mimeType,
+            fileDescription,
+            acceptExt,
+            cancelState,
+          })) || {
+            mode: "memory_buffer",
+            writable: null,
+            tempName: null,
+            async verifyResolvedSize() {
+              return true;
+            },
+            async finalizeAndSave() {},
+            async abortAndCleanup() {},
+          };
+      }
+
+      if (!saveTarget.writable && totalBytes >= maxBufferBytes) {
+        stream.clear();
+        activeDownloads.delete(requestId);
+        if (typeof gmDownload === "function") {
+          return runLegacyGmDownload(requestId, url, cleanName.filename);
+        }
+        throw makeCodedError(
+          "MUX_TOO_LARGE_FOR_MEMORY",
+          "当前环境不支持流式落盘，且文件不小于 1 GB",
+        );
+      }
+
+      const totalChunks = stream.getTotalChunks();
+      stream.schedulePrefetchFrom(0);
+
+      if (saveTarget.writable) {
+        streamWriter = saveTarget.writable.getWriter();
+        for (let idx = 0; idx < totalChunks; idx++) {
+          if (cancelState.aborted) throw makeUserCancelledError();
+          const chunk = await stream.getChunk(idx);
+          stream.schedulePrefetchFrom(idx + 1);
+          await streamWriter.write(chunk);
+          stream.evictChunk(idx);
+        }
+        await streamWriter.close();
+        try {
+          streamWriter.releaseLock?.();
+        } catch {
+          // Ignore
+        }
+        streamWriter = null;
+        await saveTarget.finalizeAndSave();
+        return { filename: cleanName.filename, mode: saveTarget.mode };
+      }
+
+      const out = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (let idx = 0; idx < totalChunks; idx++) {
+        if (cancelState.aborted) throw makeUserCancelledError();
+        const chunk = await stream.getChunk(idx);
+        stream.schedulePrefetchFrom(idx + 1);
+        out.set(chunk, offset);
+        offset += chunk.byteLength;
+        stream.evictChunk(idx);
+      }
+      await defaultSaveBufferToPage(out.buffer, cleanName.filename, mimeType);
+      return { filename: cleanName.filename, mode: "memory_buffer" };
+    } catch (err) {
+      if (streamWriter) {
+        try {
+          await streamWriter.abort?.(err);
+        } catch {
+          // Ignore
+        }
+        try {
+          streamWriter.releaseLock?.();
+        } catch {
+          // Ignore
+        }
+        streamWriter = null;
+      }
+      await saveTarget?.abortAndCleanup?.(err);
+      throw err;
+    } finally {
+      activeDownloads.delete(requestId);
+      stream?.clear();
+    }
   }
 
   function abortableSleep(ms, cancelState) {
@@ -1250,54 +1906,63 @@ export function createUserscriptController(options = {}) {
       pumpPrefetch();
     }
 
-    const customSource = new CustomSourceCtor({
-      maxCacheSize: 2 * 1024 * 1024,
-      getSize: () => ensureSize(),
-      read: async (start, end) => {
-        if (cancelState.aborted) throw makeUserCancelledError();
-        const size = await ensureSize();
-        const clampedEnd = Math.min(size, end);
-        const len = clampedEnd - start;
-        if (len <= 0) return new Uint8Array(0);
+    const customSource =
+      typeof CustomSourceCtor === "function"
+        ? new CustomSourceCtor({
+            maxCacheSize: 2 * 1024 * 1024,
+            getSize: () => ensureSize(),
+            read: async (start, end) => {
+              if (cancelState.aborted) throw makeUserCancelledError();
+              const size = await ensureSize();
+              const clampedEnd = Math.min(size, end);
+              const len = clampedEnd - start;
+              if (len <= 0) return new Uint8Array(0);
 
-        const firstChunk = Math.floor(start / chunkSize);
-        const lastChunk = Math.floor((clampedEnd - 1) / chunkSize);
+              const firstChunk = Math.floor(start / chunkSize);
+              const lastChunk = Math.floor((clampedEnd - 1) / chunkSize);
 
-        if (firstChunk === lastChunk) {
-          const chunkBytes = await getChunk(firstChunk);
-          schedulePrefetchFrom(lastChunk + 1);
-          const offset = start - firstChunk * chunkSize;
-          return chunkBytes.slice(offset, offset + len);
-        }
+              if (firstChunk === lastChunk) {
+                const chunkBytes = await getChunk(firstChunk);
+                schedulePrefetchFrom(lastChunk + 1);
+                const offset = start - firstChunk * chunkSize;
+                return chunkBytes.slice(offset, offset + len);
+              }
 
-        const needed = [];
-        for (let c = firstChunk; c <= lastChunk; c++) {
-          needed.push(getChunk(c));
-        }
-        const chunks = await Promise.all(needed);
-        schedulePrefetchFrom(lastChunk + 1);
-        const out = new Uint8Array(len);
-        let written = 0;
-        for (let i = 0; i < chunks.length; i++) {
-          const c = firstChunk + i;
-          const chunkBytes = chunks[i];
-          const chunkStart = c * chunkSize;
-          const sliceStart = Math.max(0, start - chunkStart);
-          const sliceEnd = Math.min(
-            chunkBytes.byteLength,
-            clampedEnd - chunkStart,
-          );
-          const part = chunkBytes.subarray(sliceStart, sliceEnd);
-          out.set(part, written);
-          written += part.byteLength;
-        }
-        return out;
-      },
-    });
+              const needed = [];
+              for (let c = firstChunk; c <= lastChunk; c++) {
+                needed.push(getChunk(c));
+              }
+              const chunks = await Promise.all(needed);
+              schedulePrefetchFrom(lastChunk + 1);
+              const out = new Uint8Array(len);
+              let written = 0;
+              for (let i = 0; i < chunks.length; i++) {
+                const c = firstChunk + i;
+                const chunkBytes = chunks[i];
+                const chunkStart = c * chunkSize;
+                const sliceStart = Math.max(0, start - chunkStart);
+                const sliceEnd = Math.min(
+                  chunkBytes.byteLength,
+                  clampedEnd - chunkStart,
+                );
+                const part = chunkBytes.subarray(sliceStart, sliceEnd);
+                out.set(part, written);
+                written += part.byteLength;
+              }
+              return out;
+            },
+          })
+        : null;
 
     return {
       source: customSource,
       ensureSize,
+      getTotalChunks: () => totalChunks,
+      getChunk,
+      schedulePrefetchFrom,
+      evictChunk: (idx) => {
+        cache.delete(idx);
+      },
       getKnownSize: () => resolvedSize,
       getLoadedBytes: () => loadedBytes,
       clear: () => {
@@ -1436,64 +2101,36 @@ export function createUserscriptController(options = {}) {
       },
     });
 
-    // Invoke showSaveFilePicker synchronously before the first await so transient user activation is preserved.
-    let pickerPromise = null;
-    if (typeof pageWindow?.showSaveFilePicker === "function") {
-      try {
-        const acceptMime =
-          outputContainer === "webm"
-            ? { "video/webm": [".webm"] }
-            : { "video/mp4": [".mp4"] };
-        pickerPromise = pageWindow.showSaveFilePicker({
-          suggestedName: cleanName.filename,
-          types: [
-            {
-              description:
-                outputContainer === "webm" ? "WebM Video" : "MP4 Video",
-              accept: acceptMime,
-            },
-          ],
-        });
-      } catch (syncErr) {
-        pickerPromise = Promise.reject(syncErr);
-      }
-    }
+    const mimeType = outputContainer === "webm" ? "video/webm" : "video/mp4";
+    const fileDescription =
+      outputContainer === "webm" ? "WebM Video" : "MP4 Video";
+    const acceptExt = `.${outputContainer}`;
+    const estVideo =
+      positiveSafeInt(payload.videoSize) || extractUrlClen(videoUrl);
+    const estAudio =
+      positiveSafeInt(payload.audioSize) || extractUrlClen(audioUrl);
 
-    let writable = null;
-    let writableFinalized = false;
+    let saveTarget = null;
     let vStream = null;
     let aStream = null;
     let vInput = null;
     let aInput = null;
 
     try {
-      if (pickerPromise !== null) {
-        try {
-          const fileHandle = await pickerPromise;
-          if (cancelState.aborted) throw makeUserCancelledError();
-          const rawWritable = await fileHandle.createWritable();
-          writable = ensureLocalWritableStream(rawWritable);
-          cancelState.writable = rawWritable;
-        } catch (pickerErr) {
-          if (
-            cancelState.aborted ||
-            pickerErr?.name === "AbortError" ||
-            pickerErr?.code === "USER_CANCELLED"
-          ) {
-            throw makeUserCancelledError();
-          }
-          writable = null;
-        }
-      }
+      saveTarget = await openStreamingSaveTarget({
+        cleanFilename: cleanName.filename,
+        mimeType,
+        fileDescription,
+        acceptExt,
+        estimatedBytes: estVideo + estAudio,
+        taskId: payload.taskId || requestId,
+        cancelState,
+      });
 
-      const estVideo =
-        positiveSafeInt(payload.videoSize) || extractUrlClen(videoUrl);
-      const estAudio =
-        positiveSafeInt(payload.audioSize) || extractUrlClen(audioUrl);
-      if (!writable && estVideo + estAudio >= maxBufferBytes) {
+      if (!saveTarget.writable && estVideo + estAudio >= maxBufferBytes) {
         throw makeCodedError(
           "MUX_TOO_LARGE_FOR_MEMORY",
-          "当前环境不支持流式落盘（showSaveFilePicker），且预计文件不小于 1 GB",
+          "当前环境不支持流式落盘（OPFS / showSaveFilePicker），且预计文件不小于 1 GB",
         );
       }
 
@@ -1510,6 +2147,7 @@ export function createUserscriptController(options = {}) {
           loaded,
           total,
           percent,
+          mode: saveTarget?.mode,
         });
       };
 
@@ -1548,10 +2186,35 @@ export function createUserscriptController(options = {}) {
         vStream.ensureSize(),
         aStream.ensureSize(),
       ]);
-      if (!writable && resolvedVSize + resolvedASize >= maxBufferBytes) {
+      if (
+        saveTarget.mode === "opfs" &&
+        !(await saveTarget.verifyResolvedSize(resolvedVSize + resolvedASize))
+      ) {
+        saveTarget =
+          (await openPickerSaveTarget({
+            cleanFilename: cleanName.filename,
+            mimeType,
+            fileDescription,
+            acceptExt,
+            cancelState,
+          })) || {
+            mode: "memory_buffer",
+            writable: null,
+            tempName: null,
+            async verifyResolvedSize() {
+              return true;
+            },
+            async finalizeAndSave() {},
+            async abortAndCleanup() {},
+          };
+      }
+      if (
+        !saveTarget.writable &&
+        resolvedVSize + resolvedASize >= maxBufferBytes
+      ) {
         throw makeCodedError(
           "MUX_TOO_LARGE_FOR_MEMORY",
-          "当前环境不支持流式落盘（showSaveFilePicker），且文件不小于 1 GB",
+          "当前环境不支持流式落盘（OPFS / showSaveFilePicker），且文件不小于 1 GB",
         );
       }
 
@@ -1593,8 +2256,8 @@ export function createUserscriptController(options = {}) {
         outputContainer === "webm"
           ? new mediabunny.WebMOutputFormat()
           : new mediabunny.Mp4OutputFormat({ fastStart: false });
-      const target = writable
-        ? new mediabunny.StreamTarget(writable, {
+      const target = saveTarget.writable
+        ? new mediabunny.StreamTarget(saveTarget.writable, {
             chunked: true,
             chunkSize: 8 * 1024 * 1024,
           })
@@ -1646,9 +2309,10 @@ export function createUserscriptController(options = {}) {
       vOut.close();
       aOut.close();
       await output.finalize();
-      writableFinalized = true;
 
-      if (!writable) {
+      if (saveTarget.writable) {
+        await saveTarget.finalizeAndSave();
+      } else {
         const outBuf = target.buffer;
         if (!outBuf || outBuf.byteLength === 0) {
           throw makeCodedError("MUX_EMPTY_OUTPUT", "合流输出为空");
@@ -1659,23 +2323,15 @@ export function createUserscriptController(options = {}) {
             "内存合流输出不小于 1 GB，已中止",
           );
         }
-        const mimeType =
-          outputContainer === "webm" ? "video/webm" : "video/mp4";
         await defaultSaveBufferToPage(outBuf, cleanName.filename, mimeType);
       }
 
       return {
         filename: cleanName.filename,
-        mode: writable ? "stream_picker" : "memory_buffer",
+        mode: saveTarget.mode,
       };
     } catch (err) {
-      if (writable && !writableFinalized) {
-        try {
-          await writable.abort?.();
-        } catch {
-          // Ignore stream abort error
-        }
-      }
+      await saveTarget?.abortAndCleanup?.(err);
       throw err;
     } finally {
       activeDownloads.delete(requestId);
@@ -1778,6 +2434,10 @@ export function createUserscriptController(options = {}) {
   }
 
   function mount() {
+    void cleanupLeftoverYouTubeOpfsTempFiles({
+      storage: resolveOpfsStorage(),
+      pageWindow,
+    }).catch(() => {});
     if (eventTarget && typeof eventTarget.addEventListener === "function") {
       eventTarget.addEventListener(
         YOUTUBE_HELPER_REQUEST_EVENT,
@@ -1955,7 +2615,12 @@ export async function requestYouTubePlayerViaHelper(payload, options = {}) {
 export async function downloadViaYouTubeHelper(payload, options = {}) {
   return sendHelperRequest(
     "download",
-    { url: payload.url, filename: payload.filename },
+    {
+      url: payload.url,
+      filename: payload.filename,
+      size: payload.size,
+      taskId: payload.taskId,
+    },
     {
       timeoutMs: 0,
       onProgress: payload.onProgress,
@@ -1975,6 +2640,7 @@ export async function muxDownloadViaYouTubeHelper(payload, options = {}) {
       audioSize: payload.audioSize,
       filename: payload.filename,
       outputContainer: payload.outputContainer,
+      taskId: payload.taskId,
     },
     {
       timeoutMs: 0,

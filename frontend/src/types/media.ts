@@ -269,6 +269,9 @@ export interface DownloadTask {
   refreshAvailable?: boolean;
   /** Reason displayed on the card when in-browser muxing falls back to separate track downloads. */
   fallbackReason?: string | null;
+  /** Actual save path identifier and human-readable label displayed on the task card. */
+  savePath?: string;
+  savePathLabel?: string;
   error: string | null;
   statusText: string;
   show: boolean;

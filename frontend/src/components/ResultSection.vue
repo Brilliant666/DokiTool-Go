@@ -24,6 +24,7 @@ const props = defineProps({
   locale: String,
   selection: Object,
   isDownloading: Boolean,
+  needsManualHelperRefresh: Boolean,
   resolvingIds: Object,
   formatNumber: Function,
   formatDuration: Function,
@@ -53,6 +54,8 @@ const emit = defineEmits([
   "download-selected-zip",
   "download-all-zip",
   "refresh-item",
+  "install-youtube-helper",
+  "refresh-youtube-helper-page",
 ]);
 const context = { apiOrigin: apiConfig.baseUrl };
 const urlOf = (source) => (source ? sourceUrl(source, context) : "");
@@ -73,8 +76,18 @@ const isYouTubeHelperBlocked = computed(
 const isYouTubeHelperReady = computed(
   () => youtubeHelper.value?.status === "ready",
 );
+const isYouTubeHelperInstallRequired = computed(
+  () =>
+    youtubeHelper.value?.status === "missing" ||
+    youtubeHelper.value?.status === "outdated",
+);
 const youtubeHelperScriptUrl = computed(
   () => youtubeHelper.value?.script_url || "/helper/dokitool-youtube.user.js",
+);
+const isClientMounted = ref(false);
+const ytHelperModalDismissed = ref(false);
+const ytHelperModalOpen = computed(
+  () => isYouTubeHelperInstallRequired.value && !ytHelperModalDismissed.value,
 );
 const activeVideoUrl = computed(() =>
   isYouTubeHelperBlocked.value
@@ -93,17 +106,29 @@ const activeVariant = computed(() =>
       : null,
 );
 const metadata = computed(() => activeVariant.value?.metadata || {});
+const isYouTubeAudioOnlyVariant = (variant) =>
+  props.resultData?.platform === "youtube" &&
+  variant?.metadata?.has_audio === true &&
+  !variant?.metadata?.video_codec &&
+  !variant?.metadata?.width &&
+  !variant?.metadata?.height;
 const isActiveYouTubeSplitVideo = computed(
   () =>
     props.resultData?.platform === "youtube" &&
     currentItem.value?.type === "video" &&
     activeVariant.value?.metadata?.has_audio === false,
 );
+const isActiveYouTubeAudioOnly = computed(() =>
+  isYouTubeAudioOnlyVariant(activeVariant.value),
+);
 const isYouTubeSplitOption = (option) =>
   props.resultData?.platform === "youtube" &&
   currentItem.value?.type === "video" &&
   option?.downloadTarget?.kind === "file" &&
   option?.variant?.metadata?.has_audio === false;
+const isYouTubeAudioOnlyOption = (option) =>
+  option?.downloadTarget?.kind === "file" &&
+  isYouTubeAudioOnlyVariant(option?.variant);
 const hasVideo = computed(
   () =>
     currentItem.value && ["video", "audio"].includes(currentItem.value.type),
@@ -219,6 +244,66 @@ const imageUrl = (item) => {
   const selected = props.selection?.selectionFor(item.id);
   const result = getDownloadTarget(item, selected, context);
   return result.kind === "file" ? result.url : "";
+};
+const galleryEl = ref(null);
+const loadedImageDims = ref({});
+const declaredImageDimensions = (item) => {
+  if (!readyItem(item)) return null;
+  const selected = props.selection?.selectionFor(item.id);
+  const result = getDownloadTarget(item, selected, context);
+  const meta =
+    (result && "variant" in result ? result.variant?.metadata : null) ||
+    item.variants?.find((v) => readyVariant(v))?.metadata ||
+    null;
+  const width = Number(meta?.width);
+  const height = Number(meta?.height);
+  return Number.isFinite(width) &&
+    width > 0 &&
+    Number.isFinite(height) &&
+    height > 0
+    ? { width, height }
+    : null;
+};
+const effectiveImageDimensions = (item) =>
+  declaredImageDimensions(item) || loadedImageDims.value[item.id] || null;
+const singleImageItemStyle = (item) => {
+  if (imageItems.value.length !== 1) return undefined;
+  const dims = effectiveImageDimensions(item);
+  return {
+    "--rs-single-img-ratio": dims
+      ? `${dims.width} / ${dims.height}`
+      : "4 / 3",
+  };
+};
+const onGalleryImageLoad = (event, itemId) => {
+  const img = event?.currentTarget || event?.target;
+  const width = Number(img?.naturalWidth);
+  const height = Number(img?.naturalHeight);
+  if (
+    itemId &&
+    Number.isFinite(width) &&
+    width > 0 &&
+    Number.isFinite(height) &&
+    height > 0
+  ) {
+    const prev = loadedImageDims.value[itemId];
+    if (!prev || prev.width !== width || prev.height !== height) {
+      loadedImageDims.value = {
+        ...loadedImageDims.value,
+        [itemId]: { width, height },
+      };
+    }
+  }
+};
+const syncCachedGalleryImageDimensions = () => {
+  const imgs = galleryEl.value?.querySelectorAll?.("img[data-gallery-item-id]");
+  if (!imgs) return;
+  imgs.forEach((img) => {
+    if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      const id = img.getAttribute("data-gallery-item-id");
+      if (id) onGalleryImageLoad({ currentTarget: img }, id);
+    }
+  });
 };
 const liveVariant = (item) => {
   if (!readyItem(item)) return null;
@@ -433,15 +518,28 @@ const copyToClipboard = async (text) => {
     emit("copy-url", text);
   }
 };
+const syncBodyScrollLock = () => {
+  if (typeof document === "undefined" || !document.body) return;
+  document.body.style.overflow =
+    imageModalOpen.value || ytHelperModalOpen.value ? "hidden" : "";
+};
+const closeYtHelperModal = () => {
+  ytHelperModalDismissed.value = true;
+  syncBodyScrollLock();
+};
+const openYtHelperModal = () => {
+  ytHelperModalDismissed.value = false;
+  syncBodyScrollLock();
+};
 const openImageModal = (index) => {
   activeImageIndex.value = index;
   imageModalOpen.value = true;
   props.selection.selectItem(imageItems.value[index].id);
-  document.body.style.overflow = "hidden";
+  syncBodyScrollLock();
 };
 const closeImageModal = () => {
   imageModalOpen.value = false;
-  document.body.style.overflow = "";
+  syncBodyScrollLock();
 };
 const nextImage = () => {
   activeImageIndex.value =
@@ -455,6 +553,10 @@ const prevImage = () => {
   props.selection.selectItem(imageItems.value[activeImageIndex.value].id);
 };
 const handleKeydown = (event) => {
+  if (event.key === "Escape" && ytHelperModalOpen.value) {
+    closeYtHelperModal();
+    return;
+  }
   if (!imageModalOpen.value) return;
   if (event.key === "Escape") closeImageModal();
   if (event.key === "ArrowRight") nextImage();
@@ -465,13 +567,31 @@ watch(
   () => {
     activeImageIndex.value = 0;
     activeLiveIndex.value = 0;
+    loadedImageDims.value = {};
+    ytHelperModalDismissed.value = false;
     closeImageModal();
+    nextTick(syncCachedGalleryImageDimensions);
   },
 );
-onMounted(() => window.addEventListener("keydown", handleKeydown));
+watch(
+  () => youtubeHelper.value?.status,
+  () => {
+    ytHelperModalDismissed.value = false;
+    syncBodyScrollLock();
+  },
+);
+watch(ytHelperModalOpen, syncBodyScrollLock);
+onMounted(() => {
+  isClientMounted.value = true;
+  syncBodyScrollLock();
+  syncCachedGalleryImageDimensions();
+  window.addEventListener("keydown", handleKeydown);
+});
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeydown);
-  document.body.style.overflow = "";
+  if (typeof document !== "undefined" && document.body) {
+    document.body.style.overflow = "";
+  }
   clearTimeout(copyTimer);
 });
 const infoColumnEl = ref(null),
@@ -537,7 +657,7 @@ const content = {
     openOriginal: "打开原作品",
     downloadSingle: "下载视频",
     downloadMux: "合并保存",
-    downloadSeparate: "分开保存",
+    downloadAudioOnly: "仅音频",
     downloadLive: "下载实况",
     downloadAll: "下载全部",
     downloadSelected: "下载选中",
@@ -610,7 +730,7 @@ const content = {
     openOriginal: "Open original post",
     downloadSingle: "Download Video",
     downloadMux: "Merge & Save",
-    downloadSeparate: "Save Separately",
+    downloadAudioOnly: "Audio Only",
     downloadLive: "Download Live",
     downloadAll: "Download All",
     downloadSelected: "Download Selected",
@@ -885,67 +1005,13 @@ onUnmounted(() => {
       </p>
     </div>
     <div
-      v-else-if="
-        youtubeHelper?.status === 'missing' ||
-        youtubeHelper?.status === 'outdated'
-      "
-      class="rs-yt-helper-card"
-      role="region"
-      aria-label="YouTube 下载助手安装说明"
-    >
-      <div class="rs-yt-helper-card-hd">
-        <AppIcon class="fas fa-download" />
-        <span>{{
-          youtubeHelper.status === "outdated"
-            ? `YouTube 下载助手脚本需要更新（当前 v${youtubeHelper.version || "未知"}，要求 v${youtubeHelper.min_version || "1.0.0"}+）`
-            : "需要安装 YouTube 下载助手脚本"
-        }}</span>
-      </div>
-      <p class="rs-yt-helper-card-intro">
-        YouTube 媒体直链绑定请求方网络出口 IP，本站不再提供绑定服务器 IP 的下载链接。请按以下步骤在浏览器中安装并启用用户脚本：
-      </p>
-      <ol class="rs-yt-helper-steps">
-        <li>
-          <strong>安装脚本管理器扩展：</strong>Chrome / Edge 请安装
-          <strong>Tampermonkey（篡改猴）</strong>，Firefox 请安装
-          <strong>Violentmonkey（暴力猴）</strong>。
-        </li>
-        <li>
-          <strong>在 Chrome 中打开「允许用户脚本」：</strong>在 Chrome / Edge
-          地址栏打开 <code>chrome://extensions</code>，点击 Tampermonkey 的「详情」，开启<strong>「允许用户脚本」</strong>（Allow User Scripts）开关（或开启右上角开发者模式）。
-        </li>
-        <li>
-          <strong>{{
-            youtubeHelper.status === "outdated"
-              ? "更新本站助手脚本："
-              : "安装本站助手脚本："
-          }}</strong>点击下方按钮打开脚本地址完成安装或更新，随后刷新本页并重新点击「开始解析」。
-        </li>
-      </ol>
-      <div class="rs-yt-helper-actions">
-        <a
-          :href="youtubeHelperScriptUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="rs-btn rs-btn--primary rs-yt-helper-install-link"
-        >
-          <AppIcon class="fas fa-download" />
-          <span>{{
-            youtubeHelper.status === "outdated"
-              ? "更新 YouTube 助手脚本 (/helper/dokitool-youtube.user.js)"
-              : "安装 YouTube 助手脚本 (/helper/dokitool-youtube.user.js)"
-          }}</span>
-        </a>
-      </div>
-    </div>
-    <div
       v-else-if="isYouTubeHelperReady"
       class="rs-yt-helper-notice"
       role="status"
     >
       <AppIcon class="fas fa-info-circle" />
       <span>
-        YouTube 助手已就绪（v{{ youtubeHelper.version }}）：360p 音画合一由浏览器原生附件直下；高画质支持浏览器内无损「合并保存」与音视频「分开保存」，受 2 倍码率限速，预计耗时较长。
+        YouTube 助手已就绪（v{{ youtubeHelper.version }}）：高画质默认分块并发无损「合并保存」至浏览器默认下载目录，也支持单独保存「仅音频」；360p 音画合一由浏览器原生直下。
       </span>
     </div>
     <div
@@ -1011,6 +1077,18 @@ onUnmounted(() => {
               >
                 {{ t(locale, "selectQuality") }}</button
               ><button
+                v-if="
+                  isYouTubeHelperInstallRequired &&
+                  ytHelperModalDismissed &&
+                  !isResolving
+                "
+                type="button"
+                data-yt-helper-reopen
+                class="rs-btn rs-btn--ghost"
+                @click="openYtHelperModal"
+              >
+                {{ locale === "en" ? "Install Helper" : "查看安装说明" }}</button
+              ><button
                 v-if="currentItem.resolve_url && !isResolving"
                 class="rs-btn rs-btn--ghost"
                 @click="emit('refresh-item', currentItem)"
@@ -1024,6 +1102,9 @@ onUnmounted(() => {
               @click="emit('download-main')"
               class="rs-btn rs-btn--primary"
               :data-youtube-mux-save="isActiveYouTubeSplitVideo || undefined"
+              :data-youtube-audio-only-save="
+                isActiveYouTubeAudioOnly || undefined
+              "
               :disabled="
                 isYouTubeHelperBlocked ||
                 isResolving ||
@@ -1035,25 +1116,9 @@ onUnmounted(() => {
               <AppIcon class="fas fa-download" /><span>{{
                 isActiveYouTubeSplitVideo
                   ? t(locale, "downloadMux")
-                  : t(locale, "downloadSingle")
-              }}</span>
-            </button>
-            <button
-              v-if="isActiveYouTubeSplitVideo"
-              type="button"
-              data-youtube-separate-save
-              @click="emit('download-separate')"
-              class="rs-btn rs-btn--ghost"
-              :disabled="
-                isYouTubeHelperBlocked ||
-                isResolving ||
-                target?.kind === 'unsupported' ||
-                target?.kind === 'unavailable' ||
-                target?.kind === 'invalid'
-              "
-            >
-              <AppIcon class="fas fa-layer-group" /><span>{{
-                t(locale, "downloadSeparate")
+                  : isActiveYouTubeAudioOnly
+                    ? t(locale, "downloadAudioOnly")
+                    : t(locale, "downloadSingle")
               }}</span>
             </button>
             <button
@@ -1136,11 +1201,16 @@ onUnmounted(() => {
           </div>
 
           <div
+            ref="galleryEl"
             class="rs-gallery"
             :class="{
               'rs-gallery--1': imageItems.length === 1,
-              'rs-gallery--2': imageItems.length === 2,
-              'rs-gallery--3': imageItems.length >= 3 && imageItems.length <= 6,
+              'rs-gallery--2':
+                imageItems.length === 2 || imageItems.length === 4,
+              'rs-gallery--3':
+                imageItems.length === 3 ||
+                imageItems.length === 5 ||
+                imageItems.length === 6,
               'rs-gallery--4': imageItems.length > 6,
             }"
           >
@@ -1149,13 +1219,19 @@ onUnmounted(() => {
               :key="item.id"
               @click="openImageModal(idx)"
               class="rs-gallery-item"
+              :style="singleImageItemStyle(item)"
+              :data-gallery-single="imageItems.length === 1 ? 'true' : undefined"
               :aria-label="`${t(locale, 'preview')} ${idx + 1}`"
             >
               <img
                 :src="imageUrl(item)"
+                :data-gallery-item-id="item.id"
+                :width="declaredImageDimensions(item)?.width || undefined"
+                :height="declaredImageDimensions(item)?.height || undefined"
                 class="rs-gallery-img"
                 :alt="`${t(locale, 'imagesTitle')} ${idx + 1}`"
                 loading="lazy"
+                @load="onGalleryImageLoad($event, item.id)"
               />
               <div class="rs-gallery-mask">
                 <AppIcon class="fas fa-search-plus"></AppIcon>
@@ -1496,12 +1572,21 @@ onUnmounted(() => {
                   </div>
                 </button>
                 <div
-                  v-if="isYouTubeSplitOption(option)"
+                  v-if="
+                    isYouTubeSplitOption(option) ||
+                    isYouTubeAudioOnlyOption(option)
+                  "
                   class="rs-backup-split-actions"
                 >
                   <button
                     type="button"
                     class="rs-btn rs-btn--primary rs-btn--sm"
+                    :data-youtube-mux-save="
+                      isYouTubeSplitOption(option) || undefined
+                    "
+                    :data-youtube-audio-only-save="
+                      isYouTubeAudioOnlyOption(option) || undefined
+                    "
                     :disabled="isYouTubeHelperBlocked || isResolving"
                     @click="
                       selectQuality(option);
@@ -1514,25 +1599,9 @@ onUnmounted(() => {
                     "
                   >
                     <AppIcon class="fas fa-download" /><span>{{
-                      t(locale, "downloadMux")
-                    }}</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="rs-btn rs-btn--ghost rs-btn--sm"
-                    :disabled="isYouTubeHelperBlocked || isResolving"
-                    @click="
-                      selectQuality(option);
-                      emit('download-separate', {
-                        variant_id: option.variant.id,
-                        ...(option.source?.id
-                          ? { source_id: option.source.id }
-                          : {}),
-                      });
-                    "
-                  >
-                    <AppIcon class="fas fa-layer-group" /><span>{{
-                      t(locale, "downloadSeparate")
+                      isYouTubeAudioOnlyOption(option)
+                        ? t(locale, "downloadAudioOnly")
+                        : t(locale, "downloadMux")
                     }}</span>
                   </button>
                 </div>
@@ -1656,6 +1725,88 @@ onUnmounted(() => {
           <div class="rs-copy-toast-content">
             <div class="rs-copy-toast-title">{{ t(locale, "copied") }}</div>
             <div class="rs-copy-toast-text">{{ copyToastText }}</div>
+          </div>
+        </div></Transition
+      ></Teleport
+    >
+    <Teleport to="body" :disabled="!isClientMounted"
+      ><Transition name="rs-modal"
+        ><div
+          v-if="ytHelperModalOpen"
+          data-yt-helper-modal
+          class="rs-yt-modal-backdrop"
+          @click.self="closeYtHelperModal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="YouTube 下载助手安装说明"
+        >
+          <div class="rs-yt-modal-dialog">
+            <div class="rs-yt-helper-card-hd">
+              <div class="rs-yt-helper-card-hd-main">
+                <AppIcon class="fas fa-download" />
+                <span>{{
+                  youtubeHelper.status === "outdated"
+                    ? `YouTube 下载助手脚本需要更新（当前 v${youtubeHelper.version || "未知"}，要求 v${youtubeHelper.min_version || "1.3.0"}+）`
+                    : "需要安装 YouTube 下载助手脚本"
+                }}</span>
+              </div>
+              <button
+                type="button"
+                data-yt-helper-modal-close
+                class="rs-yt-modal-close"
+                :aria-label="t(locale, 'close')"
+                @click="closeYtHelperModal"
+              >
+                <AppIcon class="fas fa-times" />
+              </button>
+            </div>
+            <p class="rs-yt-helper-card-intro">
+              YouTube 媒体直链绑定请求方网络出口 IP，本站不再提供绑定服务器 IP 的下载链接。请按以下步骤在浏览器中安装并启用用户脚本：
+            </p>
+            <ol class="rs-yt-helper-steps">
+              <li>
+                <strong>安装脚本管理器扩展：</strong>Chrome / Edge 请安装
+                <strong>Tampermonkey（篡改猴）</strong>，Firefox 请安装
+                <strong>Violentmonkey（暴力猴）</strong>。
+              </li>
+              <li>
+                <strong>在 Chrome 中打开「允许用户脚本」：</strong>在 Chrome / Edge
+                地址栏打开 <code>chrome://extensions</code>，点击 Tampermonkey 的「详情」，开启<strong>「允许用户脚本」</strong>（Allow User Scripts）开关（或开启右上角开发者模式）。
+              </li>
+              <li>
+                <strong>{{
+                  youtubeHelper.status === "outdated"
+                    ? "更新本站助手脚本："
+                    : "安装本站助手脚本："
+                }}</strong>点击下方按钮打开脚本地址完成安装或更新；安装完成后切回本标签页将自动识别并重新解析。
+              </li>
+            </ol>
+            <div class="rs-yt-helper-actions">
+              <a
+                :href="youtubeHelperScriptUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="rs-btn rs-btn--primary rs-yt-helper-install-link"
+                @click="emit('install-youtube-helper')"
+              >
+                <AppIcon class="fas fa-download" />
+                <span>{{
+                  youtubeHelper.status === "outdated"
+                    ? "更新 YouTube 助手脚本 (/helper/dokitool-youtube.user.js)"
+                    : "安装 YouTube 助手脚本 (/helper/dokitool-youtube.user.js)"
+                }}</span>
+              </a>
+              <button
+                v-if="needsManualHelperRefresh"
+                type="button"
+                data-yt-helper-manual-refresh
+                class="rs-btn rs-btn--ghost rs-yt-helper-refresh-btn"
+                @click="emit('refresh-youtube-helper-page')"
+              >
+                <AppIcon class="fas fa-redo" />
+                <span>{{ locale === "en" ? "Refresh Page" : "刷新页面" }}</span>
+              </button>
+            </div>
           </div>
         </div></Transition
       ></Teleport
@@ -2201,13 +2352,20 @@ onUnmounted(() => {
   overflow: hidden;
   aspect-ratio: 4/3;
   cursor: pointer;
-  border: none;
+  border: 1px solid var(--c-border);
   padding: 0;
   background: var(--c-bg-3);
   transition: transform var(--t-base), box-shadow var(--t-base);
 }
+.rs-gallery--1 .rs-gallery-item {
+  width: 100%;
+  aspect-ratio: var(--rs-single-img-ratio, 4/3);
+  max-height: 70vh;
+  max-height: 70dvh;
+  transition: aspect-ratio var(--t-base), transform var(--t-base), box-shadow var(--t-base);
+}
 .rs-gallery-item:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   box-shadow: var(--sh-xl);
 }
 .rs-gallery-item:focus-visible {
@@ -2217,11 +2375,8 @@ onUnmounted(() => {
 .rs-gallery-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: transform var(--t-slow);
-}
-.rs-gallery-item:hover .rs-gallery-img {
-  transform: scale(1.07);
+  display: block;
+  object-fit: contain;
 }
 .rs-gallery-mask {
   position: absolute;
@@ -3355,7 +3510,6 @@ onUnmounted(() => {
 }
 
 /* Dark Mode：复制 Toast 随 .rs 内 token 自动翻转，无需单独覆盖 */
-.rs-yt-helper-card,
 .rs-yt-helper-alert,
 .rs-yt-helper-notice {
   margin-bottom: 1.25rem;
@@ -3383,42 +3537,150 @@ onUnmounted(() => {
   color: var(--c-fg-2);
   line-height: 1.6;
 }
-.rs-yt-helper-card-hd {
+.rs-yt-modal-backdrop {
+  --ytm-bg: #ffffff;
+  --ytm-bg-subtle: #f1f5f9;
+  --ytm-fg: #0f172a;
+  --ytm-fg-2: #475569;
+  --ytm-border: #e2e8f0;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+.dark .rs-yt-modal-backdrop {
+  --ytm-bg: #1e293b;
+  --ytm-bg-subtle: #334155;
+  --ytm-fg: #f1f5f9;
+  --ytm-fg-2: #cbd5e1;
+  --ytm-border: #334155;
+}
+.rs-yt-modal-dialog {
+  width: 100%;
+  max-width: 34rem;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  padding: 1.25rem 1.375rem;
+  border-radius: 1.25rem;
+  background: var(--ytm-bg);
+  color: var(--ytm-fg);
+  border: 1px solid var(--ytm-border);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28);
+}
+.rs-yt-helper-card-hd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
   font-size: 1rem;
   font-weight: 700;
-  color: var(--c-fg);
-  margin-bottom: 0.5rem;
+  color: var(--ytm-fg);
+  margin-bottom: 0.625rem;
+}
+.rs-yt-helper-card-hd-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+  line-height: 1.45;
+}
+.rs-yt-helper-card-hd-main :deep(svg) {
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+  color: #6366f1;
+}
+.rs-yt-modal-close {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  border: 1px solid var(--ytm-border);
+  background: var(--ytm-bg-subtle);
+  color: var(--ytm-fg-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 150ms ease, color 150ms ease;
+}
+.rs-yt-modal-close:hover {
+  color: var(--ytm-fg);
 }
 .rs-yt-helper-card-intro {
   margin: 0 0 0.75rem;
   font-size: 0.875rem;
-  color: var(--c-fg-2);
+  color: var(--ytm-fg-2);
   line-height: 1.6;
 }
 .rs-yt-helper-steps {
   margin: 0 0 1rem;
   padding-left: 1.25rem;
   font-size: 0.875rem;
-  color: var(--c-fg-2);
-  line-height: 1.75;
+  color: var(--ytm-fg-2);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 .rs-yt-helper-steps code {
   padding: 0.125rem 0.375rem;
-  border-radius: var(--r-sm);
-  background: var(--c-bg-3);
+  border-radius: 0.375rem;
+  background: var(--ytm-bg-subtle);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8125rem;
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 .rs-yt-helper-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.625rem;
+}
+.rs-yt-modal-dialog .rs-btn {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-align: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: auto;
 }
 .rs-yt-helper-install-link {
   text-decoration: none;
+  flex: 1 1 auto;
+}
+.rs-yt-helper-refresh-btn {
+  background: var(--ytm-bg-subtle);
+  color: var(--ytm-fg);
+  border: 1px solid var(--ytm-border);
+}
+@media (max-width: 480px) {
+  .rs-yt-modal-backdrop {
+    padding: 0.75rem;
+  }
+  .rs-yt-modal-dialog {
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+  .rs-yt-helper-card-hd {
+    font-size: 0.9375rem;
+  }
+  .rs-yt-helper-card-intro,
+  .rs-yt-helper-steps {
+    font-size: 0.8125rem;
+  }
+  .rs-yt-helper-actions .rs-btn {
+    width: 100%;
+  }
 }
 .rs-yt-helper-notice {
   display: flex;

@@ -2677,3 +2677,133 @@ test('zuiyou and pipigx manual-entry filenames use .mp4 while genuinely unknown 
     globalThis.__uiDownloadManager = prevManager;
   }
 });
+
+test('homepage tabs show 9 popular platforms in exact order by default, fold remaining platforms under 更多平台 (N), and retain full list in prerendered HTML', async () => {
+  assert.deepEqual([...platforms.POPULAR_PLATFORM_IDS], [
+    'douyin', 'kuaishou', 'bilibili', 'xiaohongshu', 'weibo', 'x', 'youtube', 'instagram', 'facebook',
+  ]);
+  const snapshotCopy = platforms.supportedPlatforms.value;
+  try {
+    platforms.supportedPlatforms.value = platforms.readPlatformCatalog({
+      schema_version: '1.0',
+      code: 'OK',
+      data: {
+        platforms: [
+          ...snapshotCopy,
+          { id: 'x', name: 'X', site_url: 'https://x.com/', icon: 'x', capabilities: ['video', 'image'] },
+          { id: 'youtube', name: 'YouTube', site_url: 'https://www.youtube.com/', icon: 'youtube', capabilities: ['video'] },
+          { id: 'instagram', name: 'Instagram', site_url: 'https://www.instagram.com/', icon: 'instagram', capabilities: ['video', 'image'] },
+          { id: 'facebook', name: 'Facebook', site_url: 'https://www.facebook.com/', icon: 'facebook', capabilities: ['video'] },
+          { id: 'tumblr', name: 'Tumblr', site_url: 'https://www.tumblr.com/', icon: 'tumblr', capabilities: ['video'] },
+          { id: 'dailymotion', name: 'Dailymotion', site_url: 'https://www.dailymotion.com/', icon: 'dailymotion', capabilities: ['video'] },
+          { id: 'threads', name: 'Threads', site_url: 'https://www.threads.net/', icon: 'threads', capabilities: ['video'] },
+        ],
+      },
+    });
+    const grouped = platforms.groupedPlatformTabs('zh-CN');
+    assert.deepEqual(grouped.popularTabs.map((t) => t.label), [
+      '抖音', '快手', 'B站', '小红书', '微博', 'X', 'YouTube', 'Instagram', 'Facebook',
+    ]);
+    assert.deepEqual(grouped.moreTabs.map((t) => t.label), [
+      '今日头条', '皮皮虾', '皮皮搞笑', '最右', 'Tumblr', 'Dailymotion', 'Threads',
+    ]);
+
+    const ssrHtml = await renderToString(
+      createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all' }) }),
+    );
+    assert.ok(ssrHtml.includes('更多平台 (7)'));
+    for (const label of ['抖音', '快手', 'B站', '小红书', '微博', 'X', 'YouTube', 'Instagram', 'Facebook']) {
+      assert.ok(ssrHtml.includes(label), `popular platform ${label} must be in SSR HTML`);
+    }
+    for (const folded of ['今日头条', '皮皮虾', '皮皮搞笑', '最右', 'Tumblr', 'Dailymotion', 'Threads']) {
+      assert.ok(ssrHtml.includes(folded), `folded platform ${folded} must remain in prerendered HTML`);
+    }
+    assert.match(ssrHtml, /data-platform-tab="toutiao"[^>]*style="display:none;"/);
+  } finally {
+    platforms.supportedPlatforms.value = snapshotCopy;
+  }
+});
+
+test('image parse results preserve original aspect ratio for single images, use contain grid for multi-image albums, and update aspect ratio smoothly on @load when metadata dimensions are absent', async () => {
+  const singlePortrait = {
+    platform: 'xiaohongshu',
+    title: '单张竖图',
+    default_item_id: 'img-1',
+    items: [
+      {
+        id: 'img-1',
+        type: 'image',
+        state: 'ready',
+        default: { variant_id: 'v0', source_id: 's0', url: 'https://media.test/portrait.jpg' },
+        variants: [
+          {
+            id: 'v0',
+            metadata: { width: 1080, height: 1620, extension: 'jpg' },
+            delivery: { kind: 'file', sources: [{ id: 's0', url: 'https://media.test/portrait.jpg' }] },
+          },
+        ],
+      },
+    ],
+  };
+  const singleHtml = await renderToString(createSSRApp({ render: () => h(ResultSection, resultProps(singlePortrait)) }));
+  assert.match(singleHtml, /rs-gallery--1/);
+  assert.match(singleHtml, /data-gallery-single="true"/);
+  assert.match(singleHtml, /--rs-single-img-ratio:1080 \/ 1620/);
+
+  const multiMixed = {
+    platform: 'x',
+    title: '四宫格混合比例',
+    default_item_id: 'img-1',
+    items: [1, 2, 3, 4].map((idx) => ({
+      id: `img-${idx}`,
+      type: 'image',
+      state: 'ready',
+      default: { variant_id: 'v0', source_id: 's0', url: `https://media.test/mix-${idx}.jpg` },
+      variants: [
+        {
+          id: 'v0',
+          metadata: { extension: 'jpg' },
+          delivery: { kind: 'file', sources: [{ id: 's0', url: `https://media.test/mix-${idx}.jpg` }] },
+        },
+      ],
+    })),
+  };
+  const multiHtml = await renderToString(createSSRApp({ render: () => h(ResultSection, resultProps(multiMixed)) }));
+  assert.match(multiHtml, /rs-gallery--2/);
+  assert.doesNotMatch(multiHtml, /data-gallery-single/);
+
+  // Single image without metadata width/height starts with 4 / 3 placeholder and updates on @load
+  const unknownDimSingle = {
+    platform: 'instagram',
+    title: '无元数据尺寸单图',
+    default_item_id: 'img-unknown',
+    items: [
+      {
+        id: 'img-unknown',
+        type: 'image',
+        state: 'ready',
+        default: { variant_id: 'v0', source_id: 's0', url: 'https://media.test/no-meta.jpg' },
+        variants: [
+          {
+            id: 'v0',
+            metadata: { extension: 'jpg' },
+            delivery: { kind: 'file', sources: [{ id: 's0', url: 'https://media.test/no-meta.jpg' }] },
+          },
+        ],
+      },
+    ],
+  };
+  const view = await mountResultPlayer(unknownDimSingle);
+  try {
+    const findNode = (node, match) => match(node) ? node : node.children?.map((child) => findNode(child, match)).find(Boolean);
+    const cardBtn = findNode(view.app._container, (n) => n.props?.['data-gallery-single'] === 'true');
+    const imgEl = findNode(cardBtn, (n) => n.type === 'img');
+    assert.ok(cardBtn && imgEl);
+    assert.equal(cardBtn.props.style['--rs-single-img-ratio'], '4 / 3');
+    imgEl.props.onLoad({ currentTarget: { naturalWidth: 900, naturalHeight: 1600 } });
+    await nextTick();
+    assert.equal(cardBtn.props.style['--rs-single-img-ratio'], '900 / 1600');
+  } finally {
+    view.app.unmount();
+  }
+});

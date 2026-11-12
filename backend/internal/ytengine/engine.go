@@ -1289,7 +1289,7 @@ func classifyStderr(stderrText string, runErr error) *Error {
 		strings.Contains(lower, "no suitable extractor"):
 		return &Error{
 			Code:      CodeContentUnavailable,
-			Message:   "未找到可用的视频或该推文已不可访问",
+			Message:   "未找到可用的媒体，或该内容已不可访问",
 			Retryable: false,
 			Cause:     runErr,
 		}
@@ -1332,7 +1332,7 @@ func classifyStderr(stderrText string, runErr error) *Error {
 		strings.Contains(lower, "unavailable"):
 		return &Error{
 			Code:      CodeContentUnavailable,
-			Message:   "未找到可用的视频或该推文已不可访问",
+			Message:   "未找到可用的媒体，或该内容已不可访问",
 			Retryable: false,
 			Cause:     runErr,
 		}
