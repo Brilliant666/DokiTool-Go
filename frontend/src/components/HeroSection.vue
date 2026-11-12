@@ -1,7 +1,7 @@
 <script setup>
 import AppIcon from './AppIcon.vue'
-import { computed, ref } from 'vue'
-import { groupedPlatformTabs } from '../utils/platforms'
+import { computed, watch } from 'vue'
+import { platformTabs } from '../utils/platforms'
 
 const props = defineProps({
   inputUrl: String,
@@ -66,20 +66,18 @@ const getContent = (locale) => content[locale] || content['zh-CN']
 
 const hasParseError = computed(() => Boolean(props.parseError))
 
-const showMorePlatforms = ref(false)
-const groupedTabs = computed(() => groupedPlatformTabs(props.locale || 'zh-CN'))
-const primaryPlatformTabs = computed(() => [
-  groupedTabs.value.allTab,
-  ...groupedTabs.value.popularTabs
-])
-const morePlatformTabs = computed(() => groupedTabs.value.moreTabs)
-const morePlatformCount = computed(() => morePlatformTabs.value.length)
-const isMorePlatformSelected = computed(() =>
-  morePlatformTabs.value.some((tab) => tab.key === props.currentPlatform)
-)
+const primaryPlatformTabs = computed(() => platformTabs(props.locale || 'zh-CN'))
 
-const selectPlatform = (key) => {
-  emit('select-platform', key)
+watch(primaryPlatformTabs, (tabs) => {
+  if (props.currentPlatform && props.currentPlatform !== 'all') {
+    const active = tabs.find((tab) => tab.key === props.currentPlatform)
+    if (active?.disabled) emit('select-platform', 'all')
+  }
+})
+
+const selectPlatform = (tab) => {
+  if (tab.disabled) return
+  emit('select-platform', tab.key)
 }
 </script>
 
@@ -121,59 +119,21 @@ const selectPlatform = (key) => {
             :key="tab.key"
             type="button"
             :data-platform-tab="tab.key"
-            @click="selectPlatform(tab.key)"
-            :disabled="!isReady || isLoading"
+            @click="selectPlatform(tab)"
+            :disabled="!isReady || isLoading || tab.disabled"
+            :aria-disabled="tab.disabled ? 'true' : undefined"
             :aria-pressed="currentPlatform === tab.key"
             :class="[
               'theme-colors px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5',
-              currentPlatform === tab.key
-                ? 'bg-indigo-600 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25'
-                : 'bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-slate-700 border border-indigo-200 dark:border-slate-700'
+              tab.disabled
+                ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700/60 opacity-60 cursor-not-allowed'
+                : currentPlatform === tab.key
+                  ? 'bg-indigo-600 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25'
+                  : 'bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-slate-700 border border-indigo-200 dark:border-slate-700'
             ]"
           >
             <AppIcon :class="['fas', tab.icon]"></AppIcon>
             <span>{{ tab.label }}</span>
-          </button>
-          <button
-            v-for="tab in morePlatformTabs"
-            v-show="showMorePlatforms"
-            :key="tab.key"
-            type="button"
-            :data-platform-tab="tab.key"
-            data-more-platform-tab
-            @click="selectPlatform(tab.key)"
-            :disabled="!isReady || isLoading"
-            :aria-pressed="currentPlatform === tab.key"
-            :class="[
-              'theme-colors px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5',
-              currentPlatform === tab.key
-                ? 'bg-indigo-600 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25'
-                : 'bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-slate-700 border border-indigo-200 dark:border-slate-700'
-            ]"
-          >
-            <AppIcon :class="['fas', tab.icon]"></AppIcon>
-            <span>{{ tab.label }}</span>
-          </button>
-          <button
-            v-if="morePlatformCount > 0"
-            type="button"
-            data-more-platforms-toggle
-            :disabled="!isReady || isLoading"
-            :aria-expanded="showMorePlatforms"
-            @click="showMorePlatforms = !showMorePlatforms"
-            :class="[
-              'theme-colors px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-1.5',
-              !showMorePlatforms && isMorePlatformSelected
-                ? 'bg-indigo-600 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/25'
-                : 'bg-slate-100 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
-            ]"
-          >
-            <span>{{
-              showMorePlatforms
-                ? locale === 'en' ? 'Less' : '收起'
-                : locale === 'en' ? `More (${morePlatformCount})` : `更多平台 (${morePlatformCount})`
-            }}</span>
-            <AppIcon :class="['fas text-[10px]', showMorePlatforms ? 'fa-chevron-up' : 'fa-chevron-down']"></AppIcon>
           </button>
         </div>
 
@@ -204,8 +164,16 @@ const selectPlatform = (key) => {
                   : 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25 dark:shadow-indigo-900/40 border border-indigo-500/40 dark:border-indigo-500/30 parse-state-btn'"
             >
               <AppIcon :class="['fas text-xs sm:text-sm transition-transform duration-300', isLoading ? 'fa-spinner fa-spin' : isError ? 'fa-exclamation-circle' : 'fa-bolt']"></AppIcon>
-              <span class="hidden sm:inline text-sm">{{ !isReady ? (locale === 'en' ? 'Preparing…' : '正在准备…') : isLoading ? getContent(locale).loading : isError ? getContent(locale).error : getContent(locale).button }}</span>
-              <span class="sm:hidden text-sm">{{ !isReady || isLoading ? '...' : isError ? '!' : '>' }}</span>
+              <span
+                class="parse-btn-label parse-btn-label--desktop text-sm"
+                :data-reserve="locale === 'en' ? 'Preparing…' : '正在准备…'"
+                :data-reserve-alt="getContent(locale).button"
+              ><span>{{ !isReady ? (locale === 'en' ? 'Preparing…' : '正在准备…') : isLoading ? getContent(locale).loading : isError ? getContent(locale).error : getContent(locale).button }}</span></span>
+              <span
+                class="parse-btn-label parse-btn-label--mobile text-sm"
+                data-reserve="..."
+                data-reserve-alt=">"
+              ><span>{{ !isReady || isLoading ? '...' : isError ? '!' : '>' }}</span></span>
             </button>
           </div>
         </div>
@@ -265,6 +233,43 @@ const selectPlatform = (key) => {
   transition: var(--theme-color-transition),
     transform var(--button-motion-duration, 300ms) var(--theme-ease),
     opacity 300ms var(--theme-ease);
+}
+
+.parse-btn-label {
+  display: inline-grid;
+  align-items: center;
+  justify-items: stretch;
+  text-align: center;
+}
+
+.parse-btn-label > span,
+.parse-btn-label::before,
+.parse-btn-label::after {
+  grid-area: 1 / 1;
+}
+
+.parse-btn-label::before {
+  content: attr(data-reserve-alt);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.parse-btn-label::after {
+  content: attr(data-reserve);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (max-width: 639.98px) {
+  .parse-btn-label--desktop {
+    display: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .parse-btn-label--mobile {
+    display: none;
+  }
 }
 
 .enterprise-btn::before {

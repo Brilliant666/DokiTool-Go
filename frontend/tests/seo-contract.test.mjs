@@ -50,6 +50,11 @@ test('structured data declares the application without invented reviews or searc
   assert.equal(app.isPartOf['@id'], website['@id']);
   assert.equal(app.applicationCategory, 'MultimediaApplication');
   assert.equal(app.isAccessibleForFree, true);
+  for (const name of ['抖音', '快手', 'B站', '小红书', '今日头条', '微博', '皮皮虾', '皮皮搞笑', '最右', 'X', 'YouTube', 'Instagram', 'Facebook', 'Tumblr', 'Dailymotion']) {
+    assert.ok(metadata.get('description')?.includes(name), `meta description must include ${name}`);
+    assert.ok(metadata.get('keywords')?.includes(name), `meta keywords must include ${name}`);
+    assert.ok(app.description.includes(name), `WebApplication description must include ${name}`);
+  }
 });
 
 test('crawler files expose only the homepage and keep APIs out of the crawl plan', async () => {
