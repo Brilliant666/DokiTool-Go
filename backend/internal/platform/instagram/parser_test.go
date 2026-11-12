@@ -1416,3 +1416,140 @@ func TestParseInstagramPostVideoParallelNativeSupplementTimeoutAndErrorFallback(
 		t.Fatalf("expected 2 image items, got %d", gotItems)
 	}
 }
+
+func TestInstagramEmbedHTMLSingleImageDimensionsFallback(t *testing.T) {
+	const now int64 = 1762300800
+	sourceURL := "https://www.instagram.com/p/BqvsDleB3lV/"
+
+	cases := []struct {
+		name       string
+		embedHTML  string
+		wantURL    string
+		wantWidth  *int64
+		wantHeight *int64
+	}{
+		{
+			name: "srcset-1080w-only-populates-width-without-guessing-height",
+			embedHTML: `<html><body><img class="EmbeddedMediaImage" alt="Photo by creator" ` +
+				`src="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/s640x640/photo_640.jpg" ` +
+				`srcset="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/s640x640/photo_640.jpg 640w,https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/s750x750/photo_750.jpg 750w,https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_1080.jpg 1080w" /></body></html>`,
+			wantURL:    "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_1080.jpg",
+			wantWidth:  int64Ptr(1080),
+			wantHeight: nil,
+		},
+		{
+			name: "srcset-1080w-with-mismatched-thumbnail-img-attrs-does-not-copy-thumbnail-height",
+			embedHTML: `<html><body><img class="EmbeddedMediaImage" width="640" height="800" ` +
+				`src="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/s640x640/photo_640.jpg" ` +
+				`srcset="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/s640x640/photo_640.jpg 640w,https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_1080.jpg 1080w" /></body></html>`,
+			wantURL:    "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_1080.jpg",
+			wantWidth:  int64Ptr(1080),
+			wantHeight: nil,
+		},
+		{
+			name: "img-width-and-height-attributes-with-matching-srcset",
+			embedHTML: `<html><body><img class="EmbeddedMediaImage" style="max-width:640px;max-height:800px" data-width="320" width="1080" height="1350" ` +
+				`src="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_1080.jpg" ` +
+				`srcset="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/s640x640/photo_640.jpg 640w,https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_1080.jpg 1080w" /></body></html>`,
+			wantURL:    "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_1080.jpg",
+			wantWidth:  int64Ptr(1080),
+			wantHeight: int64Ptr(1350),
+		},
+		{
+			name: "img-width-and-height-attributes-without-srcset",
+			embedHTML: `<html><body><img class='EmbeddedMediaImage' width='1080' height='720' ` +
+				`src='https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_landscape.jpg' /></body></html>`,
+			wantURL:    "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_landscape.jpg",
+			wantWidth:  int64Ptr(1080),
+			wantHeight: int64Ptr(720),
+		},
+		{
+			name: "img-width-attribute-only-without-height-or-srcset",
+			embedHTML: `<html><body><img class="EmbeddedMediaImage" width="1080" ` +
+				`src="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_w_only.jpg" /></body></html>`,
+			wantURL:    "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_w_only.jpg",
+			wantWidth:  int64Ptr(1080),
+			wantHeight: nil,
+		},
+		{
+			name: "neither-srcset-descriptor-nor-width-height-attributes-keeps-dimensions-unset",
+			embedHTML: `<html><body><img class="EmbeddedMediaImage" alt="Plain embed" ` +
+				`src="https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_plain.jpg" /></body></html>`,
+			wantURL:    "https://scontent-nrt1-1.cdninstagram.com/v/t51.2885-15/e35/photo_plain.jpg",
+			wantWidth:  nil,
+			wantHeight: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewWithFetcher(
+				&stubExtractor{
+					enabled: true,
+					extract: func(context.Context, string) (*ytengine.Info, error) {
+						return nil, &ytengine.Error{
+							Code:    ytengine.CodeContentUnavailable,
+							Message: "There is no video in this post",
+						}
+					},
+				},
+				nil,
+				fakeFetcher{
+					fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+						if strings.HasSuffix(req.URL, "/embed/captioned/") {
+							return fetch.Response{
+								StatusCode: http.StatusOK,
+								Body:       []byte(tc.embedHTML),
+								URL:        req.URL,
+							}, nil
+						}
+						// Simulate production IP where anonymous GraphQL returns no shortcode_media node (with errors).
+						return fetch.Response{
+							StatusCode: http.StatusOK,
+							Body:       []byte(`{"errors":[{"message":"execution error"}],"status":"ok"}`),
+							URL:        req.URL,
+						}, nil
+					},
+				},
+			)
+
+			payload, err := p.Parse(context.Background(), sourceURL, now)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+			for _, debug := range []bool{false, true} {
+				view := unified.PublicView(payload, debug, now)
+				if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+					t.Fatalf("ValidateEnvelopeAt(debug=%v) failed: %v", debug, err)
+				}
+				items := unified.Slice(unified.Map(view["data"])["items"])
+				if len(items) != 1 {
+					t.Fatalf("debug=%v: expected 1 image item, got %d", debug, len(items))
+				}
+				item := unified.Map(items[0])
+				if unified.Str(item["type"]) != "image" {
+					t.Fatalf("debug=%v: expected item.type=image, got %q", debug, unified.Str(item["type"]))
+				}
+				def := unified.Map(item["default"])
+				if unified.Str(def["url"]) != tc.wantURL {
+					t.Fatalf("debug=%v: expected default.url=%q, got %q", debug, tc.wantURL, unified.Str(def["url"]))
+				}
+				meta := unified.Map(unified.Map(unified.Slice(item["variants"])[0])["metadata"])
+				if tc.wantWidth == nil {
+					if val, exists := meta["width"]; exists {
+						t.Fatalf("debug=%v: expected width to be absent, got %v", debug, val)
+					}
+				} else if meta["width"] != *tc.wantWidth {
+					t.Fatalf("debug=%v: expected width=%d, got %v", debug, *tc.wantWidth, meta["width"])
+				}
+				if tc.wantHeight == nil {
+					if val, exists := meta["height"]; exists {
+						t.Fatalf("debug=%v: expected height to be absent, got %v", debug, val)
+					}
+				} else if meta["height"] != *tc.wantHeight {
+					t.Fatalf("debug=%v: expected height=%d, got %v", debug, *tc.wantHeight, meta["height"])
+				}
+			}
+		})
+	}
+}
