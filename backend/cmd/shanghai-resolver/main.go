@@ -36,7 +36,7 @@ func run(args []string) error {
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
 	}
-	p := probe.New(fetch.New(), douyin.AllowedMediaURL)
+	p := probe.New(fetch.New(), douyin.AllowedMediaURL).WithTimeout(shresolver.ProbeTimeout)
 	pull := false
 	flags.Visit(func(f *flag.Flag) {
 		if f.Name == "pull-origin" {
@@ -47,7 +47,7 @@ func run(args []string) error {
 		if flags.NFlag() != 1 {
 			return errors.New("pull mode does not accept listener or TLS server options")
 		}
-		w, err := shresolver.NewPullWorker(*origin, os.Getenv("DOKITOOL_SHANGHAI_PULL_TOKEN"), fetch.New(), p)
+		w, err := shresolver.NewPullWorkerWithDetail(*origin, os.Getenv("DOKITOOL_SHANGHAI_PULL_TOKEN"), fetch.New(), fetch.New(), p)
 		if err != nil {
 			return err
 		}
@@ -65,11 +65,11 @@ func run(args []string) error {
 	if err != nil || !net.ParseIP(host).IsLoopback() {
 		return errors.New("invalid loopback listener")
 	}
-	h, err := shresolver.NewHandler(os.Getenv("DOKITOOL_SHANGHAI_TOKEN"), p)
+	h, err := shresolver.NewHandlerWithDetail(os.Getenv("DOKITOOL_SHANGHAI_TOKEN"), fetch.New(), p)
 	if err != nil {
 		return err
 	}
-	s := http.Server{Addr: *listen, Handler: h, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 4 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 8 << 10}
+	s := http.Server{Addr: *listen, Handler: h, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 4 * time.Second, WriteTimeout: shresolver.WorkTimeout + 2*time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 8 << 10}
 	if *cert != "" {
 		return s.ListenAndServeTLS(*cert, *key)
 	}

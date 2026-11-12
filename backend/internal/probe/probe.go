@@ -35,6 +35,7 @@ const (
 // redirect and time budget, including when one instance is used concurrently.
 type Probe struct {
 	fingerprint bool
+	timeout     time.Duration
 	executor    fetch.Executor
 	allowedURL  func(string) bool
 }
@@ -49,6 +50,21 @@ func (p Probe) WithFingerprint() *Probe {
 	return &p
 }
 
+// WithTimeout overrides the per-call probe deadline when d > 0.
+func (p Probe) WithTimeout(d time.Duration) *Probe {
+	if d > 0 {
+		p.timeout = d
+	}
+	return &p
+}
+
+func (p *Probe) budgetTimeout() time.Duration {
+	if p != nil && p.timeout > 0 {
+		return p.timeout
+	}
+	return Timeout
+}
+
 // Probe returns a confirmed media URL and measured metadata, or nil when no
 // media response was confirmed. Unsupported/truncated metadata and exhausted
 // optional probe budgets preserve the last successfully read URL with empty
@@ -61,7 +77,7 @@ func (p *Probe) Probe(parent context.Context, rawURL string) (unified.Object, er
 	if p == nil || p.executor == nil || p.allowedURL == nil || !p.allowedURL(rawURL) {
 		return nil, nil
 	}
-	ctx, cancel := context.WithTimeout(parent, Timeout)
+	ctx, cancel := context.WithTimeout(parent, p.budgetTimeout())
 	defer cancel()
 	r := reader{probe: p, ctx: ctx}
 	return r.inspect(rawURL, parent)
@@ -74,7 +90,7 @@ func (p *Probe) Originals(parent context.Context, rawURL string) ([]unified.Obje
 	if !p.allowedURL(rawURL) {
 		return nil, nil
 	}
-	ctx, cancel := context.WithTimeout(parent, Timeout)
+	ctx, cancel := context.WithTimeout(parent, p.budgetTimeout())
 	defer cancel()
 	entry, err := url.Parse(rawURL)
 	if err != nil {

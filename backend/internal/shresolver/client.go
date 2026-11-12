@@ -17,13 +17,15 @@ import (
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
 const (
-	clientTimeout    = probe.Timeout + 2*time.Second
-	maxResponseBytes = 32 << 10
+	clientTimeout      = probe.Timeout + 2*time.Second
+	maxV1ResponseBytes = 32 << 10
+	maxResponseBytes   = 128 << 10
 )
 
 var errUnavailable = errors.New("Shanghai original address unavailable")
@@ -83,18 +85,49 @@ func (c *Client) ResolveOriginal(parent context.Context, videoID string) ([]unif
 	defer cancel()
 	body, _ := json.Marshal(map[string]string{"video_id": videoID})
 	headers := http.Header{"Authorization": {"Bearer " + c.token}, "Content-Type": {"application/json"}, "Accept": {"application/json"}}
-	payload, err := c.request(ctx, body, headers)
+	payload, status, err := c.request(ctx, body, headers, clientTimeout)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
+	if err != nil || status != http.StatusOK {
+		return nil, errUnavailable
 	}
 	return c.validateResponse(ctx, videoID, payload)
 }
 
+// ResolveWork requests all domestic rendition URLs and 4K original candidates
+// for awemeID within WorkTimeout. If the remote endpoint speaks only v1 and
+// rejects the v2 request with HTTP 400, ErrProtocolV1 is returned so the
+// caller can fall back to ResolveOriginal.
+func (c *Client) ResolveWork(parent context.Context, awemeID string) (*douyin.ShanghaiWork, error) {
+	if err := parent.Err(); err != nil {
+		return nil, err
+	}
+	if !douyin.ValidAwemeID(awemeID) {
+		return nil, errUnavailable
+	}
+	ctx, cancel := context.WithTimeout(parent, WorkTimeout)
+	defer cancel()
+	body, _ := json.Marshal(struct {
+		Protocol int    `json:"protocol"`
+		AwemeID  string `json:"aweme_id"`
+	}{Protocol: ProtocolV2, AwemeID: awemeID})
+	headers := http.Header{"Authorization": {"Bearer " + c.token}, "Content-Type": {"application/json"}, "Accept": {"application/json"}}
+	payload, status, err := c.request(ctx, body, headers, WorkTimeout)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if status == http.StatusBadRequest {
+		return nil, douyin.ErrProtocolV1
+	}
+	if err != nil || status != http.StatusOK {
+		return nil, errUnavailable
+	}
+	return c.validateWorkResponse(ctx, awemeID, payload)
+}
+
 func (c responseValidator) validateResponse(ctx context.Context, videoID string, payload []byte) ([]unified.Object, error) {
-	if len(payload) > maxResponseBytes {
+	if len(payload) > maxV1ResponseBytes {
 		return nil, errUnavailable
 	}
 	d := json.NewDecoder(bytes.NewReader(payload))
@@ -104,10 +137,126 @@ func (c responseValidator) validateResponse(ctx context.Context, videoID string,
 	if d.Decode(&result) != nil || d.Decode(&struct{}{}) != io.EOF || result.VideoID != videoID || len(result.Candidates) < 1 || len(result.Candidates) > 2 {
 		return nil, errUnavailable
 	}
+	return c.validateCandidates(ctx, result.Candidates, c.now().Unix(), nil)
+}
+
+func (c responseValidator) validateWorkResponse(ctx context.Context, awemeID string, payload []byte) (*douyin.ShanghaiWork, error) {
+	if len(payload) == 0 || len(payload) > maxResponseBytes || bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return nil, errUnavailable
+	}
+	d := json.NewDecoder(bytes.NewReader(payload))
+	d.UseNumber()
+	d.DisallowUnknownFields()
+	var result WorkResponse
+	if d.Decode(&result) != nil || d.Decode(&struct{}{}) != io.EOF {
+		return nil, errUnavailable
+	}
+	// Legacy v1 receipt shape (no protocol field): handle with v1 rules.
+	if result.Protocol == 0 {
+		if result.AwemeID != "" || result.Renditions != nil || !ValidVideoID(result.VideoID) {
+			return nil, errUnavailable
+		}
+		rows, err := c.validateResponse(ctx, result.VideoID, payload)
+		if err != nil {
+			return nil, err
+		}
+		return &douyin.ShanghaiWork{VideoID: result.VideoID, Candidates: rows}, nil
+	}
+	if result.Protocol != ProtocolV2 || result.AwemeID != awemeID ||
+		len(result.Candidates) > 2 || len(result.Renditions) > douyin.MaxShanghaiRenditionObjects ||
+		(result.VideoID != "" && !ValidVideoID(result.VideoID)) ||
+		(len(result.Candidates) > 0 && result.VideoID == "") {
+		return nil, errUnavailable
+	}
 	now := c.now().Unix()
+	dnsOK := map[string]bool{}
+	var candidates []unified.Object
+	if len(result.Candidates) > 0 {
+		var err error
+		candidates, err = c.validateCandidates(ctx, result.Candidates, now, dnsOK)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var renditions map[string]unified.Array
+	for declaredKey, urls := range result.Renditions {
+		if len(urls) > douyin.MaxShanghaiRenditionURLs {
+			return nil, errUnavailable
+		}
+		if declaredKey == "" {
+			continue
+		}
+		var kept unified.Array
+		seen := map[string]bool{}
+		for _, raw := range urls {
+			normalized, ok := douyin.NormalizeShanghaiRenditionURL(raw)
+			if !ok || unified.DouyinStoragePath(normalized) != declaredKey || seen[normalized] {
+				continue
+			}
+			u, err := url.Parse(normalized)
+			if err != nil {
+				continue
+			}
+			exp := explicitExpiry(u)
+			if exp != 0 && exp <= now {
+				continue
+			}
+			host := strings.ToLower(u.Hostname())
+			publicHost, checked := dnsOK[host]
+			if !checked {
+				publicHost, err = c.checkPublicHost(ctx, host)
+				if err != nil {
+					return nil, err
+				}
+				dnsOK[host] = publicHost
+			}
+			if !publicHost {
+				continue
+			}
+			seen[normalized] = true
+			entry := unified.Object{"url": normalized}
+			if exp > 0 {
+				entry["expires_at"] = time.Unix(exp, 0).UTC().Format(time.RFC3339)
+			}
+			kept = append(kept, entry)
+		}
+		if len(kept) > 0 {
+			if renditions == nil {
+				renditions = map[string]unified.Array{}
+			}
+			renditions[declaredKey] = kept
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &douyin.ShanghaiWork{
+		VideoID:    result.VideoID,
+		Candidates: candidates,
+		Renditions: renditions,
+	}, nil
+}
+
+func (c responseValidator) checkPublicHost(ctx context.Context, host string) (bool, error) {
+	ips, err := c.lookup(ctx, "ip", host)
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if err != nil || len(ips) == 0 {
+		return false, nil
+	}
+	for _, ip := range ips {
+		if !fetch.PublicIP(ip) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (c responseValidator) validateCandidates(ctx context.Context, candidates []Candidate, now int64, dnsOK map[string]bool) ([]unified.Object, error) {
 	var rows []unified.Object
 	seen := map[string]bool{}
-	for _, v := range result.Candidates {
+	for _, v := range candidates {
 		u, err := url.Parse(v.URL)
 		object := unified.DouyinStoragePath(v.URL)
 		if err != nil || object == "" || !validProbeMetadata(v.Metadata) ||
@@ -126,17 +275,18 @@ func (c responseValidator) validateResponse(ctx context.Context, videoID string,
 		if seen[route] {
 			continue
 		}
-		ips, err := c.lookup(ctx, "ip", route)
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if err != nil || len(ips) == 0 {
-			return nil, errUnavailable
-		}
-		for _, ip := range ips {
-			if !fetch.PublicIP(ip) {
-				return nil, errUnavailable
+		publicHost, checked := dnsOK[route]
+		if !checked {
+			publicHost, err = c.checkPublicHost(ctx, route)
+			if err != nil {
+				return nil, err
 			}
+			if dnsOK != nil {
+				dnsOK[route] = publicHost
+			}
+		}
+		if !publicHost {
+			return nil, errUnavailable
 		}
 		row := unified.Object{"url": v.URL, "metadata": v.Metadata, "source_key": route, "object_key": object, "prefix_sha256": prefix, "obtained_at": v.ObtainedAt}
 		if v.ExpiresAt > 0 {
@@ -151,37 +301,37 @@ func (c responseValidator) validateResponse(ctx context.Context, videoID string,
 	return rows, nil
 }
 
-func (c *Client) request(ctx context.Context, body []byte, headers http.Header) ([]byte, error) {
+func (c *Client) request(ctx context.Context, body []byte, headers http.Header, timeout time.Duration) ([]byte, int, error) {
 	if c.local == nil {
 		r, err := c.executor.Do(ctx, fetch.Request{
 			URL: c.endpoint, Method: http.MethodPost, Header: headers, Body: body,
 			Policy: fetch.Policy{Purpose: "douyin-shanghai-original",
 				AllowedURL: func(raw string) bool { return raw == c.endpoint },
-				Timeout:    clientTimeout, MaxBytes: maxResponseBytes, MaxHeaderBytes: 8192},
+				Timeout:    timeout, MaxBytes: maxResponseBytes, MaxHeaderBytes: 8192},
 		})
-		if err != nil || r.StatusCode != http.StatusOK || len(r.Body) > maxResponseBytes {
-			return nil, errUnavailable
+		if err != nil {
+			return nil, 0, errUnavailable
 		}
-		return r.Body, nil
+		if len(r.Body) > maxResponseBytes {
+			return nil, r.StatusCode, errUnavailable
+		}
+		return r.Body, r.StatusCode, nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, errUnavailable
+		return nil, 0, errUnavailable
 	}
 	req.Header = headers
 	resp, err := c.local.Do(req)
 	if err != nil {
-		return nil, errUnavailable
+		return nil, 0, errUnavailable
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, errUnavailable
-	}
 	out, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil || len(out) > maxResponseBytes {
-		return nil, errUnavailable
+		return nil, resp.StatusCode, errUnavailable
 	}
-	return out, nil
+	return out, resp.StatusCode, nil
 }
 
 func validProbeMetadata(m unified.Object) bool {

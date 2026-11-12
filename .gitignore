@@ -394,6 +394,7 @@
 /backend/internal/shresolver/*
 !/backend/internal/shresolver/client.go
 !/backend/internal/shresolver/client_test.go
+!/backend/internal/shresolver/interop_test.go
 !/backend/internal/shresolver/pull_broker.go
 !/backend/internal/shresolver/pull_broker_test.go
 !/backend/internal/shresolver/pull_delivery_test.go
@@ -592,6 +593,7 @@
 !/backend/internal/platform/douyin/request.go
 !/backend/internal/platform/douyin/shanghai.go
 !/backend/internal/platform/douyin/shanghai_test.go
+!/backend/internal/platform/douyin/shanghai_work_test.go
 !/backend/internal/platform/douyin/testdata/
 !/backend/internal/platform/douyin/video.go
 /backend/internal/platform/instagram/*
