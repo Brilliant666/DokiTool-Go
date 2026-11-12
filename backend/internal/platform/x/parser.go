@@ -184,6 +184,23 @@ func AllowedOutboundHost(host string) bool {
 	return false
 }
 
+// AllowedExtractors returns the Twitter-family yt-dlp extractor names verified
+// from pinned yt-dlp 2026.10.26 (--list-extractors), excluding generic and
+// twitter:shortener (t.co) so embedded external links never fall back to generic.
+func AllowedExtractors() []string {
+	return []string{
+		"twitter",
+		"twitter:amplify",
+		"twitter:broadcast",
+		"twitter:card",
+		"twitter:spaces",
+	}
+}
+
+func isPureSyndicationPhotoTweet(st *syndicationTweet) bool {
+	return st != nil && !st.Tombstone && len(st.Photos) > 0 && !st.HasVideo
+}
+
 func splitNonEmptyPath(escapedPath string) []string {
 	trimmed := strings.Trim(escapedPath, "/")
 	if trimmed == "" {
@@ -205,6 +222,21 @@ func (p *Parser) effectiveSupplementTimeout() time.Duration {
 		return p.supplementTimeout
 	}
 	return syndicationSupplementTimeout
+}
+
+func (p *Parser) handleExtractError(ctx context.Context, err error) (unified.Object, error) {
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+		return nil, ctxErr
+	}
+	var engineErr *ytengine.Error
+	if errors.As(err, &engineErr) {
+		resp := unified.ContractError(string(engineErr.Code), engineErr.Message, engineErr.Retryable)
+		if engineErr.Retryable && engineErr.RetryAfter > 0 {
+			unified.Map(resp["error"])["retry_after_seconds"] = engineErr.RetryAfter
+		}
+		return resp, nil
+	}
+	return unified.ContractError("UPSTREAM_UNAVAILABLE", "当前平台解析服务暂不可用，请稍后重试", true), nil
 }
 
 // Parse extracts X / Twitter status metadata via ytengine + public syndication
@@ -237,90 +269,149 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		return buildSyndicationPhotoEnvelope(st, []syndicationPhoto{photo}, tweetID, source, now), nil
 	}
 
+	if p.fetcher == nil || selectedKind == "video" {
+		info, err := p.engine.Extract(ctx, canonicalURL)
+		if err != nil {
+			return p.handleExtractError(ctx, err)
+		}
+		populateMissingMP4Sizes(ctx, info, p.sizeProber)
+		return AdaptInfo(info, tweetID, source, selectedIndex, now), nil
+	}
+
 	type syndicationResult struct {
 		tweet *syndicationTweet
 		err   error
 	}
-	var (
-		synCh           chan syndicationResult
-		cancelSyn       context.CancelFunc
-		supplementTimer *time.Timer
-	)
-	if p.fetcher != nil && selectedKind == "" {
-		var synCtx context.Context
-		synCtx, cancelSyn = context.WithCancel(ctx)
-		defer cancelSyn()
-		synCh = make(chan syndicationResult, 1)
-		supplementTimer = time.NewTimer(p.effectiveSupplementTimeout())
-		defer supplementTimer.Stop()
-		fetcher := p.fetcher
-		go func() {
-			st, synErr := fetchSyndicationTweet(synCtx, fetcher, tweetID)
-			synCh <- syndicationResult{tweet: st, err: synErr}
-		}()
+	type ytExtractResult struct {
+		info *ytengine.Info
+		err  error
 	}
+
+	synCtx, cancelSyn := context.WithCancel(ctx)
+	defer cancelSyn()
+	ytCtx, cancelYT := context.WithCancel(ctx)
+	defer cancelYT()
+
+	supplementTimer := time.NewTimer(p.effectiveSupplementTimeout())
+	defer supplementTimer.Stop()
+
+	synCh := make(chan syndicationResult, 1)
+	fetcher := p.fetcher
+	go func() {
+		st, synErr := fetchSyndicationTweet(synCtx, fetcher, tweetID)
+		synCh <- syndicationResult{tweet: st, err: synErr}
+	}()
+
+	ytCh := make(chan ytExtractResult, 1)
+	engine := p.engine
+	go func() {
+		info, ytErr := engine.Extract(ytCtx, canonicalURL)
+		ytCh <- ytExtractResult{info: info, err: ytErr}
+	}()
+
+	var (
+		gotSyn bool
+		synRes syndicationResult
+		gotYT  bool
+		ytRes  ytExtractResult
+	)
 
 	awaitFullSyndication := func() (*syndicationTweet, error) {
-		if synCh == nil {
-			return fetchSyndicationTweet(ctx, p.fetcher, tweetID)
+		if !gotSyn {
+			select {
+			case synRes = <-synCh:
+				gotSyn = true
+			case <-ctx.Done():
+				cancelSyn()
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					return nil, errSyndicationTimeout
+				}
+				return nil, ctx.Err()
+			}
 		}
-		select {
-		case res := <-synCh:
-			return res.tweet, res.err
-		case <-ctx.Done():
-			cancelSyn()
+		return synRes.tweet, synRes.err
+	}
+
+	select {
+	case synRes = <-synCh:
+		gotSyn = true
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+			cancelYT()
+			return nil, ctxErr
+		}
+		if synRes.err == nil && isPureSyndicationPhotoTweet(synRes.tweet) {
+			select {
+			case ytRes = <-ytCh:
+				gotYT = true
+				var engineErr *ytengine.Error
+				if ytRes.err != nil && errors.As(ytRes.err, &engineErr) && engineErr.LocalBusy {
+					return p.handleExtractError(ctx, ytRes.err)
+				}
+			default:
+			}
+			cancelYT()
+			return buildSyndicationPhotoEnvelope(synRes.tweet, synRes.tweet.Photos, tweetID, source, now), nil
+		}
+	case ytRes = <-ytCh:
+		gotYT = true
+	case <-ctx.Done():
+		cancelYT()
+		cancelSyn()
+		if errors.Is(ctx.Err(), context.Canceled) {
 			return nil, ctx.Err()
+		}
+		return unified.ContractError("UPSTREAM_TIMEOUT", "上游解析超时，请稍后重试", true), nil
+	}
+
+	if !gotYT {
+		select {
+		case ytRes = <-ytCh:
+			gotYT = true
+		case <-ctx.Done():
+			cancelYT()
+			cancelSyn()
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return nil, ctx.Err()
+			}
+			return unified.ContractError("UPSTREAM_TIMEOUT", "上游解析超时，请稍后重试", true), nil
 		}
 	}
 
-	info, err := p.engine.Extract(ctx, canonicalURL)
-	if err != nil {
+	if ytRes.err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
 			return nil, ctxErr
 		}
 		var engineErr *ytengine.Error
-		if errors.As(err, &engineErr) {
-			if engineErr.LocalBusy {
-				resp := unified.ContractError(string(engineErr.Code), engineErr.Message, engineErr.Retryable)
-				if engineErr.Retryable && engineErr.RetryAfter > 0 {
-					unified.Map(resp["error"])["retry_after_seconds"] = engineErr.RetryAfter
-				}
-				return resp, nil
-			}
-			if engineErr.Code == ytengine.CodeContentUnavailable && p.fetcher != nil && selectedKind != "video" {
-				st, synErr := awaitFullSyndication()
-				if synErr != nil {
-					if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
-						return nil, ctxErr
-					}
-					if !errors.Is(synErr, errSyndicationNotFound) {
-						return syndicationContractError(synErr), nil
-					}
-				} else if st != nil && len(st.Photos) > 0 {
-					return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
-				}
-			}
-			resp := unified.ContractError(string(engineErr.Code), engineErr.Message, engineErr.Retryable)
-			if engineErr.Retryable && engineErr.RetryAfter > 0 {
-				unified.Map(resp["error"])["retry_after_seconds"] = engineErr.RetryAfter
-			}
-			return resp, nil
+		hasEngineErr := errors.As(ytRes.err, &engineErr)
+		if hasEngineErr && engineErr.LocalBusy {
+			cancelSyn()
+			return p.handleExtractError(ctx, ytRes.err)
 		}
-		return unified.ContractError("UPSTREAM_UNAVAILABLE", "当前平台解析服务暂不可用，请稍后重试", true), nil
+
+		st, synErr := awaitFullSyndication()
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+			return nil, ctxErr
+		}
+		if synErr == nil && isPureSyndicationPhotoTweet(st) {
+			return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
+		}
+		if hasEngineErr && engineErr.Code == ytengine.CodeContentUnavailable && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
+			return syndicationContractError(synErr), nil
+		}
+		return p.handleExtractError(ctx, ytRes.err)
 	}
 
+	info := ytRes.info
 	populateMissingMP4Sizes(ctx, info, p.sizeProber)
 	adapted := AdaptInfo(info, tweetID, source, selectedIndex, now)
-	if synCh != nil {
-		if unified.Str(adapted["code"]) == "OK" {
-			var res syndicationResult
-			var gotSyn bool
+	if unified.Str(adapted["code"]) == "OK" {
+		if !gotSyn {
 			select {
-			case res = <-synCh:
+			case synRes = <-synCh:
 				gotSyn = true
 			default:
 				select {
-				case res = <-synCh:
+				case synRes = <-synCh:
 					gotSyn = true
 				case <-supplementTimer.C:
 					cancelSyn()
@@ -328,28 +419,28 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 					cancelSyn()
 				}
 			}
-			if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
-				return nil, ctxErr
-			}
-			if gotSyn && res.err == nil && res.tweet != nil && len(res.tweet.Photos) > 0 {
-				withPhotos := adaptInfoWithPhotos(info, res.tweet.Photos, tweetID, source, selectedIndex, now)
-				if unified.Str(withPhotos["code"]) == "OK" {
-					return withPhotos, nil
-				}
-			}
-			return adapted, nil
 		}
-
-		st, synErr := awaitFullSyndication()
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
 			return nil, ctxErr
 		}
-		if synErr == nil && st != nil && len(st.Photos) > 0 {
-			return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
+		if gotSyn && synRes.err == nil && synRes.tweet != nil && len(synRes.tweet.Photos) > 0 {
+			withPhotos := adaptInfoWithPhotos(info, synRes.tweet.Photos, tweetID, source, selectedIndex, now)
+			if unified.Str(withPhotos["code"]) == "OK" {
+				return withPhotos, nil
+			}
 		}
-		if unified.Str(adapted["code"]) == "NO_MEDIA" && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
-			return syndicationContractError(synErr), nil
-		}
+		return adapted, nil
+	}
+
+	st, synErr := awaitFullSyndication()
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+		return nil, ctxErr
+	}
+	if synErr == nil && isPureSyndicationPhotoTweet(st) {
+		return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
+	}
+	if unified.Str(adapted["code"]) == "NO_MEDIA" && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
+		return syndicationContractError(synErr), nil
 	}
 	return adapted, nil
 }

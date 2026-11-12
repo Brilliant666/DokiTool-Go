@@ -306,7 +306,7 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 		if err := c.Register(catalog.XPlatform()); err != nil {
 			return err
 		}
-		xEngine := baseEngine.WithTargetPolicy(x.AllowedTargetURL, x.AllowedOutboundHost)
+		xEngine := newXEngine(baseEngine)
 		adapters["x"] = x.NewWithSizeProber(xEngine, x.NewSizeProber(executor)).WithFetcher(executor)
 	}
 	if ytEnabled {
@@ -338,6 +338,12 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 		adapters[spec.PlatformID] = ytgeneric.NewWithResolver(spec, siteEngine, prober, net.DefaultResolver)
 	}
 	return nil
+}
+
+func newXEngine(baseEngine *ytengine.Engine) *ytengine.Engine {
+	return baseEngine.
+		WithTargetPolicy(x.AllowedTargetURL, x.AllowedOutboundHost).
+		WithExtractors(x.AllowedExtractors()...)
 }
 
 // configureYouTubeHelper optionally enables /api/youtube/context and

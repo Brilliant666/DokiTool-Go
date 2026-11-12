@@ -201,22 +201,32 @@ sleep 10
 
 	// Verify stderr classification
 	cases := []struct {
-		stderr   string
-		wantCode ErrorCode
+		stderr        string
+		wantCode      ErrorCode
+		wantRetryable bool
 	}{
-		{"ERROR: [twitter] 123: HTTP Error 429: Too Many Requests", CodeRateLimited},
-		{"ERROR: [twitter] 123: No video could be found in this tweet", CodeContentUnavailable},
-		{"ERROR: [twitter] 123: Protected tweet; please sign in", CodeUpstreamBlocked},
+		{"ERROR: [twitter] 123: HTTP Error 429: Too Many Requests", CodeRateLimited, true},
+		{"ERROR: [twitter] 123: No video could be found in this tweet", CodeContentUnavailable, false},
+		{"ERROR: [twitter] 123: Protected tweet; please sign in", CodeUpstreamBlocked, false},
+		{"ERROR: [generic] gen-ai-pose-image: Unable to download webpage: <urlopen error Tunnel connection failed: 403 Forbidden>", CodeUpstreamBlocked, false},
+		{"ERROR: Unsupported URL: https://github.com/wzc520pyfm/gen-ai-pose-image", CodeContentUnavailable, false},
+		{"ERROR: No suitable extractor found for URL https://github.com/wzc520pyfm/gen-ai-pose-image/issues/429?timeout=1", CodeContentUnavailable, false},
 	}
 	for _, tc := range cases {
+		classified := classifyStderr(tc.stderr, errors.New("exit status 1"))
+		if classified.Code != tc.wantCode || classified.Retryable != tc.wantRetryable {
+			t.Fatalf("classifyStderr(%q) = (code=%s, retryable=%v), want (code=%s, retryable=%v)",
+				tc.stderr, classified.Code, classified.Retryable, tc.wantCode, tc.wantRetryable)
+		}
 		errBin, errHashes := writeFakeYTDLP(t, "echo '"+tc.stderr+"' >&2\nexit 1")
 		errEng, err := New(Config{BinaryPath: errBin, AllowedHashes: errHashes})
 		if err != nil {
 			t.Fatal(err)
 		}
 		_, extractErr := errEng.Extract(context.Background(), "https://x.com/i/status/123")
-		if extractErr == nil || !strings.Contains(extractErr.Error(), string(tc.wantCode)) {
-			t.Fatalf("stderr %q => %v, want %s", tc.stderr, extractErr, tc.wantCode)
+		var eErr *Error
+		if !errors.As(extractErr, &eErr) || eErr.Code != tc.wantCode || eErr.Retryable != tc.wantRetryable {
+			t.Fatalf("stderr %q => %#v (%v), want code=%s retryable=%v", tc.stderr, eErr, extractErr, tc.wantCode, tc.wantRetryable)
 		}
 	}
 }

@@ -1348,3 +1348,497 @@ func TestParseXVideoParallelSyndicationTimeoutAndErrorFallback(t *testing.T) {
 		t.Fatalf("/video/1 Parse failed: env=%+v err=%v", videoOnlyEnv, err)
 	}
 }
+
+func TestParseXIssue73PhotoPriorityAndExtractorMatrix(t *testing.T) {
+	const now int64 = 1762300800
+	const extlinkTweetID = "2115900212212588814"
+	const extlinkTweetURL = "https://x.com/lalala9529/status/" + extlinkTweetID + "?s=19"
+	const wantPhotoURL = "https://pbs.twimg.com/media/HV0v-QhbAAAdG9e?format=jpg&name=orig"
+
+	// Verify AllowedExtractors matches pinned yt-dlp 2026.10.26 Twitter media extractors without generic/shortener.
+	gotExtractors := AllowedExtractors()
+	wantExtractors := []string{"twitter", "twitter:amplify", "twitter:broadcast", "twitter:card", "twitter:spaces"}
+	if strings.Join(gotExtractors, ",") != strings.Join(wantExtractors, ",") {
+		t.Fatalf("AllowedExtractors() = %v, want %v", gotExtractors, wantExtractors)
+	}
+
+	extlinkPhotoSyndicationBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Pose reference generator\nhttps://github.com/wzc520pyfm/gen-ai-pose-image\nhttps://gen-ai-pose-image.vercel.app/ https://t.co/ExtLinkPic",
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/HV0v-QhbAAAdG9e.jpg", "width": 1536, "height": 2048},
+		},
+		"mediaDetails": []map[string]any{
+			{
+				"type":            "photo",
+				"media_url_https": "https://pbs.twimg.com/media/HV0v-QhbAAAdG9e.jpg",
+				"original_info":   map[string]any{"width": 1536, "height": 2048},
+			},
+		},
+	})
+
+	purePhotoNoExtlinkBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Pure photo tweet without external links https://t.co/OnlyPhoto",
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/PureNoExt1.png", "width": 1920, "height": 1080},
+			{"url": "https://pbs.twimg.com/media/PureNoExt2.jpg", "width": 1080, "height": 1080},
+		},
+	})
+
+	mixedVideoPhotoBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Mixed video and photo post",
+		"video":      map[string]any{"durationMs": 9500},
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/MixedPhotoA.jpg", "width": 1600, "height": 900},
+		},
+		"mediaDetails": []map[string]any{
+			{"type": "video", "media_url_https": "https://pbs.twimg.com/ext_tw_video_thumb/777/pu/img/thumb.jpg"},
+			{"type": "photo", "media_url_https": "https://pbs.twimg.com/media/MixedPhotoA.jpg", "original_info": map[string]any{"width": 1600, "height": 900}},
+		},
+	})
+
+	mixedAnimatedGifPhotoBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Mixed animated_gif and photo post",
+		"photos": []map[string]any{
+			{"url": "https://pbs.twimg.com/media/GifCompanionPhoto.jpg", "width": 1200, "height": 1200},
+		},
+		"mediaDetails": []map[string]any{
+			{"type": "animated_gif", "media_url_https": "https://pbs.twimg.com/tweet_video_thumb/888.jpg"},
+			{"type": "photo", "media_url_https": "https://pbs.twimg.com/media/GifCompanionPhoto.jpg", "original_info": map[string]any{"width": 1200, "height": 1200}},
+		},
+	})
+
+	pureVideoSyndicationBody, _ := json.Marshal(map[string]any{
+		"__typename": "Tweet",
+		"text":       "Pure video post",
+		"video":      map[string]any{"durationMs": 12000},
+		"mediaDetails": []map[string]any{
+			{"type": "video", "media_url_https": "https://pbs.twimg.com/ext_tw_video_thumb/555/pu/img/thumb.jpg"},
+		},
+	})
+
+	makeVideoInfo := func(tweetID, mediaID string) *ytengine.Info {
+		return &ytengine.Info{
+			ID:        mediaID,
+			DisplayID: tweetID,
+			Title:     "Sample Video",
+			Duration:  float64Ptr(12.0),
+			Formats: []ytengine.Format{
+				{
+					FormatID: "http-2176",
+					URL:      "https://video.twimg.com/ext_tw_video/" + mediaID + "/pu/vid/1280x720/v720.mp4?tag=12",
+					Ext:      "mp4",
+					Protocol: "https",
+					Width:    int64Ptr(1280),
+					Height:   int64Ptr(720),
+					VCodec:   "avc1.640020",
+					ACodec:   "mp4a.40.2",
+					Filesize: int64Ptr(2048576),
+				},
+			},
+		}
+	}
+
+	// 1a. Pure photo + external link (syndication finishes first -> returns photo immediately and cancels yt-dlp).
+	t.Run("pure-photo-with-extlink-syndication-first-cancels-ytdlp", func(t *testing.T) {
+		ytStarted := make(chan struct{})
+		ytCanceled := make(chan struct{})
+		p := NewWithFetcher(
+			&stubExtractor{
+				enabled: true,
+				extract: func(ytCtx context.Context, _ string) (*ytengine.Info, error) {
+					close(ytStarted)
+					<-ytCtx.Done()
+					close(ytCanceled)
+					return nil, ytCtx.Err()
+				},
+			},
+			nil,
+			fakeXFetcher{
+				fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					<-ytStarted
+					return fetch.Response{StatusCode: http.StatusOK, Body: extlinkPhotoSyndicationBody, URL: req.URL}, nil
+				},
+			},
+		)
+
+		start := time.Now()
+		env, err := p.Parse(context.Background(), extlinkTweetURL, now)
+		elapsed := time.Since(start)
+		if err != nil {
+			t.Fatalf("unexpected Go error: %v", err)
+		}
+		if elapsed > time.Second {
+			t.Fatalf("expected immediate photo return without waiting for yt-dlp timeout, took %v", elapsed)
+		}
+		select {
+		case <-ytCanceled:
+		case <-time.After(time.Second):
+			t.Fatal("expected yt-dlp child context to be cancelled immediately after syndication pure-photo win")
+		}
+
+		view := unified.PublicView(env, false, now)
+		if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+			t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+		}
+		if unified.Str(view["code"]) != "OK" {
+			t.Fatalf("expected code=OK, got %+v", view)
+		}
+		items := unified.Slice(unified.Map(view["data"])["items"])
+		if len(items) != 1 || unified.Str(unified.Map(items[0])["type"]) != "image" {
+			t.Fatalf("expected 1 image item, got %+v", items)
+		}
+		src := unified.Map(unified.Slice(unified.Map(unified.Map(unified.Slice(unified.Map(items[0])["variants"])[0])["delivery"])["sources"])[0])
+		if unified.Str(src["url"]) != wantPhotoURL {
+			t.Fatalf("photo source url = %q, want %q", unified.Str(src["url"]), wantPhotoURL)
+		}
+	})
+
+	// 1b. Pure photo + external link (yt-dlp fails first with any non-LocalBusy error -> waits for full syndication and returns photo).
+	t.Run("pure-photo-with-extlink-ytdlp-fails-first-ignores-error", func(t *testing.T) {
+		ytErrors := []struct {
+			name string
+			err  error
+		}{
+			{
+				name: "upstream-blocked-403-tunnel",
+				err:  &ytengine.Error{Code: ytengine.CodeUpstreamBlocked, Message: "outbound blocked", Retryable: false},
+			},
+			{
+				name: "upstream-unavailable-502",
+				err:  &ytengine.Error{Code: ytengine.CodeUpstreamUnavailable, Message: "upstream unavailable", Retryable: true},
+			},
+			{
+				name: "content-unavailable-disabled-extractor",
+				err:  &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "no suitable extractor", Retryable: false},
+			},
+			{
+				name: "upstream-timeout",
+				err:  &ytengine.Error{Code: ytengine.CodeUpstreamTimeout, Message: "timeout", Retryable: true},
+			},
+			{
+				name: "non-engine-error",
+				err:  errors.New("unexpected subprocess error"),
+			},
+		}
+		for _, tc := range ytErrors {
+			t.Run(tc.name, func(t *testing.T) {
+				ytDone := make(chan struct{})
+				p := NewWithFetcher(
+					&stubExtractor{
+						enabled: true,
+						extract: func(context.Context, string) (*ytengine.Info, error) {
+							defer close(ytDone)
+							return nil, tc.err
+						},
+					},
+					nil,
+					fakeXFetcher{
+						fn: func(reqCtx context.Context, req fetch.Request) (fetch.Response, error) {
+							<-ytDone
+							// Exceed supplementTimeout to verify full syndication wait is preserved.
+							select {
+							case <-time.After(45 * time.Millisecond):
+								return fetch.Response{StatusCode: http.StatusOK, Body: extlinkPhotoSyndicationBody, URL: req.URL}, nil
+							case <-reqCtx.Done():
+								return fetch.Response{}, reqCtx.Err()
+							}
+						},
+					},
+				)
+				p.supplementTimeout = 15 * time.Millisecond
+
+				env, err := p.Parse(context.Background(), extlinkTweetURL, now)
+				if err != nil {
+					t.Fatalf("unexpected Go error: %v", err)
+				}
+				view := unified.PublicView(env, false, now)
+				if err := unified.ValidateEnvelopeAt(view, now); err != nil {
+					t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+				}
+				if unified.Str(view["code"]) != "OK" {
+					t.Fatalf("expected code=OK photo fallback on %s, got %+v", tc.name, view)
+				}
+				items := unified.Slice(unified.Map(view["data"])["items"])
+				if len(items) != 1 || unified.Str(unified.Map(items[0])["type"]) != "image" {
+					t.Fatalf("expected 1 image item, got %+v", items)
+				}
+			})
+		}
+	})
+
+	// 1c. LocalBusy exception: yt-dlp LocalBusy is never masked by syndication photo fallback and cancels syndication.
+	t.Run("local-busy-is-not-masked-by-syndication", func(t *testing.T) {
+		synCanceled := make(chan struct{})
+		p := NewWithFetcher(
+			&stubExtractor{
+				enabled: true,
+				extract: func(context.Context, string) (*ytengine.Info, error) {
+					return nil, &ytengine.Error{
+						Code:       ytengine.CodeRateLimited,
+						Message:    "本地解析引擎繁忙，请稍后重试",
+						Retryable:  true,
+						RetryAfter: 1,
+						LocalBusy:  true,
+					}
+				},
+			},
+			nil,
+			fakeXFetcher{
+				fn: func(reqCtx context.Context, _ fetch.Request) (fetch.Response, error) {
+					<-reqCtx.Done()
+					close(synCanceled)
+					return fetch.Response{}, reqCtx.Err()
+				},
+			},
+		)
+		env, err := p.Parse(context.Background(), extlinkTweetURL, now)
+		if err != nil {
+			t.Fatalf("unexpected Go error: %v", err)
+		}
+		if unified.Str(env["code"]) != "RATE_LIMITED" || unified.Map(env["error"])["retry_after_seconds"] != 1 {
+			t.Fatalf("expected LocalBusy RATE_LIMITED with retry_after_seconds=1, got %+v", env)
+		}
+		select {
+		case <-synCanceled:
+		case <-time.After(time.Second):
+			t.Fatal("expected syndication context to be cancelled on LocalBusy")
+		}
+	})
+
+	// 2. Pure photo without external link.
+	t.Run("pure-photo-without-extlink", func(t *testing.T) {
+		p := NewWithFetcher(
+			&stubExtractor{
+				enabled: true,
+				extract: func(ytCtx context.Context, _ string) (*ytengine.Info, error) {
+					select {
+					case <-time.After(80 * time.Millisecond):
+						return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "no video"}
+					case <-ytCtx.Done():
+						return nil, ytCtx.Err()
+					}
+				},
+			},
+			nil,
+			fakeXFetcher{
+				fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					return fetch.Response{StatusCode: http.StatusOK, Body: purePhotoNoExtlinkBody, URL: req.URL}, nil
+				},
+			},
+		)
+		env, err := p.Parse(context.Background(), "https://x.com/NASA/status/1546621144358391808", now)
+		if err != nil || unified.Str(env["code"]) != "OK" {
+			t.Fatalf("expected code=OK on pure photo without extlink, got env=%+v err=%v", env, err)
+		}
+		items := unified.Slice(unified.Map(unified.PublicView(env, false, now)["data"])["items"])
+		if len(items) != 2 || unified.Str(unified.Map(items[0])["type"]) != "image" || unified.Str(unified.Map(items[1])["type"]) != "image" {
+			t.Fatalf("expected 2 image items, got %+v", items)
+		}
+	})
+
+	// 3. Video + photo mixed (syndication finishes first with HasVideo=true -> must NOT cancel yt-dlp; returns [video, image]).
+	// Also verifies animated_gif + photo is treated as HasVideo=true, and if yt-dlp fails on HasVideo=true, error is preserved.
+	t.Run("video-and-photo-mixed", func(t *testing.T) {
+		for _, bodyCase := range []struct {
+			name string
+			body []byte
+		}{
+			{"video-plus-photo", mixedVideoPhotoBody},
+			{"animated-gif-plus-photo", mixedAnimatedGifPhotoBody},
+		} {
+			t.Run(bodyCase.name, func(t *testing.T) {
+				synDone := make(chan struct{})
+				p := NewWithFetcher(
+					&stubExtractor{
+						enabled: true,
+						extract: func(ytCtx context.Context, _ string) (*ytengine.Info, error) {
+							<-synDone
+							if err := ytCtx.Err(); err != nil {
+								t.Errorf("ytCtx must NOT be cancelled when syndication reports HasVideo=true: %v", err)
+								return nil, err
+							}
+							return makeVideoInfo("1546621144358391808", "777"), nil
+						},
+					},
+					nil,
+					fakeXFetcher{
+						fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+							defer close(synDone)
+							return fetch.Response{StatusCode: http.StatusOK, Body: bodyCase.body, URL: req.URL}, nil
+						},
+					},
+				)
+				env, err := p.Parse(context.Background(), "https://x.com/NASA/status/1546621144358391808", now)
+				if err != nil || unified.Str(env["code"]) != "OK" {
+					t.Fatalf("mixed Parse failed: env=%+v err=%v", env, err)
+				}
+				items := unified.Slice(unified.Map(unified.PublicView(env, false, now)["data"])["items"])
+				if len(items) != 2 || unified.Str(unified.Map(items[0])["type"]) != "video" || unified.Str(unified.Map(items[1])["type"]) != "image" {
+					t.Fatalf("expected [video, image] items on %s, got %+v", bodyCase.name, items)
+				}
+			})
+		}
+
+		// When HasVideo=true and yt-dlp fails, do NOT drop the video and return partial photos; keep current error behavior.
+		mixedErrParser := NewWithFetcher(
+			&stubExtractor{
+				enabled: true,
+				extract: func(context.Context, string) (*ytengine.Info, error) {
+					return nil, &ytengine.Error{Code: ytengine.CodeUpstreamUnavailable, Message: "yt-dlp failed", Retryable: true}
+				},
+			},
+			nil,
+			fakeXFetcher{
+				fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					return fetch.Response{StatusCode: http.StatusOK, Body: mixedVideoPhotoBody, URL: req.URL}, nil
+				},
+			},
+		)
+		mixedErrEnv, err := mixedErrParser.Parse(context.Background(), "https://x.com/NASA/status/1546621144358391808", now)
+		if err != nil || unified.Str(mixedErrEnv["code"]) != "UPSTREAM_UNAVAILABLE" {
+			t.Fatalf("expected UPSTREAM_UNAVAILABLE when HasVideo=true and yt-dlp fails, got env=%+v err=%v", mixedErrEnv, err)
+		}
+	})
+
+	// 4. Pure video (syndication returns HasVideo=true, Photos=[] -> waits for yt-dlp and returns video).
+	t.Run("pure-video", func(t *testing.T) {
+		synDone := make(chan struct{})
+		p := NewWithFetcher(
+			&stubExtractor{
+				enabled: true,
+				extract: func(_ context.Context, _ string) (*ytengine.Info, error) {
+					<-synDone
+					return makeVideoInfo("1790637656616943991", "555"), nil
+				},
+			},
+			nil,
+			fakeXFetcher{
+				fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					defer close(synDone)
+					return fetch.Response{StatusCode: http.StatusOK, Body: pureVideoSyndicationBody, URL: req.URL}, nil
+				},
+			},
+		)
+		env, err := p.Parse(context.Background(), "https://x.com/historyinmemes/status/1790637656616943991", now)
+		if err != nil || unified.Str(env["code"]) != "OK" {
+			t.Fatalf("pure video Parse failed: env=%+v err=%v", env, err)
+		}
+		items := unified.Slice(unified.Map(unified.PublicView(env, false, now)["data"])["items"])
+		if len(items) != 1 || unified.Str(unified.Map(items[0])["type"]) != "video" {
+			t.Fatalf("expected 1 video item, got %+v", items)
+		}
+	})
+
+	// 5. Syndication fails first + yt-dlp succeeds -> returns video.
+	t.Run("syndication-fails-first-ytdlp-succeeds", func(t *testing.T) {
+		synDone := make(chan struct{})
+		p := NewWithFetcher(
+			&stubExtractor{
+				enabled: true,
+				extract: func(_ context.Context, _ string) (*ytengine.Info, error) {
+					<-synDone
+					return makeVideoInfo("1790637656616943991", "555"), nil
+				},
+			},
+			nil,
+			fakeXFetcher{
+				fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					defer close(synDone)
+					return fetch.Response{StatusCode: http.StatusBadGateway, Body: []byte("bad gateway"), URL: req.URL}, nil
+				},
+			},
+		)
+		env, err := p.Parse(context.Background(), "https://x.com/historyinmemes/status/1790637656616943991", now)
+		if err != nil || unified.Str(env["code"]) != "OK" {
+			t.Fatalf("expected code=OK when syndication fails and yt-dlp succeeds, got env=%+v err=%v", env, err)
+		}
+		items := unified.Slice(unified.Map(unified.PublicView(env, false, now)["data"])["items"])
+		if len(items) != 1 || unified.Str(unified.Map(items[0])["type"]) != "video" {
+			t.Fatalf("expected 1 video item, got %+v", items)
+		}
+	})
+
+	// 6. Both fail (syndication fails + yt-dlp fails).
+	t.Run("both-fail", func(t *testing.T) {
+		bothFailCases := []struct {
+			name      string
+			ytErr     error
+			synStatus int
+			wantCode  string
+		}{
+			{
+				name:      "both-404-content-unavailable",
+				ytErr:     &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "not found", Retryable: false},
+				synStatus: http.StatusNotFound,
+				wantCode:  "CONTENT_UNAVAILABLE",
+			},
+			{
+				name:      "yt-content-unavailable-syn-503-surfaces-upstream-unavailable",
+				ytErr:     &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "no video", Retryable: false},
+				synStatus: http.StatusServiceUnavailable,
+				wantCode:  "UPSTREAM_UNAVAILABLE",
+			},
+			{
+				name:      "yt-blocked-syn-503-preserves-yt-blocked",
+				ytErr:     &ytengine.Error{Code: ytengine.CodeUpstreamBlocked, Message: "protected", Retryable: false},
+				synStatus: http.StatusServiceUnavailable,
+				wantCode:  "UPSTREAM_BLOCKED",
+			},
+		}
+		for _, tc := range bothFailCases {
+			t.Run(tc.name, func(t *testing.T) {
+				p := NewWithFetcher(
+					&stubExtractor{
+						enabled: true,
+						extract: func(context.Context, string) (*ytengine.Info, error) {
+							return nil, tc.ytErr
+						},
+					},
+					nil,
+					fakeXFetcher{
+						fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+							return fetch.Response{StatusCode: tc.synStatus, Body: []byte("err"), URL: req.URL}, nil
+						},
+					},
+				)
+				env, err := p.Parse(context.Background(), extlinkTweetURL, now)
+				if err != nil {
+					t.Fatalf("unexpected Go error: %v", err)
+				}
+				if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+					t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+				}
+				if got := unified.Str(env["code"]); got != tc.wantCode {
+					t.Fatalf("code = %q, want %q (env=%+v)", got, tc.wantCode, env)
+				}
+			})
+		}
+	})
+
+	// 7. selectedKind == "video" (/video/1) never falls back to syndication photos.
+	t.Run("selected-kind-video-does-not-return-photos", func(t *testing.T) {
+		p := NewWithFetcher(
+			&stubExtractor{
+				enabled: true,
+				extract: func(context.Context, string) (*ytengine.Info, error) {
+					return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "no video", Retryable: false}
+				},
+			},
+			nil,
+			fakeXFetcher{
+				fn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					t.Fatalf("unexpected syndication fetch on /video/1: %s", req.URL)
+					return fetch.Response{StatusCode: http.StatusOK, Body: extlinkPhotoSyndicationBody, URL: req.URL}, nil
+				},
+			},
+		)
+		env, err := p.Parse(context.Background(), "https://x.com/lalala9529/status/"+extlinkTweetID+"/video/1", now)
+		if err != nil || unified.Str(env["code"]) != "CONTENT_UNAVAILABLE" {
+			t.Fatalf("expected CONTENT_UNAVAILABLE for /video/1 on pure-photo tweet, got env=%+v err=%v", env, err)
+		}
+	})
+}

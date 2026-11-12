@@ -16,6 +16,7 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/api"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/x"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
@@ -175,6 +176,40 @@ func TestYTDLPXConfiguration(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("x-engine-pins-twitter-extractors-and-forbids-generic", func(t *testing.T) {
+		baseEngine, err := ytengine.NewFromEnv(func(k string) string {
+			if k == "DOKITOOL_YTDLP_BINARY" {
+				return fakeBin
+			}
+			return ""
+		}, nil)
+		if err != nil || !baseEngine.Enabled() {
+			t.Fatalf("NewFromEnv failed: %v", err)
+		}
+		xEngine := newXEngine(baseEngine)
+		target := "https://x.com/i/status/2115900212212588814"
+		args := xEngine.CommandArgs(target)
+		wantExtractors := strings.Join(x.AllowedExtractors(), ",")
+		if wantExtractors != "twitter,twitter:amplify,twitter:broadcast,twitter:card,twitter:spaces" {
+			t.Fatalf("unexpected x.AllowedExtractors(): %q", wantExtractors)
+		}
+		if strings.Contains(wantExtractors, "generic") || strings.Contains(wantExtractors, "shortener") {
+			t.Fatalf("x.AllowedExtractors() must exclude generic and twitter:shortener, got %q", wantExtractors)
+		}
+		var sawUseExtractors bool
+		for i := 0; i < len(args)-1; i++ {
+			if args[i] == "--use-extractors" {
+				sawUseExtractors = true
+				if args[i+1] != wantExtractors {
+					t.Fatalf("--use-extractors value = %q, want %q (args=%v)", args[i+1], wantExtractors, args)
+				}
+			}
+		}
+		if !sawUseExtractors {
+			t.Fatalf("expected --use-extractors in xEngine CommandArgs, got %v", args)
+		}
+	})
 }
 
 func TestYouTubeHelperConfiguration(t *testing.T) {
