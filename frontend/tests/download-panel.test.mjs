@@ -383,3 +383,24 @@ test('only expired unknown history with a confirmed gone owner can be cleared', 
   await view.click(view.button('清除', view.row('lost')));
   assert.deepEqual(view.events, [['clear-completed', 'lost']]);
 });
+
+test('download card displays actual CDN hostname without leaking path or signed query parameters', async t => {
+  const view = await mount(t, [
+    task('active-route', 'downloading', {
+      url: 'https://v26-cold.douyinvod.com/ab9b7783/video/tos/cn/tos-cn-ve-15/oM0f/?x-expires=1800000000&sig=secretToken123',
+    }),
+  ]);
+  const rowText = textOf(view.row('active-route'));
+  assert.ok(rowText.includes('v26-cold.douyinvod.com'));
+  assert.equal(rowText.includes('secretToken123'), false);
+  assert.equal(rowText.includes('tos-cn-ve-15'), false);
+
+  await view.update([
+    task('active-route', 'completed', {
+      url: 'https://v13-cold.douyinvod.com/61a60ed7/video/tos/cn/tos-cn-ve-15/oM0f/?sig=anotherSecret',
+    }),
+  ]);
+  const settledText = textOf(view.row('active-route'));
+  assert.ok(settledText.includes('v13-cold.douyinvod.com'));
+  assert.equal(settledText.includes('anotherSecret'), false);
+});

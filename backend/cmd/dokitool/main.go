@@ -44,6 +44,9 @@ import (
 func preparePublicMedia(key string) api.PublicMedia {
 	weibo := weiboplatform.PreparePublic(key)
 	return func(ctx context.Context, platform string, payload unified.Object, now int64) (unified.Object, error) {
+		if platform == "douyin" {
+			return douyin.PreparePublic(ctx, platform, payload, now)
+		}
 		if platform == "xiaohongshu" {
 			return xiaohongshu.PreparePublic(ctx, platform, payload, now)
 		}

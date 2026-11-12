@@ -32,11 +32,7 @@ import {
   fileResource,
   mediaExtension,
 } from "../utils/mediaDelivery";
-import {
-  mergeAndDownload,
-  mergeSegments,
-  type HlsSegment,
-} from "../utils/segmentDownload";
+import type { HlsSegment } from "../utils/segmentDownload";
 import type { TbvideoItem } from "../services/tbvideo";
 import { reportTbvideo } from "../../public/downloads/tbvideo.js";
 import { apiConfig } from "../services/apiConfig";
@@ -898,6 +894,8 @@ export function useMediaDownload({
         loaded: 0,
         total: 0,
       });
+      const { mergeAndDownload } = await import("../utils/segmentDownload");
+      checkAbort(abortController.signal);
       const ok = await mergeAndDownload(segments, {
         signal: abortController.signal,
         filename,
@@ -1087,6 +1085,7 @@ export function useMediaDownload({
   type ItemSnapshot = {
     item: MediaItem;
     choice: MediaSelection | null;
+    pinned?: boolean;
     title?: string;
     total: number;
     version: number;
@@ -1120,6 +1119,7 @@ export function useMediaDownload({
     return freeze({
       item,
       choice: pinnedChoice,
+      pinned: Boolean(choice?.source_id),
       // Keep the actual UI choice for concurrent-selection checks; task pinning
       // must not change the user's selection or the displayed server default.
       selectionKey: JSON.stringify(choice),
@@ -1782,16 +1782,36 @@ export function useMediaDownload({
     }
     videoRetries.set(id, (forceRefresh = false) => enqueueItem(snapshot, id, forceRefresh));
     try {
-      const { item, target } = await resolvedTarget(
+      let { item, target } = await resolvedTarget(
         snapshot,
         controller.signal,
         refresh,
       );
       if (!ownsTask(id, controller)) return false;
+      const delivery = target.variant.delivery;
+      if (
+        !refresh &&
+        !snapshot.pinned &&
+        target.kind === "file" &&
+        delivery.kind === "file" &&
+        delivery.sources.length > 1 &&
+        delivery.sources.some((s) => s.browser_fetch === "allowed")
+      ) {
+        target = await (await import("../downloads/routeProbe")).default(
+          target,
+          item,
+          snapshot.platform,
+          apiContext,
+          controller.signal,
+          (statusText) =>
+            ownsTask(id, controller) &&
+            videoStore.updateDownload(id, { statusText }),
+        );
+        if (!ownsTask(id, controller)) return false;
+      }
       const prepared = preparedSnapshot(snapshot, item, target);
       videoRetries.set(id, (forceRefresh = false) => enqueueItem(prepared, id, forceRefresh));
       videoStore.updateDownload(id, { refreshAvailable: refreshable(prepared) });
-      const delivery = target.variant.delivery;
       if (target.kind === "pair") {
         if (delivery.kind !== "pair") throw new Error("实况资源不完整");
         videoStore.updateDownload(id, { abortController: null });
@@ -1892,14 +1912,19 @@ export function useMediaDownload({
         data,
       };
     }
-    if (delivery.kind === "hls" || delivery.kind === "segments")
+    if (delivery.kind === "hls" || delivery.kind === "segments") {
+      const resolvedSegments = await declaredSegments(
+        delivery,
+        apiContext,
+        signal,
+      );
+      const { mergeSegments } = await import("../utils/segmentDownload");
+      checkAbort(signal);
       return {
         filename: `${name}.${mediaExtension(resource.metadata, delivery)}`,
-        data: await mergeSegments(
-          await declaredSegments(delivery, apiContext, signal),
-          { signal },
-        ),
+        data: await mergeSegments(resolvedSegments, { signal }),
       };
+    }
     throw new Error("该资源需要 DASH 处理，当前暂不支持");
   }
   async function archiveItems(
