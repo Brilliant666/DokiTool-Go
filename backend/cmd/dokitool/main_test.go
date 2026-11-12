@@ -419,3 +419,79 @@ func TestYTDLPSitesConfiguration(t *testing.T) {
 		}
 	})
 }
+
+func TestXTombstoneFallbackFlagAndConfiguration(t *testing.T) {
+	for _, valid := range []string{x.TombstoneFallbackOff, x.TombstoneFallbackFxTwitter} {
+		if err := x.ValidateTombstoneFallback(valid); err != nil {
+			t.Fatalf("ValidateTombstoneFallback(%q) failed: %v", valid, err)
+		}
+	}
+	for _, invalid := range []string{"", "auto", "true", "false", "vxtwitter", "FXTWITTER", "Off", "https://api.fxtwitter.com"} {
+		if err := x.ValidateTombstoneFallback(invalid); err == nil {
+			t.Fatalf("ValidateTombstoneFallback(%q) unexpectedly succeeded", invalid)
+		}
+		occupied, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		runErr := run([]string{"serve", "-listen", occupied.Addr().String(), "-x-tombstone-fallback", invalid})
+		occupied.Close()
+		if runErr == nil || !strings.Contains(runErr.Error(), "x-tombstone-fallback") {
+			t.Fatalf("want startup error before listener for -x-tombstone-fallback=%q, got %v", invalid, runErr)
+		}
+	}
+
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "yt-dlp")
+	payload := []byte("#!/bin/sh\necho '{}' \n")
+	if err := os.WriteFile(fakeBin, payload, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	hexSum := hex.EncodeToString(sum[:])
+
+	origAsset, hadOrig := ytengine.OfficialSHA256Sums20261026[hexSum]
+	ytengine.OfficialSHA256Sums20261026[hexSum] = "yt-dlp-tombstone-cmd-test"
+	defer func() {
+		if hadOrig {
+			ytengine.OfficialSHA256Sums20261026[hexSum] = origAsset
+		} else {
+			delete(ytengine.OfficialSHA256Sums20261026, hexSum)
+		}
+	}()
+
+	env := map[string]string{
+		"DOKITOOL_YTDLP_X_ENABLED": "true",
+		"DOKITOOL_YTDLP_BINARY":    fakeBin,
+	}
+
+	// Default configureYTDLPX keeps tombstone fallback off.
+	cDefault, err := catalog.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultAdapters := map[string]api.Adapter{}
+	if err := configureYTDLPX(cDefault, defaultAdapters, fetch.New(), func(k string) string { return env[k] }); err != nil {
+		t.Fatalf("configureYTDLPX failed: %v", err)
+	}
+	defaultX, ok := defaultAdapters["x"].(*x.Parser)
+	if !ok || defaultX == nil || defaultX.TombstoneFallback() != x.TombstoneFallbackOff {
+		t.Fatalf("default X parser TombstoneFallback = %v, want %q", defaultAdapters["x"], x.TombstoneFallbackOff)
+	}
+
+	// Explicit off and fxtwitter modes wire cleanly into the registered X adapter.
+	for _, mode := range []string{x.TombstoneFallbackOff, x.TombstoneFallbackFxTwitter} {
+		c, err := catalog.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		adapters := map[string]api.Adapter{}
+		if err := configureYTDLPWithOptions(c, adapters, fetch.New(), mode, func(k string) string { return env[k] }); err != nil {
+			t.Fatalf("configureYTDLPWithOptions(%q) failed: %v", mode, err)
+		}
+		xp, ok := adapters["x"].(*x.Parser)
+		if !ok || xp == nil || xp.TombstoneFallback() != mode {
+			t.Fatalf("mode %q: X parser TombstoneFallback = %v, want %q", mode, adapters["x"], mode)
+		}
+	}
+}

@@ -17,7 +17,12 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
-const maxTweetVideos = 4
+const (
+	maxTweetVideos = 4
+
+	TombstoneFallbackOff       = "off"
+	TombstoneFallbackFxTwitter = "fxtwitter"
+)
 
 var (
 	tweetIDPattern    = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
@@ -44,6 +49,7 @@ type Parser struct {
 	sizeProber        SizeProber
 	fetcher           fetch.Executor
 	supplementTimeout time.Duration
+	tombstoneFallback string
 }
 
 // New creates an X platform parser bound to the given ytengine.Extractor.
@@ -72,6 +78,42 @@ func (p *Parser) WithFetcher(fetcher fetch.Executor) *Parser {
 	cp := *p
 	cp.fetcher = fetcher
 	return &cp
+}
+
+// ValidateTombstoneFallback validates the -x-tombstone-fallback startup flag.
+func ValidateTombstoneFallback(mode string) error {
+	switch mode {
+	case TombstoneFallbackOff, TombstoneFallbackFxTwitter:
+		return nil
+	default:
+		return fmt.Errorf("x-tombstone-fallback must be %s or %s", TombstoneFallbackOff, TombstoneFallbackFxTwitter)
+	}
+}
+
+// WithTombstoneFallback returns a copy of the Parser configured with the given
+// TweetTombstone fallback mode ("off" or "fxtwitter").
+func (p *Parser) WithTombstoneFallback(mode string) (*Parser, error) {
+	if err := ValidateTombstoneFallback(mode); err != nil {
+		return nil, err
+	}
+	var cp Parser
+	if p != nil {
+		cp = *p
+	}
+	cp.tombstoneFallback = mode
+	return &cp, nil
+}
+
+// TombstoneFallback reports the configured TweetTombstone fallback mode ("off" or "fxtwitter").
+func (p *Parser) TombstoneFallback() string {
+	if p != nil && p.tombstoneFallback == TombstoneFallbackFxTwitter {
+		return TombstoneFallbackFxTwitter
+	}
+	return TombstoneFallbackOff
+}
+
+func (p *Parser) fxtwitterEnabled() bool {
+	return p != nil && p.tombstoneFallback == TombstoneFallbackFxTwitter
 }
 
 // ExtractTweetTarget validates an X / Twitter status URL and returns:
@@ -262,6 +304,9 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 			}
 			return syndicationContractError(synErr), nil
 		}
+		if st != nil && st.Tombstone {
+			return p.resolveTombstone(ctx, tweetID, source, "photo", selectedIndex, now)
+		}
 		photo, found := st.photoAt(selectedIndex)
 		if !found {
 			return unified.ContractError("CONTENT_UNAVAILABLE", fmt.Sprintf("所选第 %d 张图片不存在或不可用", selectedIndex), false), nil
@@ -272,10 +317,31 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	if p.fetcher == nil || selectedKind == "video" {
 		info, err := p.engine.Extract(ctx, canonicalURL)
 		if err != nil {
+			var engineErr *ytengine.Error
+			if selectedKind == "video" && p.fetcher != nil && p.fxtwitterEnabled() &&
+				(!errors.As(err, &engineErr) || !engineErr.LocalBusy) {
+				st, synErr := fetchSyndicationTweet(ctx, p.fetcher, tweetID)
+				if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+					return nil, ctxErr
+				}
+				if synErr == nil && st != nil && st.Tombstone {
+					return p.resolveTombstone(ctx, tweetID, source, "video", selectedIndex, now)
+				}
+			}
 			return p.handleExtractError(ctx, err)
 		}
 		populateMissingMP4Sizes(ctx, info, p.sizeProber)
-		return AdaptInfo(info, tweetID, source, selectedIndex, now), nil
+		adapted := AdaptInfo(info, tweetID, source, selectedIndex, now)
+		if unified.Str(adapted["code"]) != "OK" && selectedKind == "video" && p.fetcher != nil && p.fxtwitterEnabled() {
+			st, synErr := fetchSyndicationTweet(ctx, p.fetcher, tweetID)
+			if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+				return nil, ctxErr
+			}
+			if synErr == nil && st != nil && st.Tombstone {
+				return p.resolveTombstone(ctx, tweetID, source, "video", selectedIndex, now)
+			}
+		}
+		return adapted, nil
 	}
 
 	type syndicationResult struct {
@@ -395,6 +461,9 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		if synErr == nil && isPureSyndicationPhotoTweet(st) {
 			return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
 		}
+		if synErr == nil && st != nil && st.Tombstone {
+			return p.resolveTombstone(ctx, tweetID, source, "", selectedIndex, now)
+		}
 		if hasEngineErr && engineErr.Code == ytengine.CodeContentUnavailable && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
 			return syndicationContractError(synErr), nil
 		}
@@ -438,6 +507,9 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	}
 	if synErr == nil && isPureSyndicationPhotoTweet(st) {
 		return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
+	}
+	if synErr == nil && st != nil && st.Tombstone {
+		return p.resolveTombstone(ctx, tweetID, source, "", selectedIndex, now)
 	}
 	if unified.Str(adapted["code"]) == "NO_MEDIA" && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
 		return syndicationContractError(synErr), nil
