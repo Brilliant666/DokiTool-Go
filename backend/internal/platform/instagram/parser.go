@@ -47,6 +47,7 @@ const (
 	instagramGraphDocID          = "8845758582119845"
 	instagramLoginBlockedMessage = "需要登录，暂不支持"
 	nativeFetchTimeout           = 10 * time.Second
+	nativeSupplementTimeout      = 3 * time.Second
 	nativeMaxBodyBytes           = 2 << 20 // 2 MiB
 	maxCarouselEntries           = 10
 )
@@ -54,9 +55,10 @@ const (
 // Parser adapts yt-dlp -J metadata and anonymous native Instagram responses
 // (Captioned Embed + GraphQL) for Reels, Posts, and Carousels into unified-v1.
 type Parser struct {
-	engine     ytengine.Extractor
-	sizeProber ytengine.SizeProber
-	fetcher    fetch.Executor
+	engine            ytengine.Extractor
+	sizeProber        ytengine.SizeProber
+	fetcher           fetch.Executor
+	supplementTimeout time.Duration
 }
 
 // New creates an Instagram platform parser bound to the given ytengine.Extractor.
@@ -287,6 +289,13 @@ func splitNonEmptyPath(escapedPath string) []string {
 	return out
 }
 
+func (p *Parser) effectiveSupplementTimeout() time.Duration {
+	if p != nil && p.supplementTimeout > 0 {
+		return p.supplementTimeout
+	}
+	return nativeSupplementTimeout
+}
+
 // Parse extracts Instagram Reel/Post/Carousel metadata via the 3-tier pipeline
 // (ytengine yt-dlp -> anonymous Captioned Embed -> anonymous GraphQL) and
 // formats a unified-v1 envelope.
@@ -318,6 +327,29 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		AllowCodecLessProgressiveMP4: true,
 	}
 
+	type nativeFetchResult struct {
+		post     *nativePost
+		loginReq bool
+		ok       bool
+	}
+	var (
+		nativeCh        chan nativeFetchResult
+		cancelNative    context.CancelFunc
+		supplementTimer *time.Timer
+	)
+	if engineReady && fetcherReady && !isReelOrTVCanonical(canonicalURL) {
+		var nativeCtx context.Context
+		nativeCtx, cancelNative = context.WithCancel(ctx)
+		defer cancelNative()
+		nativeCh = make(chan nativeFetchResult, 1)
+		supplementTimer = time.NewTimer(p.effectiveSupplementTimeout())
+		defer supplementTimer.Stop()
+		go func() {
+			post, loginReq, ok := p.fetchNativePost(nativeCtx, shortcode, false)
+			nativeCh <- nativeFetchResult{post: post, loginReq: loginReq, ok: ok}
+		}()
+	}
+
 	var ytErr error
 	if engineReady {
 		info, err := p.engine.Extract(ctx, canonicalURL)
@@ -338,18 +370,35 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 			ytengine.PopulateMissingMP4Sizes(ctx, info, p.sizeProber, opts)
 			adapted := ytengine.AdaptInfo(info, opts, now)
 			if unified.Str(adapted["code"]) == "OK" {
-				if fetcherReady && !isReelOrTVCanonical(canonicalURL) {
+				if nativeCh != nil {
 					ytItems := unified.Slice(unified.Map(adapted["data"])["items"])
 					if len(ytItems) < maxCarouselEntries {
-						if post, _, nativeOK := p.fetchNativePost(ctx, shortcode, false); nativeOK &&
-							len(post.Items) > 1 && (post.hasImage() || len(post.Items) > len(ytItems)) {
-							if merged := p.buildNativeEnvelopeWithYTVideos(ctx, post, ytItems, shortcode, source, now); unified.Str(merged["code"]) == "OK" {
-								return merged, nil
+						var res nativeFetchResult
+						var gotNative bool
+						select {
+						case res = <-nativeCh:
+							gotNative = true
+						default:
+							select {
+							case res = <-nativeCh:
+								gotNative = true
+							case <-supplementTimer.C:
+								cancelNative()
+							case <-ctx.Done():
+								cancelNative()
 							}
 						}
 						if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
 							return nil, ctxErr
 						}
+						if gotNative && res.ok && res.post != nil &&
+							len(res.post.Items) > 1 && (res.post.hasImage() || len(res.post.Items) > len(ytItems)) {
+							if merged := p.buildNativeEnvelopeWithYTVideos(ctx, res.post, ytItems, shortcode, source, now); unified.Str(merged["code"]) == "OK" {
+								return merged, nil
+							}
+						}
+					} else {
+						cancelNative()
 					}
 				}
 				return adapted, nil
@@ -362,7 +411,27 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 
 	var nativeLoginRequired bool
 	if fetcherReady {
-		nativeEnv, loginReq, nativeOK := p.extractNativeWithStatus(ctx, shortcode, canonicalURL, source, now)
+		var (
+			nativeEnv unified.Object
+			loginReq  bool
+			nativeOK  bool
+		)
+		if nativeCh != nil {
+			select {
+			case res := <-nativeCh:
+				loginReq = res.loginReq
+				if res.ok && res.post != nil && len(res.post.Items) > 0 {
+					if env := p.buildNativeEnvelope(ctx, res.post, shortcode, source, now); unified.Str(env["code"]) == "OK" {
+						nativeEnv = env
+						nativeOK = true
+					}
+				}
+			case <-ctx.Done():
+				cancelNative()
+			}
+		} else {
+			nativeEnv, loginReq, nativeOK = p.extractNativeWithStatus(ctx, shortcode, canonicalURL, source, now)
+		}
 		if nativeOK {
 			return nativeEnv, nil
 		}
@@ -498,6 +567,10 @@ func (p *Parser) fetchNativePost(ctx context.Context, shortcode string, needVide
 		if embedPost.FromContextJSON && (!needVideo || embedPost.hasVideo()) {
 			return embedPost, false, true
 		}
+	}
+
+	if ctx.Err() != nil {
+		return nil, loginReq, false
 	}
 
 	// Tier 2: Anonymous GraphQL endpoint (POST /api/graphql PolarisPostActionLoadPostQueryQuery)

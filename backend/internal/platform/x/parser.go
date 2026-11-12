@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
@@ -39,9 +40,10 @@ var (
 // Parser adapts yt-dlp -J metadata and public syndication photo metadata for
 // X / Twitter status URLs into unified-v1.
 type Parser struct {
-	engine     ytengine.Extractor
-	sizeProber SizeProber
-	fetcher    fetch.Executor
+	engine            ytengine.Extractor
+	sizeProber        SizeProber
+	fetcher           fetch.Executor
+	supplementTimeout time.Duration
 }
 
 // New creates an X platform parser bound to the given ytengine.Extractor.
@@ -198,6 +200,13 @@ func splitNonEmptyPath(escapedPath string) []string {
 	return out
 }
 
+func (p *Parser) effectiveSupplementTimeout() time.Duration {
+	if p != nil && p.supplementTimeout > 0 {
+		return p.supplementTimeout
+	}
+	return syndicationSupplementTimeout
+}
+
 // Parse extracts X / Twitter status metadata via ytengine + public syndication
 // and formats a unified-v1 envelope.
 func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.Object, error) {
@@ -228,6 +237,42 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		return buildSyndicationPhotoEnvelope(st, []syndicationPhoto{photo}, tweetID, source, now), nil
 	}
 
+	type syndicationResult struct {
+		tweet *syndicationTweet
+		err   error
+	}
+	var (
+		synCh           chan syndicationResult
+		cancelSyn       context.CancelFunc
+		supplementTimer *time.Timer
+	)
+	if p.fetcher != nil && selectedKind == "" {
+		var synCtx context.Context
+		synCtx, cancelSyn = context.WithCancel(ctx)
+		defer cancelSyn()
+		synCh = make(chan syndicationResult, 1)
+		supplementTimer = time.NewTimer(p.effectiveSupplementTimeout())
+		defer supplementTimer.Stop()
+		fetcher := p.fetcher
+		go func() {
+			st, synErr := fetchSyndicationTweet(synCtx, fetcher, tweetID)
+			synCh <- syndicationResult{tweet: st, err: synErr}
+		}()
+	}
+
+	awaitFullSyndication := func() (*syndicationTweet, error) {
+		if synCh == nil {
+			return fetchSyndicationTweet(ctx, p.fetcher, tweetID)
+		}
+		select {
+		case res := <-synCh:
+			return res.tweet, res.err
+		case <-ctx.Done():
+			cancelSyn()
+			return nil, ctx.Err()
+		}
+	}
+
 	info, err := p.engine.Extract(ctx, canonicalURL)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
@@ -243,7 +288,7 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 				return resp, nil
 			}
 			if engineErr.Code == ytengine.CodeContentUnavailable && p.fetcher != nil && selectedKind != "video" {
-				st, synErr := fetchSyndicationTweet(ctx, p.fetcher, tweetID)
+				st, synErr := awaitFullSyndication()
 				if synErr != nil {
 					if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
 						return nil, ctxErr
@@ -251,7 +296,7 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 					if !errors.Is(synErr, errSyndicationNotFound) {
 						return syndicationContractError(synErr), nil
 					}
-				} else if len(st.Photos) > 0 {
+				} else if st != nil && len(st.Photos) > 0 {
 					return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
 				}
 			}
@@ -265,23 +310,46 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	}
 
 	populateMissingMP4Sizes(ctx, info, p.sizeProber)
-	if p.fetcher != nil && selectedKind == "" {
-		st, synErr := fetchSyndicationTweet(ctx, p.fetcher, tweetID)
-		if synErr != nil && errors.Is(synErr, context.Canceled) {
-			return nil, synErr
-		}
-		if synErr == nil && len(st.Photos) > 0 {
-			adapted := adaptInfoWithPhotos(info, st.Photos, tweetID, source, selectedIndex, now)
-			if unified.Str(adapted["code"]) == "NO_MEDIA" {
-				return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
+	adapted := AdaptInfo(info, tweetID, source, selectedIndex, now)
+	if synCh != nil {
+		if unified.Str(adapted["code"]) == "OK" {
+			var res syndicationResult
+			var gotSyn bool
+			select {
+			case res = <-synCh:
+				gotSyn = true
+			default:
+				select {
+				case res = <-synCh:
+					gotSyn = true
+				case <-supplementTimer.C:
+					cancelSyn()
+				case <-ctx.Done():
+					cancelSyn()
+				}
+			}
+			if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+				return nil, ctxErr
+			}
+			if gotSyn && res.err == nil && res.tweet != nil && len(res.tweet.Photos) > 0 {
+				withPhotos := adaptInfoWithPhotos(info, res.tweet.Photos, tweetID, source, selectedIndex, now)
+				if unified.Str(withPhotos["code"]) == "OK" {
+					return withPhotos, nil
+				}
 			}
 			return adapted, nil
 		}
-		adapted := AdaptInfo(info, tweetID, source, selectedIndex, now)
+
+		st, synErr := awaitFullSyndication()
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+			return nil, ctxErr
+		}
+		if synErr == nil && st != nil && len(st.Photos) > 0 {
+			return buildSyndicationPhotoEnvelope(st, st.Photos, tweetID, source, now), nil
+		}
 		if unified.Str(adapted["code"]) == "NO_MEDIA" && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
 			return syndicationContractError(synErr), nil
 		}
-		return adapted, nil
 	}
-	return AdaptInfo(info, tweetID, source, selectedIndex, now), nil
+	return adapted, nil
 }

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
@@ -1113,5 +1115,304 @@ func TestInstagramSingleImageMultiImageMixedCompletionAndLoginBlocked(t *testing
 			errObj["retryable"] == true {
 			t.Fatalf("Parse(%q) = %+v, want UPSTREAM_BLOCKED '需要登录，暂不支持' (non-retryable)", loginURL, blockedEnv)
 		}
+	}
+}
+
+func TestParseInstagramPostVideoParallelNativeSupplementTimeoutAndErrorFallback(t *testing.T) {
+	const now int64 = 1762300800
+	const shortcode = "DIqghhpok2K"
+	const postURL = "https://www.instagram.com/p/" + shortcode + "/"
+
+	sampleYTVideo := func() *ytengine.Info {
+		return &ytengine.Info{
+			ID:        shortcode,
+			Title:     "Instagram /p/ Video Post",
+			Thumbnail: "https://scontent-nrt1-2.cdninstagram.com/v/t51.2885-15/post_thumb.jpg",
+			Formats: []ytengine.Format{
+				{
+					FormatID: "0",
+					URL:      "https://scontent-nrt1-2.cdninstagram.com/o1/v/t16/f2/m69/post_video_720.mp4",
+					Ext:      "mp4",
+					Protocol: "https",
+					Width:    int64Ptr(720),
+					Height:   int64Ptr(1280),
+					Filesize: int64Ptr(4096000),
+				},
+			},
+		}
+	}
+
+	// 1. Default native supplement timeout is bounded to 3 seconds (~3s per PR #65 follow-up).
+	defaultParser := NewWithFetcher(&stubExtractor{enabled: true}, nil, fakeFetcher{})
+	if got := defaultParser.effectiveSupplementTimeout(); got != 3*time.Second {
+		t.Fatalf("effectiveSupplementTimeout() = %v, want 3s", got)
+	}
+
+	// 2. Deterministic barrier handshake proving yt-dlp and native supplement run concurrently on /p/,
+	// and completed carousel images remain preserved even when yt-dlp finishes after supplementTimeout.
+	ytEntered := make(chan struct{})
+	nativeEntered := make(chan struct{})
+	bothRunning := make(chan struct{})
+	go func() {
+		<-ytEntered
+		<-nativeEntered
+		close(bothRunning)
+	}()
+
+	mixedSidecarCtx := map[string]any{
+		"gql_data": map[string]any{
+			"shortcode_media": map[string]any{
+				"__typename": "GraphSidecar",
+				"id":         "5100001",
+				"shortcode":  shortcode,
+				"edge_sidecar_to_children": map[string]any{
+					"edges": []any{
+						map[string]any{
+							"node": map[string]any{
+								"__typename":     "GraphVideo",
+								"id":             "vid-slide-1",
+								"is_video":       true,
+								"display_url":    "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/vid1_poster.jpg",
+								"video_url":      "https://scontent-nrt1-1.cdninstagram.com/o1/v/t16/f2/m69/vid1_native.mp4",
+								"video_duration": 12.0,
+								"dimensions":     map[string]any{"width": 720, "height": 1280},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "img-slide-2",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/img2_1440.jpg",
+								"dimensions":  map[string]any{"width": 1440, "height": 1800},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	rawMixedCtx, _ := json.Marshal(mixedSidecarCtx)
+	escapedMixedCtx, _ := json.Marshal(string(rawMixedCtx))
+	mixedEmbedHTML := `<script>window.__data = {"contextJSON":` + string(escapedMixedCtx) + `};</script>`
+
+	parallelParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(ctx context.Context, _ string) (*ytengine.Info, error) {
+				close(ytEntered)
+				select {
+				case <-bothRunning:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				time.Sleep(60 * time.Millisecond)
+				return sampleYTVideo(), nil
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(reqCtx context.Context, req fetch.Request) (fetch.Response, error) {
+				close(nativeEntered)
+				select {
+				case <-bothRunning:
+				case <-reqCtx.Done():
+					return fetch.Response{}, reqCtx.Err()
+				}
+				return fetch.Response{StatusCode: http.StatusOK, Body: []byte(mixedEmbedHTML), URL: req.URL}, nil
+			},
+		},
+	)
+	parallelParser.supplementTimeout = 30 * time.Millisecond
+
+	parallelCtx, cancelParallel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelParallel()
+	parallelEnv, err := parallelParser.Parse(parallelCtx, postURL, now)
+	if err != nil {
+		t.Fatalf("parallel mixed /p/ Parse failed: %v", err)
+	}
+	parallelItems := unified.Slice(unified.Map(unified.PublicView(parallelEnv, false, now)["data"])["items"])
+	if len(parallelItems) != 2 || unified.Str(unified.Map(parallelItems[0])["type"]) != "video" || unified.Str(unified.Map(parallelItems[1])["type"]) != "image" {
+		t.Fatalf("expected [video, image] from parallel mixed /p/ carousel, got %+v", parallelItems)
+	}
+
+	// 3. Hung native supplement on a /p/ video post is cancelled at supplementTimeout without
+	// entering Tier 2 GraphQL, and returns the yt-dlp video result directly.
+	embedCanceled := make(chan struct{})
+	var graphqlCalled atomic.Bool
+	timeoutParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				return sampleYTVideo(), nil
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(reqCtx context.Context, req fetch.Request) (fetch.Response, error) {
+				if req.URL == "https://www.instagram.com/api/graphql" {
+					graphqlCalled.Store(true)
+					return fetch.Response{StatusCode: http.StatusInternalServerError}, nil
+				}
+				<-reqCtx.Done()
+				close(embedCanceled)
+				return fetch.Response{}, reqCtx.Err()
+			},
+		},
+	)
+	timeoutParser.supplementTimeout = 80 * time.Millisecond
+
+	start := time.Now()
+	videoEnv, err := timeoutParser.Parse(context.Background(), postURL, now)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("timeout fallback Parse returned Go error: %v", err)
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("expected native supplement timeout to cut off promptly (<1s), took %v", elapsed)
+	}
+	select {
+	case <-embedCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("expected hung native embed request context to be cancelled on supplement timeout")
+	}
+	if graphqlCalled.Load() {
+		t.Fatal("expected Tier 2 GraphQL not to start after native supplement context cancellation")
+	}
+	videoView := unified.PublicView(videoEnv, false, now)
+	if err := unified.ValidateEnvelopeAt(videoView, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt failed on /p/ video fallback envelope: %v", err)
+	}
+	if unified.Str(videoView["code"]) != "OK" {
+		t.Fatalf("expected code=OK video result on native supplement timeout, got %+v", videoView)
+	}
+	videoItems := unified.Slice(unified.Map(videoView["data"])["items"])
+	if len(videoItems) != 1 || !strings.Contains(unified.Str(unified.Map(unified.Map(videoItems[0])["default"])["url"]), "post_video_720.mp4") {
+		t.Fatalf("expected yt-dlp post_video_720.mp4 result on supplement timeout, got %+v", videoItems)
+	}
+
+	// 4. Native supplement failures (HTTP 403/429/500, login-wall HTML/JSON, malformed body)
+	// on a /p/ video post return the yt-dlp video result directly without failing.
+	nativeFailureCases := []struct {
+		name    string
+		fetchFn func(context.Context, fetch.Request) (fetch.Response, error)
+	}{
+		{
+			name: "http-429-both-tiers",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusTooManyRequests, URL: req.URL}, nil
+			},
+		},
+		{
+			name: "http-500-both-tiers",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusInternalServerError, URL: req.URL}, nil
+			},
+		},
+		{
+			name: "login-wall-on-native-when-ytdlp-succeeded",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				if strings.HasSuffix(req.URL, "/embed/captioned/") {
+					return fetch.Response{StatusCode: http.StatusOK, Body: []byte(`<html>Log in to watch</html>`), URL: req.URL}, nil
+				}
+				return fetch.Response{StatusCode: http.StatusOK, Body: []byte(`{"data":{"xdt_shortcode_media":null},"status":"ok"}`), URL: req.URL}, nil
+			},
+		},
+		{
+			name: "malformed-body",
+			fetchFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				return fetch.Response{StatusCode: http.StatusOK, Body: []byte(`{not valid`), URL: req.URL}, nil
+			},
+		},
+	}
+	for _, tc := range nativeFailureCases {
+		t.Run("post-video-ignores-native-"+tc.name, func(t *testing.T) {
+			p := NewWithFetcher(
+				&stubExtractor{
+					enabled: true,
+					extract: func(context.Context, string) (*ytengine.Info, error) {
+						return sampleYTVideo(), nil
+					},
+				},
+				nil,
+				fakeFetcher{fn: tc.fetchFn},
+			)
+			env, err := p.Parse(context.Background(), postURL, now)
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if unified.Str(env["code"]) != "OK" {
+				t.Fatalf("expected code=OK video result despite native %s, got %+v", tc.name, env)
+			}
+		})
+	}
+
+	// 5. Pure-image /p/ post where yt-dlp returns CONTENT_UNAVAILABLE is NOT cut off by
+	// supplementTimeout and reuses the single in-flight native fetch without duplicating requests.
+	var embedHits atomic.Int32
+	pureImageSidecar := map[string]any{
+		"gql_data": map[string]any{
+			"shortcode_media": map[string]any{
+				"__typename": "GraphSidecar",
+				"id":         "5100009",
+				"shortcode":  "BoHk1haB5tM",
+				"edge_sidecar_to_children": map[string]any{
+					"edges": []any{
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "slow-img-1",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/slow_img1.jpg",
+								"dimensions":  map[string]any{"width": 1080, "height": 1350},
+							},
+						},
+						map[string]any{
+							"node": map[string]any{
+								"__typename":  "GraphImage",
+								"id":          "slow-img-2",
+								"display_url": "https://scontent-nrt1-1.cdninstagram.com/v/t51.29350-15/slow_img2.jpg",
+								"dimensions":  map[string]any{"width": 1080, "height": 1350},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	rawPureCtx, _ := json.Marshal(pureImageSidecar)
+	escapedPureCtx, _ := json.Marshal(string(rawPureCtx))
+	pureEmbedHTML := `<script>window.__data = {"contextJSON":` + string(escapedPureCtx) + `};</script>`
+
+	slowPureImageParser := NewWithFetcher(
+		&stubExtractor{
+			enabled: true,
+			extract: func(context.Context, string) (*ytengine.Info, error) {
+				time.Sleep(15 * time.Millisecond)
+				return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "There is no video in this post"}
+			},
+		},
+		nil,
+		fakeFetcher{
+			fn: func(reqCtx context.Context, req fetch.Request) (fetch.Response, error) {
+				embedHits.Add(1)
+				select {
+				case <-time.After(90 * time.Millisecond):
+					return fetch.Response{StatusCode: http.StatusOK, Body: []byte(pureEmbedHTML), URL: req.URL}, nil
+				case <-reqCtx.Done():
+					return fetch.Response{}, reqCtx.Err()
+				}
+			},
+		},
+	)
+	slowPureImageParser.supplementTimeout = 30 * time.Millisecond
+
+	slowPureEnv, err := slowPureImageParser.Parse(context.Background(), "https://www.instagram.com/p/BoHk1haB5tM/", now)
+	if err != nil || unified.Str(slowPureEnv["code"]) != "OK" {
+		t.Fatalf("expected pure-image /p/ post slower than supplementTimeout to succeed, got env=%+v err=%v", slowPureEnv, err)
+	}
+	if gotHits := embedHits.Load(); gotHits != 1 {
+		t.Fatalf("expected exactly 1 native embed fetch (reused from parallel task), got %d", gotHits)
+	}
+	if gotItems := len(unified.Slice(unified.Map(slowPureEnv["data"])["items"])); gotItems != 2 {
+		t.Fatalf("expected 2 image items, got %d", gotItems)
 	}
 }

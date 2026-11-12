@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	syndicationEndpointURL = "https://cdn.syndication.twimg.com/tweet-result"
-	syndicationHost        = "cdn.syndication.twimg.com"
-	pbsMediaHost           = "pbs.twimg.com"
-	syndicationTimeout     = 10 * time.Second
-	syndicationMaxBytes    = 512 << 10 // 512 KiB
-	base36Alphabet         = "0123456789abcdefghijklmnopqrstuvwxyz"
+	syndicationEndpointURL       = "https://cdn.syndication.twimg.com/tweet-result"
+	syndicationHost              = "cdn.syndication.twimg.com"
+	pbsMediaHost                 = "pbs.twimg.com"
+	syndicationTimeout           = 10 * time.Second
+	syndicationSupplementTimeout = 3 * time.Second
+	syndicationMaxBytes          = 512 << 10 // 512 KiB
+	base36Alphabet               = "0123456789abcdefghijklmnopqrstuvwxyz"
 )
 
 var (
