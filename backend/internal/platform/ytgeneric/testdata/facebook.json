@@ -1,0 +1,59 @@
+{
+  "id": "647537299265662",
+  "title": "Padre enseña a su hijo a cómo bañar un recién nacido junto con su gato",
+  "description": "Un video tierno sobre un padre enseñando a su hijo.",
+  "uploader": "Noticias Ejemplo",
+  "uploader_id": "noticias.ejemplo",
+  "timestamp": 1600000000,
+  "duration": 136.0,
+  "view_count": 125000,
+  "like_count": 4800,
+  "comment_count": 310,
+  "repost_count": 920,
+  "width": 720,
+  "height": 1280,
+  "thumbnail": "https://scontent-nrt1-2.xx.fbcdn.net/v/t15.5256-10/647537299265662_thumb.jpg?ccb=1-7&oh=test_thumb",
+  "webpage_url": "https://www.facebook.com/watch/?v=647537299265662",
+  "extractor": "facebook",
+  "extractor_key": "Facebook",
+  "formats": [
+    {
+      "format_id": "946537014817549a",
+      "url": "https://video-nrt6-1.xx.fbcdn.net/o1/v/t2/f2/m69/dash_audio.m4a?ccb=17-1&oh=test_audio",
+      "ext": "m4a",
+      "protocol": "https",
+      "vcodec": "none",
+      "acodec": "mp4a.40.5",
+      "abr": 65.4
+    },
+    {
+      "format_id": "sd",
+      "url": "https://video-nrt6-1.xx.fbcdn.net/o1/v/t2/f2/m366/sample_sd.mp4?ccb=17-1&oh=test_sd&tag=dash_h264-basic-gen2_360p",
+      "ext": "mp4",
+      "protocol": "https",
+      "vcodec": "",
+      "acodec": "",
+      "quality": -3
+    },
+    {
+      "format_id": "hd",
+      "url": "https://video-nrt6-1.xx.fbcdn.net/o1/v/t2/f2/m366/sample_hd.mp4?ccb=17-1&oh=test_hd&tag=dash_h264-basic-gen2_720p",
+      "ext": "mp4",
+      "protocol": "https",
+      "vcodec": "",
+      "acodec": "",
+      "quality": -2
+    },
+    {
+      "format_id": "1417507216490308v",
+      "url": "https://video-nrt6-1.xx.fbcdn.net/o1/v/t2/f2/m69/dash_720v.mp4?ccb=17-1&oh=test_dashv",
+      "ext": "mp4",
+      "protocol": "https",
+      "width": 720,
+      "height": 1280,
+      "vcodec": "vp09.00.31.08.01.01.01.01.00",
+      "acodec": "none",
+      "vbr": 980.2
+    }
+  ]
+}

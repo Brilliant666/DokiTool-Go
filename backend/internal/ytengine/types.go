@@ -81,6 +81,7 @@ type Format struct {
 	Width          *int64            `json:"width"`
 	Height         *int64            `json:"height"`
 	FPS            *float64          `json:"fps"`
+	Quality        *float64          `json:"quality"`
 	TBR            *float64          `json:"tbr"`
 	VBR            *float64          `json:"vbr"`
 	ABR            *float64          `json:"abr"`
@@ -112,6 +113,7 @@ type Info struct {
 	ChannelID    string      `json:"channel_id"`
 	Width        *int64      `json:"width"`
 	Height       *int64      `json:"height"`
+	IsLive       *bool       `json:"is_live"`
 	Timestamp    *float64    `json:"timestamp"`
 	Duration     *float64    `json:"duration"`
 	ViewCount    *int64      `json:"view_count"`

@@ -92,7 +92,14 @@ export async function declaredSegments(
         signal,
       );
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      if (segments) return segments;
+      if (
+        segments &&
+        !(
+          delivery.output?.container === "mp4" &&
+          segments.some((s) => /\.ts(?:$|[?#])/i.test(s.url))
+        )
+      )
+        return segments;
     }
     throw new Error("HLS 清单不可读取，或需要当前不支持的处理能力");
   }

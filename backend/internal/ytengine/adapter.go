@@ -48,6 +48,7 @@ type AdaptOptions struct {
 	EnableDASHMux                bool
 	EnableHLS                    bool
 	AllowCodecLessProgressiveMP4 bool
+	SingleStreamHLSOnly          bool
 }
 
 // SizeProber resolves the exact byte length of a progressive MP4 URL.
@@ -208,7 +209,7 @@ func parsePositiveContentLength(raw string) (int64, bool) {
 // PopulateMissingMP4Sizes concurrently probes exact byte lengths for progressive MP4
 // formats that lack an exact Filesize from yt-dlp. Any probe failure is ignored (fail-soft).
 func PopulateMissingMP4Sizes(ctx context.Context, info *Info, prober SizeProber, opts AdaptOptions) {
-	if info == nil || prober == nil {
+	if info == nil || prober == nil || opts.SingleStreamHLSOnly {
 		return
 	}
 	maxEntries := opts.MaxEntries
@@ -547,13 +548,65 @@ func resolveFormatHasAudio(acodec string) *bool {
 }
 
 func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts AdaptOptions, now int64) (unified.Array, unified.Object) {
+	if opts.SingleStreamHLSOnly {
+		if (entry.IsLive != nil && *entry.IsLive) || (parent != nil && parent.IsLive != nil && *parent.IsLive) {
+			return nil, nil
+		}
+		var singleHLS []Format
+		for _, f := range entry.Formats {
+			cleanURL := SanitizeMediaURL(f.URL, opts.AllowedMediaURL)
+			if cleanURL == "" {
+				continue
+			}
+			f.URL = cleanURL
+			if isSingleStreamCombinedMP4HLS(f) {
+				singleHLS = append(singleHLS, f)
+			}
+		}
+		sortFormats(singleHLS)
+		deduped := deduplicateSingleStreamHLSFormats(singleHLS)
+		variants := make(unified.Array, 0, len(deduped))
+		seenVariantIDs := make(map[string]bool, len(deduped))
+		for i, f := range deduped {
+			formatKey := nonEmptyOr(f.FormatID, fmt.Sprintf("hls-%d", i+1))
+			sources := buildFormatSourcesWithContext(f, opts, entryKey, formatKey, "", now)
+			if len(sources) == 0 {
+				continue
+			}
+			metadata := buildFormatMetadata(f, boolPtr(true), false)
+			variantID := "v-" + shortDigest(opts.PlatformID+":hls-single:"+entryKey+":"+formatKey)
+			if seenVariantIDs[variantID] {
+				continue
+			}
+			seenVariantIDs[variantID] = true
+			variants = append(variants, unified.Object{
+				"id":       variantID,
+				"label":    qualityLabel(f, ""),
+				"metadata": metadata,
+				"delivery": unified.Object{
+					"kind":    "hls",
+					"scope":   "single",
+					"sources": sources,
+					"output": unified.Object{
+						"container": "mp4",
+						"extension": "mp4",
+						"mime_type": "video/mp4",
+					},
+				},
+			})
+		}
+		return variants, nil
+	}
+
 	var mp4Formats []Format
 	var dashVideoFormats []Format
 	var dashAudioFormats []Format
 	var hlsVideoFormats []Format
 	var hlsAudioFormats []Format
 
-	// First pass: check if any audio-bearing format exists in the entry
+	// First pass: check if any audio-bearing format exists in the entry and count
+	// distinct progressive MP4 URLs (so top-level dimensions are inherited only when
+	// all progressive MP4 entries refer to a single stream rather than distinct SD/HD tiers).
 	hasAnyAudioInEntry := false
 	for _, f := range entry.Formats {
 		if !isNoCodec(f.ACodec) && strings.TrimSpace(f.ACodec) != "" {
@@ -561,6 +614,21 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 			break
 		}
 	}
+	uniqueProgressiveMP4URLs := make(map[string]bool)
+	for _, f := range entry.Formats {
+		cleanURL := SanitizeMediaURL(f.URL, opts.AllowedMediaURL)
+		if cleanURL == "" {
+			continue
+		}
+		fCopy := f
+		fCopy.URL = cleanURL
+		if isProgressiveMP4Format(fCopy, opts.AllowCodecLessProgressiveMP4) ||
+			(opts.AllowCodecLessProgressiveMP4 && !hasAnyAudioInEntry && isSilentCodecLessMP4(fCopy)) {
+			uniqueProgressiveMP4URLs[cleanURL] = true
+		}
+	}
+	inheritEntryDimensions := len(uniqueProgressiveMP4URLs) == 1 &&
+		entry.Width != nil && entry.Height != nil && *entry.Width > 0 && *entry.Height > 0
 
 	for _, f := range entry.Formats {
 		cleanURL := SanitizeMediaURL(f.URL, opts.AllowedMediaURL)
@@ -574,7 +642,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 			continue
 		}
 		if isProgressiveMP4Format(f, opts.AllowCodecLessProgressiveMP4) {
-			if (f.Width == nil || f.Height == nil) && entry.Width != nil && entry.Height != nil && *entry.Width > 0 && *entry.Height > 0 {
+			if inheritEntryDimensions && f.Width == nil && f.Height == nil {
 				w, h := *entry.Width, *entry.Height
 				f.Width = &w
 				f.Height = &h
@@ -584,7 +652,7 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 		}
 		// Silent progressive MP4 post (e.g. vintage Instagram post with no audio streams at all)
 		if opts.AllowCodecLessProgressiveMP4 && !hasAnyAudioInEntry && isSilentCodecLessMP4(f) {
-			if (f.Width == nil || f.Height == nil) && entry.Width != nil && entry.Height != nil && *entry.Width > 0 && *entry.Height > 0 {
+			if inheritEntryDimensions && f.Width == nil && f.Height == nil {
 				w, h := *entry.Width, *entry.Height
 				f.Width = &w
 				f.Height = &h
@@ -685,7 +753,16 @@ func buildEntryVariants(entry, parent *Info, entryKey, itemTitle string, opts Ad
 			continue
 		}
 		metadata := buildFormatMetadata(f, hasAudio, true)
-		variantID := "v-" + shortDigest(opts.PlatformID+":file:"+entryKey+":"+formatKey)
+		variantPrefix := "v-"
+		if f.Width == nil || f.Height == nil {
+			switch formatIDQualityRank(f.FormatID) {
+			case 2:
+				variantPrefix = "v-hd-"
+			case 1:
+				variantPrefix = "v-sd-"
+			}
+		}
+		variantID := variantPrefix + shortDigest(opts.PlatformID+":file:"+entryKey+":"+formatKey)
 		if seenVariantIDs[variantID] {
 			continue
 		}
@@ -1280,6 +1357,51 @@ func isHLSAudioOnly(f Format) bool {
 	return strings.Contains(proto, "m3u8") || strings.HasSuffix(urlPath, ".m3u8")
 }
 
+func isSingleStreamCombinedMP4HLS(f Format) bool {
+	proto := strings.ToLower(strings.TrimSpace(f.Protocol))
+	if proto != "m3u8_native" && proto != "m3u8" {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(f.Ext), "mp4") {
+		return false
+	}
+	u, err := url.Parse(f.URL)
+	if err != nil {
+		return false
+	}
+	lowerPath := strings.ToLower(u.Path)
+	if !strings.Contains(lowerPath, "/fmp4/") || !strings.HasSuffix(lowerPath, ".m3u8") {
+		return false
+	}
+	return cleanCodec(f.VCodec) != "" && cleanCodec(f.ACodec) != ""
+}
+
+func deduplicateSingleStreamHLSFormats(formats []Format) []Format {
+	out := make([]Format, 0, len(formats))
+	seenTier := make(map[string]bool, len(formats))
+	seenURL := make(map[string]bool, len(formats))
+	for _, f := range formats {
+		if seenURL[f.URL] {
+			continue
+		}
+		seenURL[f.URL] = true
+		w, h := derefInt(f.Width), derefInt(f.Height)
+		if w > 0 && h > 0 {
+			fpsTier := int64(0)
+			if fps := math.Round(derefFloat(f.FPS)); fps >= 50 {
+				fpsTier = int64(fps)
+			}
+			key := fmt.Sprintf("%dx%d:%d", w, h, fpsTier)
+			if seenTier[key] {
+				continue
+			}
+			seenTier[key] = true
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 func isNoCodec(codec string) bool {
 	c := strings.ToLower(strings.TrimSpace(codec))
 	return c == "none"
@@ -1291,6 +1413,29 @@ func cleanCodec(codec string) string {
 		return ""
 	}
 	return c
+}
+
+func formatIDQualityRank(raw string) int {
+	id := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case id == "hd" || strings.HasSuffix(id, "_hd") || strings.HasSuffix(id, "-hd"):
+		return 2
+	case id == "sd" || strings.HasSuffix(id, "_sd") || strings.HasSuffix(id, "-sd"):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func formatIDQualityLabel(raw string) string {
+	switch formatIDQualityRank(raw) {
+	case 2:
+		return "HD"
+	case 1:
+		return "SD"
+	default:
+		return ""
+	}
 }
 
 func sortFormats(formats []Format) {
@@ -1311,6 +1456,13 @@ func sortFormats(formats []Format) {
 		ta, tb := derefFloat(a.TBR), derefFloat(b.TBR)
 		if ta != tb {
 			return ta > tb
+		}
+		if a.Quality != nil && b.Quality != nil && *a.Quality != *b.Quality {
+			return *a.Quality > *b.Quality
+		}
+		qa, qb := formatIDQualityRank(a.FormatID), formatIDQualityRank(b.FormatID)
+		if qa != qb {
+			return qa > qb
 		}
 		return a.FormatID > b.FormatID
 	})
@@ -1493,6 +1645,9 @@ func qualityLabel(f Format, suffix string) string {
 				}
 			}
 		}
+	}
+	if base == "" {
+		base = formatIDQualityLabel(f.FormatID)
 	}
 	if base == "" {
 		if suffix != "" {

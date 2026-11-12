@@ -266,3 +266,121 @@ func TestYouTubeHelperConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestYTDLPSitesConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "yt-dlp")
+	payload := []byte("#!/bin/sh\necho '{}' \n")
+	if err := os.WriteFile(fakeBin, payload, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	hexSum := hex.EncodeToString(sum[:])
+
+	origAsset, hadOrig := ytengine.OfficialSHA256Sums20261026[hexSum]
+	ytengine.OfficialSHA256Sums20261026[hexSum] = "yt-dlp-sites-cmd-test"
+	defer func() {
+		if hadOrig {
+			ytengine.OfficialSHA256Sums20261026[hexSum] = origAsset
+		} else {
+			delete(ytengine.OfficialSHA256Sums20261026, hexSum)
+		}
+	}()
+
+	tests := []struct {
+		name      string
+		env       map[string]string
+		wantSites []string
+		wantErr   bool
+	}{
+		{
+			name:      "default-off",
+			env:       nil,
+			wantSites: nil,
+			wantErr:   false,
+		},
+		{
+			name: "unknown-site-fails-even-when-other-switches-off-and-binary-missing",
+			env: map[string]string{
+				"DOKITOOL_YTDLP_SITES":  "facebook,vimeo",
+				"DOKITOOL_YTDLP_BINARY": filepath.Join(dir, "missing-yt-dlp"),
+			},
+			wantSites: nil,
+			wantErr:   true,
+		},
+		{
+			name: "empty-token-fails",
+			env: map[string]string{
+				"DOKITOOL_YTDLP_SITES": "facebook,,tumblr",
+			},
+			wantSites: nil,
+			wantErr:   true,
+		},
+		{
+			name: "enabled-missing-binary-not-registered-in-catalog",
+			env: map[string]string{
+				"DOKITOOL_YTDLP_SITES":  "facebook,tumblr,dailymotion",
+				"DOKITOOL_YTDLP_BINARY": filepath.Join(dir, "missing-yt-dlp"),
+			},
+			wantSites: nil,
+			wantErr:   false,
+		},
+		{
+			name: "enabled-verified-binary-registers-selected-sites-only",
+			env: map[string]string{
+				"DOKITOOL_YTDLP_SITES":  "facebook,tumblr,dailymotion",
+				"DOKITOOL_YTDLP_BINARY": fakeBin,
+			},
+			wantSites: []string{"facebook", "tumblr", "dailymotion"},
+			wantErr:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := catalog.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			adapters := map[string]api.Adapter{}
+			err = configureYTDLPX(c, adapters, fetch.New(), func(k string) string { return tc.env[k] })
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("configureYTDLPX err=%v, wantErr=%v", err, tc.wantErr)
+			}
+			wantSet := map[string]bool{}
+			for _, id := range tc.wantSites {
+				wantSet[id] = true
+			}
+			for _, id := range []string{"facebook", "tumblr", "dailymotion", "x", "youtube", "instagram"} {
+				want := wantSet[id]
+				if c.Has(id) != want || (adapters[id] != nil) != want {
+					t.Fatalf("site %s: catalog.Has=%v adapter=%v, want=%v", id, c.Has(id), adapters[id] != nil, want)
+				}
+			}
+			if len(tc.wantSites) == 3 {
+				if got := c.PlatformForURL("https://www.facebook.com/reel/1517545242764683"); got != "facebook" {
+					t.Fatalf("PlatformForURL(facebook)=%q, want facebook", got)
+				}
+				if got := c.PlatformForURL("https://maskofthedragon.tumblr.com/post/706987028632748032"); got != "tumblr" {
+					t.Fatalf("PlatformForURL(tumblr)=%q, want tumblr", got)
+				}
+				if got := c.PlatformForURL("https://www.dailymotion.com/video/x8t9abc"); got != "dailymotion" {
+					t.Fatalf("PlatformForURL(dailymotion)=%q, want dailymotion", got)
+				}
+			}
+		})
+	}
+
+	t.Run("unknown-site-fails-serve-before-listener", func(t *testing.T) {
+		t.Setenv("DOKITOOL_YTDLP_SITES", "facebook,unknownsite")
+		occupied, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer occupied.Close()
+		err = run([]string{"serve", "-listen", occupied.Addr().String(), "-client-identity", "direct"})
+		if err == nil || !strings.Contains(err.Error(), "DOKITOOL_YTDLP_SITES") {
+			t.Fatalf("want DOKITOOL_YTDLP_SITES startup error before binding listener, got %v", err)
+		}
+	})
+}

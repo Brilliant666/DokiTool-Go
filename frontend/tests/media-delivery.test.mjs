@@ -45,3 +45,55 @@ test('extensions follow metadata and delivery output rather than opaque signed f
   assert.equal(delivery.mediaExtension({extension:'mov'},undefined,'video/mp4'),'mov');
   assert.equal(delivery.mediaExtension({container:'mp4'}),'mp4');
 });
+test('dailymotion single-stream fMP4 HLS resolves #EXT-X-MAP init + m4s fragments, rejects MPEG-TS when output is mp4, and builds readable mp4 filename',async()=>{
+  const { buildMediaFilename } = await vite.ssrLoadModule('/src/utils/videoFilename.ts');
+  const m3u8Url = 'https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/718475466/h264_aac_fhd/1/manifest.m3u8';
+  const manifest = [
+    '#EXTM3U',
+    '#EXT-X-VERSION:7',
+    '#EXT-X-TARGETDURATION:6',
+    '#EXT-X-MAP:URI="init.mp4"',
+    '#EXTINF:5.000,',
+    'seg-0.m4s',
+    '#EXTINF:4.200,',
+    'seg-1.m4s',
+    '#EXT-X-ENDLIST',
+  ].join('\n');
+  const bodies = new Map([
+    [m3u8Url, new TextEncoder().encode(manifest)],
+    ['https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/718475466/h264_aac_fhd/1/init.mp4', new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70])],
+    ['https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/718475466/h264_aac_fhd/1/seg-0.m4s', new Uint8Array([0x01, 0x02, 0x03])],
+    ['https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/718475466/h264_aac_fhd/1/seg-1.m4s', new Uint8Array([0x04, 0x05])],
+  ]);
+  globalThis.fetch = async (url) => {
+    const payload = bodies.get(String(url));
+    if (!payload) throw new Error(`unexpected fetch: ${url}`);
+    return new Response(payload, { status: 200, headers: { 'content-length': String(payload.byteLength) } });
+  };
+  const value = { kind: 'hls', scope: 'single', sources: [{ url: m3u8Url }], output: { container: 'mp4', extension: 'mp4', mime_type: 'video/mp4' } };
+  const resolved = await delivery.declaredSegments(value, {});
+  assert.deepEqual(resolved, [
+    { url: 'https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/718475466/h264_aac_fhd/1/init.mp4' },
+    { url: 'https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/718475466/h264_aac_fhd/1/seg-0.m4s' },
+    { url: 'https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/718475466/h264_aac_fhd/1/seg-1.m4s' },
+  ]);
+  const merged = await segments.mergeSegments(resolved);
+  assert.deepEqual(
+    [...new Uint8Array(await merged.arrayBuffer())],
+    [0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x01, 0x02, 0x03, 0x04, 0x05],
+  );
+  const ext = delivery.mediaExtension(undefined, value);
+  assert.equal(ext, 'mp4');
+  assert.equal(
+    buildMediaFilename({ title: 'Big Buck Bunny Clip', index: 1, total: 1, fallback: m3u8Url, extension: ext }),
+    'Big Buck Bunny Clip.mp4',
+  );
+
+  // Defense-in-depth: MPEG-TS (.ts) segments must be rejected when output.container === "mp4"
+  const legacyM3u8 = 'https://vod3.cf.dmcdn.net/sec2(tok)/video/790/233/154332097_mp4_h264_aac_hd.m3u8';
+  globalThis.fetch = async () => new Response('#EXTM3U\n#EXTINF:10.0,\n../../../frag(1)/video/790/233/154332097_mp4_h264_aac_hd.ts?sig=1\n#EXT-X-ENDLIST\n');
+  await assert.rejects(
+    delivery.declaredSegments({ kind: 'hls', scope: 'single', sources: [{ url: legacyM3u8 }], output: { container: 'mp4', extension: 'mp4', mime_type: 'video/mp4' } }, {}),
+    /HLS 清单不可读取，或需要当前不支持的处理能力/,
+  );
+});

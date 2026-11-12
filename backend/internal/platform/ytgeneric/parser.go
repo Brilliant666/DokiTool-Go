@@ -22,12 +22,63 @@ type SiteSpec struct {
 	PlatformID                   string   `json:"platform_id"`
 	Name                         string   `json:"name"`
 	SiteURL                      string   `json:"site_url"`
+	Icon                         string   `json:"icon"`
+	CatalogDomains               []string `json:"catalog_domains"`
 	InputHosts                   []string `json:"input_hosts"`
+	OutboundHosts                []string `json:"outbound_hosts"`
 	MediaHostSuffix              []string `json:"media_host_suffix"`
+	Extractors                   []string `json:"extractors"`
 	MaxEntries                   int      `json:"max_entries"`
 	EnableDASHMux                bool     `json:"enable_dash_mux"`
 	EnableHLS                    bool     `json:"enable_hls"`
 	AllowCodecLessProgressiveMP4 bool     `json:"allow_codecless_progressive_mp4"`
+	SingleStreamHLSOnly          bool     `json:"single_stream_hls_only"`
+}
+
+// CatalogEntry returns the catalog registration record for this SiteSpec.
+func (s SiteSpec) CatalogEntry() unified.Object {
+	icon := strings.TrimSpace(s.Icon)
+	if icon == "" {
+		icon = s.PlatformID
+	}
+	rawDomains := s.CatalogDomains
+	if len(rawDomains) == 0 {
+		for _, h := range s.InputHosts {
+			clean := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(h)), ".")
+			if clean != "" {
+				rawDomains = append(rawDomains, clean)
+			}
+		}
+	}
+	domains := make(unified.Array, 0, len(rawDomains))
+	seen := make(map[string]bool, len(rawDomains))
+	for _, d := range rawDomains {
+		clean := strings.ToLower(strings.TrimSpace(d))
+		if clean != "" && !seen[clean] {
+			seen[clean] = true
+			domains = append(domains, clean)
+		}
+	}
+	return unified.Object{
+		"id":           s.PlatformID,
+		"name":         s.Name,
+		"site_url":     s.SiteURL,
+		"icon":         icon,
+		"capabilities": unified.Array{"video"},
+		"domains":      domains,
+	}
+}
+
+func hostMatchesRule(host, rule string) bool {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	r := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(rule), "."))
+	if h == "" || r == "" {
+		return false
+	}
+	if strings.HasPrefix(r, ".") {
+		return strings.HasSuffix(h, r) && len(h) > len(r)
+	}
+	return h == r
 }
 
 // Parser implements api.Adapter for any SiteSpec using the shared ytengine pipeline.
@@ -63,27 +114,24 @@ func (p *Parser) AllowedInputURL(raw string) bool {
 	return ok
 }
 
-// AllowedOutboundHost checks whether host matches spec.InputHosts or spec.MediaHostSuffix.
+// AllowedOutboundHost checks whether host matches spec.InputHosts, spec.OutboundHosts, or spec.MediaHostSuffix.
 func (p *Parser) AllowedOutboundHost(host string) bool {
 	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
 	if p == nil || h == "" || net.ParseIP(h) != nil {
 		return false
 	}
 	for _, allowed := range p.spec.InputHosts {
-		ah := strings.ToLower(strings.TrimSpace(allowed))
-		if ah == "" {
-			continue
+		if hostMatchesRule(h, allowed) {
+			return true
 		}
-		if h == ah || (strings.HasPrefix(ah, ".") && strings.HasSuffix(h, ah) && len(h) > len(ah)) {
+	}
+	for _, allowed := range p.spec.OutboundHosts {
+		if hostMatchesRule(h, allowed) {
 			return true
 		}
 	}
 	for _, suffix := range p.spec.MediaHostSuffix {
-		s := strings.ToLower(strings.TrimSpace(suffix))
-		if s == "" {
-			continue
-		}
-		if h == strings.TrimPrefix(s, ".") || (strings.HasPrefix(s, ".") && strings.HasSuffix(h, s) && len(h) > len(s)) {
+		if hostMatchesRule(h, suffix) {
 			return true
 		}
 	}
@@ -135,11 +183,7 @@ func (p *Parser) AllowedMediaURL(raw string) bool {
 	}
 	matched := false
 	for _, suffix := range p.spec.MediaHostSuffix {
-		s := strings.ToLower(strings.TrimSpace(suffix))
-		if s == "" {
-			continue
-		}
-		if host == strings.TrimPrefix(s, ".") || (strings.HasPrefix(s, ".") && strings.HasSuffix(host, s) && len(host) > len(s)) {
+		if hostMatchesRule(host, suffix) {
 			matched = true
 			break
 		}
@@ -179,11 +223,7 @@ func (p *Parser) sanitizeInputURL(raw string) (string, bool) {
 	}
 	matched := false
 	for _, allowed := range p.spec.InputHosts {
-		ah := strings.ToLower(strings.TrimSpace(allowed))
-		if ah == "" {
-			continue
-		}
-		if host == ah || (strings.HasPrefix(ah, ".") && strings.HasSuffix(host, ah) && len(host) > len(ah)) {
+		if hostMatchesRule(host, allowed) {
 			matched = true
 			break
 		}
@@ -245,6 +285,7 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		EnableDASHMux:                p.spec.EnableDASHMux,
 		EnableHLS:                    p.spec.EnableHLS,
 		AllowCodecLessProgressiveMP4: p.spec.AllowCodecLessProgressiveMP4,
+		SingleStreamHLSOnly:          p.spec.SingleStreamHLSOnly,
 	}
 	ytengine.PopulateMissingMP4Sizes(ctx, info, p.sizeProber, opts)
 	return ytengine.AdaptInfo(info, opts, now), nil

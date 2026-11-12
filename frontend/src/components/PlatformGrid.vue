@@ -11,17 +11,23 @@ import pipixiaArtwork from "../assets/platforms/pipixia.png";
 import pipigxArtwork from "../assets/platforms/pipigx.ico";
 import zuiyouArtwork from "../assets/platforms/zuiyou.png";
 import { supportedPlatforms } from "../utils/platforms";
+import { iconForClass } from "../utils/iconPaths";
 
-const xArtwork =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="#0f172a" d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8L200.7 275.5 26.8 48H172.4L272.9 180.9 389.2 48zM364.4 421.8h39.1L151.1 88h-42L364.4 421.8z"/></svg>',
-  );
-const youtubeArtwork =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="#ff0003" d="M549.655 124.083c-6.281-23.65-24.787-42.276-48.284-48.597C458.781 64 288 64 288 64S117.22 64 74.629 75.486c-23.497 6.322-42.003 24.947-48.284 48.597-11.412 42.867-11.412 132.305-11.412 132.305s0 89.438 11.412 132.305c6.281 23.65 24.787 41.5 48.284 47.821C117.22 448 288 448 288 448s170.78 0 213.371-11.486c23.497-6.321 42.003-24.171 48.284-47.821 11.412-42.867 11.412-132.305 11.412-132.305s0-89.438-11.412-132.305zm-317.51 213.508V175.185l142.739 81.205-142.739 81.201z"/></svg>',
-  );
+const brandSvg = (cls, fill) => {
+  const icon = iconForClass(cls);
+  return icon
+    ? "data:image/svg+xml;utf8," +
+        encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${icon.viewBox}"><path fill="${fill}" d="${icon.path}"/></svg>`,
+        )
+    : "";
+};
+
+const xArtwork = brandSvg("fa-x-twitter", "#0f172a");
+const youtubeArtwork = brandSvg("fa-youtube", "#ff0003");
+const facebookArtwork = brandSvg("fa-facebook", "#1877f2");
+const tumblrArtwork = brandSvg("fa-tumblr", "#001935");
+const dailymotionArtwork = brandSvg("fa-dailymotion", "#0d0d0d");
 const instagramArtwork =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
@@ -79,6 +85,21 @@ const platformArtwork = {
     img: instagramArtwork,
     desc: "解析 Instagram 视频",
     color: "#e1306c",
+  },
+  facebook: {
+    img: facebookArtwork,
+    desc: "解析 Facebook 视频",
+    color: "#1877f2",
+  },
+  tumblr: {
+    img: tumblrArtwork,
+    desc: "解析 Tumblr 视频",
+    color: "#001935",
+  },
+  dailymotion: {
+    img: dailymotionArtwork,
+    desc: "解析 Dailymotion 视频",
+    color: "#0d0d0d",
   },
 };
 const allPlatforms = computed(() =>

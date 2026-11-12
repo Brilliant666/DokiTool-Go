@@ -32,6 +32,7 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/x"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/xiaohongshu"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/youtube"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/ytgeneric"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/zuiyou"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/probe"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/shresolver"
@@ -257,10 +258,10 @@ func enableTBVideo(key string) (bool, error) {
 	return enabled, nil
 }
 
-// configureYTDLPX optionally registers the X / Twitter, YouTube, and Instagram
-// platforms when their respective DOKITOOL_YTDLP_*_ENABLED switches are true
+// configureYTDLPX optionally registers the X / Twitter, YouTube, Instagram, and
+// DOKITOOL_YTDLP_SITES platforms when their respective switches are enabled
 // and the shared yt-dlp binary preflight succeeds.
-// Production defaults all switches to false.
+// Production defaults all switches to off.
 func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, executor fetch.Executor, getenv func(string) string) error {
 	parseSwitch := func(key string) (bool, error) {
 		raw := getenv(key)
@@ -286,7 +287,11 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 	if err != nil {
 		return err
 	}
-	if !xEnabled && !ytEnabled && !igEnabled {
+	genericSites, err := ytgeneric.ParseSitesEnv(getenv("DOKITOOL_YTDLP_SITES"))
+	if err != nil {
+		return err
+	}
+	if !xEnabled && !ytEnabled && !igEnabled && len(genericSites) == 0 {
 		return nil
 	}
 
@@ -317,6 +322,20 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 		}
 		igEngine := baseEngine.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)
 		adapters["instagram"] = instagram.NewWithSizeProber(igEngine, ytengine.NewSizeProber(executor, instagram.AllowedMediaURL)).WithFetcher(executor)
+	}
+	for _, spec := range genericSites {
+		if err := c.Register(spec.CatalogEntry()); err != nil {
+			return err
+		}
+		policyParser := ytgeneric.NewWithResolver(spec, nil, nil, net.DefaultResolver)
+		siteEngine := baseEngine.
+			WithTargetPolicy(policyParser.AllowedInputURL, policyParser.AllowedOutboundHost).
+			WithExtractors(spec.Extractors...)
+		var prober ytengine.SizeProber
+		if !spec.SingleStreamHLSOnly {
+			prober = ytengine.NewSizeProber(executor, policyParser.AllowedMediaURL)
+		}
+		adapters[spec.PlatformID] = ytgeneric.NewWithResolver(spec, siteEngine, prober, net.DefaultResolver)
 	}
 	return nil
 }

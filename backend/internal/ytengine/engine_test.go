@@ -1830,3 +1830,189 @@ func TestAdaptInfoDualContainerDASHAudioVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestWithExtractorsCommandArgsAndSubprocess(t *testing.T) {
+	base := &Engine{socketTimeoutSec: 15}
+	target := "https://www.facebook.com/watch/?v=647537299265662"
+
+	defaultArgs := base.CommandArgs(target)
+	for _, arg := range defaultArgs {
+		if arg == "--use-extractors" {
+			t.Fatalf("default engine must not emit --use-extractors, got %v", defaultArgs)
+		}
+	}
+
+	pinned := base.WithExtractors("facebook", "facebook:reel", "facebook")
+	args := pinned.CommandArgs(target)
+	n := len(args)
+	if n < 5 ||
+		args[n-5] != "--use-extractors" ||
+		args[n-4] != "facebook,facebook:reel" ||
+		args[n-3] != "-J" ||
+		args[n-2] != "--" ||
+		args[n-1] != target {
+		t.Fatalf("unexpected --use-extractors CLI tail: %v", args)
+	}
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "yt-dlp")
+	script := "#!/bin/sh\nseen=''\nprev=''\nfor a in \"$@\"; do\n  if [ \"$prev\" = \"--use-extractors\" ]; then seen=\"$a\"; fi\n  prev=\"$a\"\ndone\nif [ \"$seen\" != \"facebook,facebook:reel\" ]; then\n  echo \"ERROR: missing --use-extractors ($seen)\" >&2\n  exit 1\nfi\necho '{\"id\":\"647537299265662\",\"title\":\"FB Test\",\"formats\":[{\"format_id\":\"hd\",\"url\":\"https://video-nrt6-1.xx.fbcdn.net/v/sample.mp4\",\"ext\":\"mp4\",\"protocol\":\"https\"}]}'\n"
+	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(script))
+	digest := hex.EncodeToString(sum[:])
+
+	eng, err := New(Config{
+		BinaryPath:    fakeBin,
+		AllowedHashes: map[string]string{digest: "yt-dlp-test"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fbEng := eng.WithExtractors("facebook", "facebook:reel")
+	info, err := fbEng.Extract(context.Background(), target)
+	if err != nil || info == nil || info.ID != "647537299265662" {
+		t.Fatalf("expected subprocess with --use-extractors to succeed, got info=%+v err=%v", info, err)
+	}
+}
+
+func TestSingleStreamHLSOnlyFiltering(t *testing.T) {
+	const now int64 = 1762300800
+	w1080, h1080 := int64(1920), int64(1080)
+	w720, h720 := int64(1280), int64(720)
+	fps60 := float64(60)
+	sz := int64(5000000)
+
+	info := &Info{
+		ID:       "xbvrdzy",
+		Title:    "Single Stream HLS Filter Test",
+		Uploader: "Creator",
+		Formats: []Format{
+			// 1. Progressive MP4 (must be excluded in SingleStreamHLSOnly mode)
+			{
+				FormatID: "http-720",
+				URL:      "https://vod2.cf.dmcdn.net/progressive/720.mp4",
+				Ext:      "mp4",
+				Protocol: "https",
+				Width:    &w720,
+				Height:   &h720,
+				VCodec:   "avc1.64001f",
+				ACodec:   "mp4a.40.2",
+				Filesize: &sz,
+			},
+			// 2. Video-only HLS needing external #EXT-X-MEDIA audio (must be excluded)
+			{
+				FormatID: "hls-video-only",
+				URL:      "https://vod2.cf.dmcdn.net/adaptive/video.m3u8",
+				Ext:      "mp4",
+				Protocol: "m3u8_native",
+				Width:    &w1080,
+				Height:   &h1080,
+				VCodec:   "avc1.64002a",
+				ACodec:   "none",
+			},
+			// 3. Audio-only HLS (must be excluded)
+			{
+				FormatID: "hls-audio-only",
+				URL:      "https://vod2.cf.dmcdn.net/adaptive/audio.m3u8",
+				Ext:      "m4a",
+				Protocol: "m3u8_native",
+				VCodec:   "none",
+				ACodec:   "mp4a.40.2",
+			},
+			// 4. Unknown-codec HLS (must be excluded)
+			{
+				FormatID: "hls-unknown",
+				URL:      "https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/1/unknown/manifest.m3u8",
+				Ext:      "mp4",
+				Protocol: "m3u8_native",
+			},
+			// 5. Legacy Dailymotion MPEG-TS HLS lacking /fmp4/ (must be excluded even with ext=="mp4" and codecs)
+			{
+				FormatID: "hls-legacy-ts",
+				URL:      "https://vod3.cf.dmcdn.net/sec2(tok)/video/790/233/154332097_mp4_h264_aac_hd.m3u8",
+				Ext:      "mp4",
+				Protocol: "m3u8_native",
+				Width:    &w720,
+				Height:   &h720,
+				VCodec:   "avc1.64001f",
+				ACodec:   "mp4a.40.2",
+			},
+			// 6. Verified single-stream combined fMP4 HLS (must be kept!)
+			{
+				FormatID: "hls-1080@60",
+				URL:      "https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/1/h264_aac_fhd_hfr/2/manifest.m3u8",
+				Ext:      "mp4",
+				Protocol: "m3u8_native",
+				Width:    &w1080,
+				Height:   &h1080,
+				FPS:      &fps60,
+				VCodec:   "avc1.64002a",
+				ACodec:   "mp4a.40.2",
+			},
+		},
+	}
+
+	opts := AdaptOptions{
+		PlatformID:          "dailymotion",
+		ContentID:           "xbvrdzy",
+		SourceURL:           "https://www.dailymotion.com/video/xbvrdzy",
+		SingleStreamHLSOnly: true,
+		AllowedMediaURL: func(raw string) bool {
+			return strings.Contains(raw, ".dmcdn.net/")
+		},
+	}
+	probed := false
+	PopulateMissingMP4Sizes(context.Background(), info, func(context.Context, string) (int64, bool) {
+		probed = true
+		return 1234, true
+	}, opts)
+	if probed {
+		t.Fatal("PopulateMissingMP4Sizes must not probe when SingleStreamHLSOnly is true")
+	}
+
+	env := AdaptInfo(info, opts, now)
+	if err := unified.ValidateEnvelopeAt(env, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+	}
+	pub := unified.PublicView(env, false, now)
+	if err := unified.ValidateEnvelopeAt(pub, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt(PublicView) failed: %v", err)
+	}
+
+	item := unified.Map(unified.Slice(unified.Map(pub["data"])["items"])[0])
+	if item["default"] != nil || unified.Str(item["default_unavailable_reason"]) != "processing_required" {
+		t.Fatalf("expected null default with processing_required, got default=%v reason=%v", item["default"], item["default_unavailable_reason"])
+	}
+	variants := unified.Slice(item["variants"])
+	if len(variants) != 1 {
+		t.Fatalf("expected exactly 1 verified single-stream HLS variant, got %d: %+v", len(variants), variants)
+	}
+	v := unified.Map(variants[0])
+	delivery := unified.Map(v["delivery"])
+	if unified.Str(delivery["kind"]) != "hls" || unified.Str(delivery["scope"]) != "single" {
+		t.Fatalf("expected kind=hls scope=single, got %+v", delivery)
+	}
+	if _, hasSel := delivery["selection"]; hasSel {
+		t.Fatalf("single-stream HLS must not set selection: %+v", delivery)
+	}
+	if unified.Str(v["label"]) != "1080p60" {
+		t.Fatalf("expected label 1080p60, got %v", v["label"])
+	}
+
+	// Live streams (is_live == true) must never be emitted as single-stream VOD HLS.
+	isLive := true
+	liveInfo := *info
+	liveInfo.IsLive = &isLive
+	liveEnv := AdaptInfo(&liveInfo, opts, now)
+	if err := unified.ValidateEnvelopeAt(liveEnv, now); err != nil {
+		t.Fatalf("ValidateEnvelopeAt(liveEnv) failed: %v", err)
+	}
+	if unified.Str(liveEnv["code"]) != "NO_MEDIA" {
+		t.Fatalf("expected live stream to return NO_MEDIA in SingleStreamHLSOnly mode, got %+v", liveEnv)
+	}
+}
