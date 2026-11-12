@@ -23,14 +23,24 @@ const (
 	ProtocolV2     = 2
 	ProtocolHeader = "X-DokiTool-Shanghai-Protocol"
 
-	// ProbeTimeout bounds Shanghai's two-dispatch cold-storage MP4 probe.
-	// Empirical 376 MiB cold originals take 6.6-7.7s; 10s leaves ~30% margin.
-	ProbeTimeout = 10 * time.Second
+	// ProbeTimeout bounds a standalone v1 two-dispatch original MP4 probe.
+	// In v2, resolveWork applies the tighter WorkResolveTimeout sub-budget so
+	// workCtx expires before ProbeTimeout and preserves already-fetched Renditions.
+	ProbeTimeout = 8 * time.Second
 
-	// WorkTimeout bounds Shanghai's combined detail lookup (~0.26s typical,
-	// 4s cap) + cold-storage original probe (10s cap) + callback delivery,
-	// and serves as Japan's hard maximum wait before falling back to local data.
-	WorkTimeout = 14 * time.Second
+	// WorkResolveTimeout bounds Shanghai's v2 detail lookup (~0.26s typical,
+	// 4s cap) plus the remaining time for original probing. If original probing
+	// exceeds the remainder, resolveWork returns Renditions with empty Candidates.
+	WorkResolveTimeout = 7 * time.Second
+
+	// workResultReserve keeps lease headroom before DeadlineMS so Shanghai can
+	// still upload Renditions over cross-border HTTPS (~0.25-1.05s) after a probe timeout.
+	workResultReserve = 1500 * time.Millisecond
+
+	// WorkTimeout bounds Japan's wait for Shanghai (7s Shanghai work budget +
+	// 2s cross-border claim/result margin), keeping worst-case parse + Japan
+	// fallback original probe (~0.7-1.0s) within ~10s.
+	WorkTimeout = 9 * time.Second
 )
 
 var videoIDPattern = regexp.MustCompile(`^v[0-9a-zA-Z]{10,127}$`)
@@ -155,7 +165,24 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func resolveWork(ctx context.Context, detailExec fetch.Executor, p originalProbe, awemeID string) (WorkResponse, error) {
-	detail, err := douyin.FetchShanghaiDetail(ctx, detailExec, awemeID)
+	workBudget := WorkResolveTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			if err := ctx.Err(); err != nil {
+				return WorkResponse{}, err
+			}
+			return WorkResponse{}, context.DeadlineExceeded
+		}
+		reserve := min(workResultReserve, remaining/2)
+		if capped := remaining - reserve; capped < workBudget {
+			workBudget = capped
+		}
+	}
+	workCtx, cancel := context.WithTimeout(ctx, workBudget)
+	defer cancel()
+
+	detail, err := douyin.FetchShanghaiDetail(workCtx, detailExec, awemeID)
 	if err != nil {
 		return WorkResponse{}, err
 	}
@@ -169,15 +196,18 @@ func resolveWork(ctx context.Context, detailExec fetch.Executor, p originalProbe
 		return out, nil
 	}
 	if ValidVideoID(detail.VideoID) {
-		orig, origErr := probeOriginal(ctx, p, detail.VideoID)
+		orig, origErr := probeOriginal(workCtx, p, detail.VideoID)
 		if err := ctx.Err(); err != nil {
 			return WorkResponse{}, err
 		}
-		if origErr == nil {
+		if origErr == nil && workCtx.Err() == nil {
 			out.VideoID = detail.VideoID
 			out.Candidates = orig.Candidates
 		} else if len(out.Renditions) == 0 {
-			return WorkResponse{}, origErr
+			if origErr != nil {
+				return WorkResponse{}, origErr
+			}
+			return WorkResponse{}, workCtx.Err()
 		}
 	}
 	return out, nil
