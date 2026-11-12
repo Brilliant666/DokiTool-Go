@@ -235,6 +235,11 @@ func (b *PullBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *PullBroker) claim(w http.ResponseWriter, r *http.Request) {
+	if r.Context().Err() != nil {
+		w.Header().Set("Connection", "close")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), PullWait)
 	defer cancel()
 	proto := 1
@@ -268,11 +273,16 @@ func (b *PullBroker) receive(w http.ResponseWriter, r *http.Request) {
 	// Limit how long a slow sender can occupy one of the result slots.
 	controller := http.NewResponseController(w)
 	_ = controller.SetReadDeadline(time.Now().Add(3 * time.Second))
-	defer controller.SetReadDeadline(time.Time{})
 	var result PullResult
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxResponseBytes+512))
 	d.DisallowUnknownFields()
-	if d.Decode(&result) != nil || d.Decode(&struct{}{}) != io.EOF || len(result.Result) == 0 {
+	if d.Decode(&result) != nil || d.Decode(&struct{}{}) != io.EOF {
+		w.Header().Set("Connection", "close")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	_ = controller.SetReadDeadline(time.Time{})
+	if len(result.Result) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
