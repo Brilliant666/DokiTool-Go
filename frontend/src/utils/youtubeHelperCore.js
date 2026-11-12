@@ -3,13 +3,25 @@
 // userscript (Tampermonkey / Violentmonkey), the Vue frontend, and Node unit tests,
 // and can be packaged into a browser extension in the future.
 
-export const YOUTUBE_HELPER_VERSION = "1.3.0";
-export const MIN_YOUTUBE_HELPER_VERSION = "1.3.0";
+export const YOUTUBE_HELPER_VERSION = "1.3.1";
+export const MIN_YOUTUBE_HELPER_VERSION = "1.3.1";
 export const YOUTUBE_HELPER_SCRIPT_URL = "/helper/dokitool-youtube.user.js";
 export const YOUTUBE_OPFS_TEMP_PREFIX = "dokitool-yt-tmp-";
 export const YOUTUBE_FILE_PICKER_ID = "dokitool-youtube";
-export const DEFAULT_OPFS_CLEANUP_DELAY_MS = 15000;
+export const DEFAULT_OPFS_CLEANUP_DELAY_MS = 120 * 1000;
+export const MAX_OPFS_CLEANUP_DELAY_MS = 30 * 60 * 1000;
+export const OPFS_CLEANUP_BYTES_PER_SECOND = 5 * 1024 * 1024;
+export const OPFS_STALE_TEMP_MAX_AGE_MS = 60 * 60 * 1000;
 export const OPFS_QUOTA_HEADROOM_FACTOR = 1.2;
+
+export function computeOpfsCleanupDelayMs(byteLength) {
+  const bytes = Math.max(0, Number(byteLength) || 0);
+  const estimatedMs = Math.ceil(bytes / OPFS_CLEANUP_BYTES_PER_SECOND) * 1000;
+  return Math.min(
+    MAX_OPFS_CLEANUP_DELAY_MS,
+    Math.max(DEFAULT_OPFS_CLEANUP_DELAY_MS, estimatedMs),
+  );
+}
 
 export const DEFAULT_MUX_CHUNK_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_MUX_VIDEO_CONCURRENCY = 3;
@@ -76,10 +88,9 @@ export function extractYouTubeVideoId(rawUrl) {
   if (host === "youtu.be" || host === "www.youtu.be") {
     if (segments.length === 1) candidate = segments[0];
   } else if (
-    host === "youtube.com" ||
-    host === "www.youtube.com" ||
-    host === "m.youtube.com" ||
-    host === "music.youtube.com"
+    ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"].includes(
+      host,
+    )
   ) {
     if (segments.length === 1 && segments[0].toLowerCase() === "watch") {
       candidate = parsed.searchParams.get("v") || "";
@@ -188,17 +199,12 @@ export function extractUrlClen(rawUrl) {
 }
 
 function pickUsableVariantSource(variant) {
-  const sources = variant?.delivery?.sources;
+  const sources = variant && variant.delivery && variant.delivery.sources;
   if (!Array.isArray(sources) || sources.length === 0) return null;
+  const hasUrl = (s) => s && typeof s.url === "string" && s.url.trim();
   return (
-    sources.find(
-      (s) =>
-        s &&
-        s.availability !== "unavailable" &&
-        typeof s.url === "string" &&
-        s.url.trim(),
-    ) ||
-    sources.find((s) => s && typeof s.url === "string" && s.url.trim()) ||
+    sources.find((s) => hasUrl(s) && s.availability !== "unavailable") ||
+    sources.find(hasUrl) ||
     null
   );
 }
@@ -212,7 +218,8 @@ export function selectYouTubeMuxPair(
     !videoVariant ||
     typeof videoVariant !== "object" ||
     videoVariant.state === "deferred" ||
-    videoVariant.delivery?.kind !== "file"
+    !videoVariant.delivery ||
+    videoVariant.delivery.kind !== "file"
   ) {
     return { ok: false, reason: "当前画质不支持浏览器内合流" };
   }
@@ -225,12 +232,9 @@ export function selectYouTubeMuxPair(
     return { ok: false, reason: "视频轨地址无效或不可用" };
   }
 
-  const vcodec = String(vMeta.video_codec || "")
-    .trim()
-    .toLowerCase();
-  const vContainer = String(vMeta.container || vMeta.extension || "")
-    .trim()
-    .toLowerCase();
+  const norm = (v) => String(v || "").trim().toLowerCase();
+  const vcodec = norm(vMeta.video_codec);
+  const vContainer = norm(vMeta.container || vMeta.extension);
 
   const isH264OrAV1 =
     vcodec === "h264" ||
@@ -258,8 +262,10 @@ export function selectYouTubeMuxPair(
             (att) =>
               att &&
               typeof att === "object" &&
-              att.resource?.role === "audio" &&
-              att.resource?.delivery?.kind === "file",
+              att.resource &&
+              att.resource.role === "audio" &&
+              att.resource.delivery &&
+              att.resource.delivery.kind === "file",
           )
           .map((att) => ({
             id: att.id || `att-${att.resource.id || "audio"}`,
@@ -276,23 +282,16 @@ export function selectYouTubeMuxPair(
       typeof cand !== "object" ||
       cand.state === "deferred" ||
       cand.id === videoVariant.id ||
-      cand.delivery?.kind !== "file"
+      !cand.delivery ||
+      cand.delivery.kind !== "file"
     ) {
       continue;
     }
     const aMeta = cand.metadata || {};
-    const aMime = String(aMeta.mime_type || "")
-      .trim()
-      .toLowerCase();
-    const aExt = String(aMeta.extension || "")
-      .trim()
-      .toLowerCase();
-    const aContainer = String(aMeta.container || "")
-      .trim()
-      .toLowerCase();
-    const acodec = String(aMeta.audio_codec || "")
-      .trim()
-      .toLowerCase();
+    const aMime = norm(aMeta.mime_type);
+    const aExt = norm(aMeta.extension);
+    const aContainer = norm(aMeta.container);
+    const acodec = norm(aMeta.audio_codec);
 
     const isStandaloneAudio =
       aMeta.has_audio === true &&
@@ -300,47 +299,30 @@ export function selectYouTubeMuxPair(
       (aMime.startsWith("audio/") || aExt === "m4a" || aExt === "webm");
     if (!isStandaloneAudio) continue;
 
-    if (isMp4Video) {
-      const aacMatch =
-        (acodec === "aac" || acodec.startsWith("mp4a")) &&
-        (aContainer === "mp4" || aContainer === "m4a" || aExt === "m4a");
-      if (!aacMatch) continue;
-      const audioSource = pickUsableVariantSource(cand);
-      if (!audioSource || !isValidGooglevideoPlaybackUrl(audioSource.url)) {
-        continue;
-      }
-      return {
-        ok: true,
-        outputContainer: "mp4",
-        outputExtension: "mp4",
-        outputMimeType: "video/mp4",
-        videoVariant,
-        audioVariant: cand,
-        videoSource,
-        audioSource,
-      };
+    const outFmt = isMp4Video
+      ? (acodec === "aac" || acodec.startsWith("mp4a")) &&
+        (aContainer === "mp4" || aContainer === "m4a" || aExt === "m4a")
+        ? "mp4"
+        : ""
+      : (acodec === "opus" || acodec.startsWith("opus")) &&
+          (aContainer === "webm" || aExt === "webm")
+        ? "webm"
+        : "";
+    if (!outFmt) continue;
+    const audioSource = pickUsableVariantSource(cand);
+    if (!audioSource || !isValidGooglevideoPlaybackUrl(audioSource.url)) {
+      continue;
     }
-
-    if (isWebmVideo) {
-      const opusMatch =
-        (acodec === "opus" || acodec.startsWith("opus")) &&
-        (aContainer === "webm" || aExt === "webm");
-      if (!opusMatch) continue;
-      const audioSource = pickUsableVariantSource(cand);
-      if (!audioSource || !isValidGooglevideoPlaybackUrl(audioSource.url)) {
-        continue;
-      }
-      return {
-        ok: true,
-        outputContainer: "webm",
-        outputExtension: "webm",
-        outputMimeType: "video/webm",
-        videoVariant,
-        audioVariant: cand,
-        videoSource,
-        audioSource,
-      };
-    }
+    return {
+      ok: true,
+      outputContainer: outFmt,
+      outputExtension: outFmt,
+      outputMimeType: `video/${outFmt}`,
+      videoVariant,
+      audioVariant: cand,
+      videoSource,
+      audioSource,
+    };
   }
 
   return {
@@ -604,14 +586,15 @@ function dispatchBridgeEvent(eventTarget, eventName, payloadObj) {
   }
 }
 
-const activeOpfsTempNames = new Set();
 let opfsTempCounter = 0;
 
-export async function cleanupLeftoverYouTubeOpfsTempFiles(options = {}) {
+export async function cleanupLeftoverYouTubeOpfsTempFiles(options) {
+  const opts = options || {};
+  const nav =
+    (opts.pageWindow && opts.pageWindow.navigator) ||
+    (typeof navigator !== "undefined" ? navigator : null);
   const storage =
-    options?.storage ??
-    options?.pageWindow?.navigator?.storage ??
-    (typeof navigator !== "undefined" ? navigator.storage : null);
+    opts.storage !== undefined ? opts.storage : nav && nav.storage;
   if (!storage || typeof storage.getDirectory !== "function") {
     return 0;
   }
@@ -624,52 +607,83 @@ export async function cleanupLeftoverYouTubeOpfsTempFiles(options = {}) {
   if (!root || typeof root.removeEntry !== "function") {
     return 0;
   }
-  const namesToRemove = [];
+  const locks = opts.locks !== undefined ? opts.locks : nav && nav.locks;
+  const nowFn = typeof opts.now === "function" ? opts.now : Date.now;
+  const maxAgeMs =
+    Number.isFinite(opts.maxAgeMs) && opts.maxAgeMs >= 0
+      ? opts.maxAgeMs
+      : OPFS_STALE_TEMP_MAX_AGE_MS;
+  const active = opts.activeNames;
+
+  const candidates = [];
   try {
-    if (typeof root.keys === "function") {
-      for await (const name of root.keys()) {
+    const iter =
+      (typeof root.keys === "function" && root.keys()) ||
+      (typeof root.entries === "function" && root.entries()) ||
+      (typeof root.values === "function" && root.values());
+    if (iter) {
+      for await (const entry of iter) {
+        const name =
+          typeof entry === "string"
+            ? entry
+            : Array.isArray(entry)
+              ? entry[0]
+              : entry && entry.name;
         if (
           typeof name === "string" &&
           name.startsWith(YOUTUBE_OPFS_TEMP_PREFIX) &&
-          !activeOpfsTempNames.has(name)
+          !(active && active.has(name))
         ) {
-          namesToRemove.push(name);
-        }
-      }
-    } else if (typeof root.entries === "function") {
-      for await (const entry of root.entries()) {
-        const name = Array.isArray(entry) ? entry[0] : entry?.name;
-        if (
-          typeof name === "string" &&
-          name.startsWith(YOUTUBE_OPFS_TEMP_PREFIX) &&
-          !activeOpfsTempNames.has(name)
-        ) {
-          namesToRemove.push(name);
-        }
-      }
-    } else if (typeof root.values === "function") {
-      for await (const handle of root.values()) {
-        const name = handle?.name;
-        if (
-          typeof name === "string" &&
-          name.startsWith(YOUTUBE_OPFS_TEMP_PREFIX) &&
-          !activeOpfsTempNames.has(name)
-        ) {
-          namesToRemove.push(name);
+          candidates.push(name);
         }
       }
     }
   } catch {
     // Ignore directory iteration failures on restricted profiles
   }
+
+  const isStaleEnough = async (name) => {
+    if ((active && active.has(name)) || typeof root.getFileHandle !== "function") {
+      return false;
+    }
+    const handle = await root.getFileHandle(name);
+    if (!handle || typeof handle.getFile !== "function") return false;
+    const file = await handle.getFile();
+    const mtime = Number(file && file.lastModified);
+    return Number.isFinite(mtime) && mtime > 0 && nowFn() - mtime > maxAgeMs;
+  };
+
   let removed = 0;
-  for (const name of namesToRemove) {
-    if (activeOpfsTempNames.has(name)) continue;
-    try {
-      await root.removeEntry(name);
-      removed += 1;
-    } catch {
-      // Ignore locked or already-removed entries
+  for (const name of candidates) {
+    const lockName = name.endsWith(".crswap") ? name.slice(0, -7) : name;
+    if (active && (active.has(name) || active.has(lockName))) continue;
+    let lockChecked = false;
+    if (locks && typeof locks.request === "function") {
+      try {
+        await locks.request(
+          lockName,
+          { mode: "exclusive", ifAvailable: true },
+          async (lock) => {
+            lockChecked = true;
+            if (lock && (await isStaleEnough(name))) {
+              await root.removeEntry(name);
+              removed += 1;
+            }
+          },
+        );
+      } catch {
+        // Fall through to age check only if locks.request itself threw
+      }
+    }
+    if (!lockChecked) {
+      try {
+        if (await isStaleEnough(name)) {
+          await root.removeEntry(name);
+          removed += 1;
+        }
+      } catch {
+        // Ignore locked or already-removed entries
+      }
     }
   }
   return removed;
@@ -683,6 +697,7 @@ export function createUserscriptController(options = {}) {
     pageWindow = (typeof document !== "undefined" && document?.defaultView) ||
       (typeof window !== "undefined" ? window : globalThis),
     opfsStorage = null,
+    webLocks = null,
     now = () => Date.now(),
     version = YOUTUBE_HELPER_VERSION,
     mediabunny = null,
@@ -693,6 +708,7 @@ export function createUserscriptController(options = {}) {
 
   let memoryVisitorCache = null;
   const activeDownloads = new Map();
+  const activeOpfsTempNames = new Set();
   let muxRnCounter = 0;
 
   function makeCodedError(code, message) {
@@ -828,6 +844,64 @@ export function createUserscriptController(options = {}) {
     );
   }
 
+  function resolveWebLocks() {
+    return (
+      webLocks ||
+      pageWindow?.navigator?.locks ||
+      (typeof navigator !== "undefined" ? navigator.locks : null)
+    );
+  }
+
+  function scheduleCleanupTimer(fn, delayMs) {
+    const timer =
+      typeof pageWindow?.setTimeout === "function"
+        ? pageWindow.setTimeout(fn, delayMs)
+        : setTimeout(fn, delayMs);
+    timer?.unref?.();
+    return timer;
+  }
+
+  async function acquireOpfsTempLock(locks, lockName) {
+    if (!locks || typeof locks.request !== "function") {
+      return () => {};
+    }
+    let releaseHold = null;
+    const holdPromise = new Promise((resolve) => {
+      releaseHold = resolve;
+    });
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      releaseHold?.();
+    };
+    let onGranted;
+    let onFailed;
+    const granted = new Promise((resolve, reject) => {
+      onGranted = resolve;
+      onFailed = reject;
+    });
+    try {
+      const reqPromise = locks.request(
+        lockName,
+        { mode: "exclusive" },
+        () => {
+          onGranted();
+          return holdPromise;
+        },
+      );
+      if (reqPromise && typeof reqPromise.catch === "function") {
+        reqPromise.catch((err) => onFailed(err));
+      }
+      await granted;
+      if (released) releaseHold?.();
+      return release;
+    } catch {
+      release();
+      return () => {};
+    }
+  }
+
   async function openPickerSaveTarget({
     cleanFilename,
     mimeType,
@@ -924,10 +998,16 @@ export function createUserscriptController(options = {}) {
 
       if (opfsEligible) {
         let opfsRoot = null;
+        let releaseWebLock = () => {};
         const safeTask = sanitizeOpfsTaskId(taskId);
         const tempName = `${YOUTUBE_OPFS_TEMP_PREFIX}${safeTask}-${now()}-${++opfsTempCounter}.part`;
         activeOpfsTempNames.add(tempName);
         try {
+          releaseWebLock = await acquireOpfsTempLock(
+            resolveWebLocks(),
+            tempName,
+          );
+          if (cancelState.aborted) throw makeUserCancelledError();
           opfsRoot = await storage.getDirectory();
           if (cancelState.aborted) throw makeUserCancelledError();
           const fileHandle = await opfsRoot.getFileHandle(tempName, {
@@ -954,6 +1034,7 @@ export function createUserscriptController(options = {}) {
               // Ignore if already removed
             }
             activeOpfsTempNames.delete(tempName);
+            releaseWebLock();
           };
 
           if (cancelState.aborted) {
@@ -984,22 +1065,19 @@ export function createUserscriptController(options = {}) {
                 throw makeUserCancelledError();
               }
               const file = await fileHandle.getFile();
+              if (cancelState.aborted) {
+                await cleanupImmediate();
+                throw makeUserCancelledError();
+              }
               if (!file || file.size === 0) {
                 await cleanupImmediate();
                 throw makeCodedError("MUX_EMPTY_OUTPUT", "输出文件为空");
               }
-              const scaledDefaultDelayMs = Math.min(
-                180000,
-                Math.max(
-                  DEFAULT_OPFS_CLEANUP_DELAY_MS,
-                  Math.ceil(file.size / (25 * 1024 * 1024)) * 1000,
-                ),
-              );
               const delayMs =
                 Number.isFinite(muxConfig.opfsCleanupDelayMs) &&
                 muxConfig.opfsCleanupDelayMs >= 0
                   ? muxConfig.opfsCleanupDelayMs
-                  : scaledDefaultDelayMs;
+                  : computeOpfsCleanupDelayMs(file.size);
 
               if (typeof saveOpfsFile === "function") {
                 await saveOpfsFile(file, cleanFilename, mimeType, tempName);
@@ -1012,14 +1090,14 @@ export function createUserscriptController(options = {}) {
                     // Ignore
                   }
                   activeOpfsTempNames.delete(tempName);
+                  releaseWebLock();
                 };
                 if (delayMs === 0) {
                   await removeTemp();
                 } else {
-                  const timer = setTimeout(() => {
+                  scheduleCleanupTimer(() => {
                     void removeTemp();
                   }, delayMs);
-                  timer?.unref?.();
                 }
                 return;
               }
@@ -1073,14 +1151,14 @@ export function createUserscriptController(options = {}) {
                   // Ignore
                 }
                 activeOpfsTempNames.delete(tempName);
+                releaseWebLock();
               };
               if (delayMs === 0) {
                 await delayedCleanup();
               } else {
-                const timer = setTimeout(() => {
+                scheduleCleanupTimer(() => {
                   void delayedCleanup();
                 }, delayMs);
-                timer?.unref?.();
               }
             },
             abortAndCleanup: cleanupImmediate,
@@ -1092,6 +1170,7 @@ export function createUserscriptController(options = {}) {
             // Ignore
           }
           activeOpfsTempNames.delete(tempName);
+          releaseWebLock();
           if (
             cancelState.aborted ||
             opfsErr?.code === "USER_CANCELLED" ||
@@ -2436,6 +2515,9 @@ export function createUserscriptController(options = {}) {
   function mount() {
     void cleanupLeftoverYouTubeOpfsTempFiles({
       storage: resolveOpfsStorage(),
+      locks: resolveWebLocks(),
+      now,
+      activeNames: activeOpfsTempNames,
       pageWindow,
     }).catch(() => {});
     if (eventTarget && typeof eventTarget.addEventListener === "function") {
@@ -2488,7 +2570,7 @@ export function sendHelperRequest(action, payload = {}, options = {}) {
       reject(new Error("当前环境不支持助手通信"));
       return;
     }
-    if (signal?.aborted) {
+    if (signal && signal.aborted) {
       reject(new DOMException("Aborted", "AbortError"));
       return;
     }
@@ -2511,7 +2593,7 @@ export function sendHelperRequest(action, payload = {}, options = {}) {
           onProgressEvent,
         );
       }
-      signal?.removeEventListener("abort", onAbort);
+      if (signal) signal.removeEventListener("abort", onAbort);
     };
 
     const onAbort = () => {
@@ -2529,29 +2611,30 @@ export function sendHelperRequest(action, payload = {}, options = {}) {
     };
 
     const onProgressEvent = (event) => {
-      const detail = parseDetail(event?.detail);
+      const detail = parseDetail(event && event.detail);
       if (!detail || detail.requestId !== requestId) return;
       onProgress(detail);
     };
 
     const onResponse = (event) => {
-      const detail = parseDetail(event?.detail);
-      if (!detail || detail.requestId !== requestId) return;
-      if (settled) return;
+      const detail = parseDetail(event && event.detail);
+      if (!detail || detail.requestId !== requestId || settled) return;
       settled = true;
       cleanup();
       if (detail.ok) {
         resolve(detail.data);
       } else {
+        const errInfo = detail.error || {};
+        const code = errInfo.code;
         const err = new Error(
-          detail.error?.message ||
-            (detail.error?.code === "USER_CANCELLED" ? "Aborted" : "助手请求失败"),
+          errInfo.message ||
+            (code === "USER_CANCELLED" ? "Aborted" : "助手请求失败"),
         );
-        if (detail.error?.code === "USER_CANCELLED") {
+        if (code === "USER_CANCELLED") {
           err.name = "AbortError";
         }
-        if (detail.error?.code) {
-          err.code = detail.error.code;
+        if (code) {
+          err.code = code;
         }
         reject(err);
       }
@@ -2564,7 +2647,7 @@ export function sendHelperRequest(action, payload = {}, options = {}) {
         onProgressEvent,
       );
     }
-    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
 
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
@@ -2585,23 +2668,23 @@ export function sendHelperRequest(action, payload = {}, options = {}) {
 
 export async function pingYouTubeHelper(options = {}) {
   const { timeoutMs = 600, eventTarget } = options;
+  const missing = { installed: false, version: null, supported: false };
   try {
     const data = await sendHelperRequest(
       "ping",
       {},
       { timeoutMs, eventTarget },
     );
-    const version = typeof data?.version === "string" ? data.version.trim() : "";
-    if (!version) {
-      return { installed: false, version: null, supported: false };
-    }
+    const version =
+      data && typeof data.version === "string" ? data.version.trim() : "";
+    if (!version) return missing;
     return {
       installed: true,
       version,
       supported: isHelperVersionSupported(version, MIN_YOUTUBE_HELPER_VERSION),
     };
   } catch {
-    return { installed: false, version: null, supported: false };
+    return missing;
   }
 }
 
