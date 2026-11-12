@@ -519,3 +519,288 @@ func TestWorkResponse128KiBLimitAndHostFiltering(t *testing.T) {
 		t.Fatalf("legacy v1 format handling failed: err=%v work=%+v", err, legacyWork)
 	}
 }
+
+// frozenV2OldBroker models commit 213fd13's Japan PullBroker (pullCapacity = 4,
+// WorkTimeout = 14s, strict DisallowUnknownFields on PullResult and WorkResponse).
+type frozenV2OldBroker struct {
+	responseValidator
+	token                   string
+	claimSlots, resultSlots chan struct{}
+	mu                      sync.Mutex
+	waiting                 []chan PullJob
+	pending                 map[string]chan json.RawMessage
+}
+
+func newFrozenV2OldBroker(token string) *frozenV2OldBroker {
+	v := newResponseValidator()
+	v.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+	}
+	return &frozenV2OldBroker{
+		responseValidator: v,
+		token:             token,
+		claimSlots:        make(chan struct{}, 4), // 213fd13 pullCapacity = 4
+		resultSlots:       make(chan struct{}, 4),
+		pending:           map[string]chan json.RawMessage{},
+	}
+}
+
+func (b *frozenV2OldBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") != "Bearer "+b.token || r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	path := r.URL.EscapedPath()
+	slots := b.resultSlots
+	if path == ClaimPath {
+		slots = b.claimSlots
+	}
+	select {
+	case slots <- struct{}{}:
+		defer func() { <-slots }()
+	default:
+		w.WriteHeader(http.StatusTooManyRequests)
+		return
+	}
+	switch path {
+	case ClaimPath:
+		if r.ContentLength != 0 || r.Header.Get(ProtocolHeader) != "2" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		ch := make(chan PullJob, 1)
+		b.mu.Lock()
+		b.waiting = append(b.waiting, ch)
+		b.mu.Unlock()
+		select {
+		case job := <-ch:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(job)
+		case <-r.Context().Done():
+			w.WriteHeader(http.StatusNoContent)
+		}
+	case ResultPath:
+		var res PullResult
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxResponseBytes+512))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&res) != nil || dec.Decode(&struct{}{}) != io.EOF || res.Protocol != ProtocolV2 || len(res.Result) == 0 || len(res.Result) > maxResponseBytes {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		b.mu.Lock()
+		ch := b.pending[res.TaskID]
+		delete(b.pending, res.TaskID)
+		b.mu.Unlock()
+		if ch == nil {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		ch <- res.Result
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (b *frozenV2OldBroker) ResolveOriginal(context.Context, string) ([]unified.Object, error) {
+	return nil, errUnavailable
+}
+
+func (b *frozenV2OldBroker) ResolveWork(parent context.Context, awemeID string) (*douyin.ShanghaiWork, error) {
+	ctx, cancel := context.WithTimeout(parent, 14*time.Second) // 213fd13 WorkTimeout = 14s
+	defer cancel()
+	b.mu.Lock()
+	if len(b.waiting) == 0 {
+		b.mu.Unlock()
+		return nil, errUnavailable
+	}
+	w := b.waiting[0]
+	b.waiting = b.waiting[1:]
+	var ids [32]byte
+	rand.Read(ids[:])
+	deadline, _ := ctx.Deadline()
+	job := PullJob{
+		Protocol:   ProtocolV2,
+		TaskID:     hex.EncodeToString(ids[:16]),
+		AttemptID:  hex.EncodeToString(ids[16:]),
+		AwemeID:    awemeID,
+		DeadlineMS: deadline.UnixMilli(),
+	}
+	resCh := make(chan json.RawMessage, 1)
+	b.pending[job.TaskID] = resCh
+	b.mu.Unlock()
+	w <- job
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case raw := <-resCh:
+		return b.validateWorkResponse(ctx, awemeID, raw)
+	}
+}
+
+// runFrozenV2OldWorkerOnce models commit 213fd13's v2 PullWorker.runOnce
+// (single loop, leaseBudget = min(remaining, 14s), strict DisallowUnknownFields).
+func runFrozenV2OldWorkerOnce(ctx context.Context, control, detailExec fetch.Executor, origin, token string, p originalProbe, seenDeadline *int64) error {
+	post := func(c context.Context, path string, body []byte) (fetch.Response, error) {
+		target := origin + path
+		h := http.Header{"Authorization": {"Bearer " + token}, "Content-Type": {"application/json"}}
+		if path == ClaimPath {
+			h.Set(ProtocolHeader, "2")
+		}
+		return control.Do(c, fetch.Request{
+			URL: target, Method: http.MethodPost, Body: body, Header: h,
+			Policy: fetch.Policy{Purpose: "douyin-original-pull", Timeout: 25 * time.Second, MaxBytes: 1024, MaxHeaderBytes: 8192, AllowedURL: func(raw string) bool { return raw == target }},
+		})
+	}
+	res, err := post(ctx, ClaimPath, nil)
+	if err != nil || res.StatusCode != http.StatusOK {
+		return fmt.Errorf("claim failed: err=%v status=%d", err, res.StatusCode)
+	}
+	var job PullJob
+	d := json.NewDecoder(bytes.NewReader(res.Body))
+	d.DisallowUnknownFields()
+	if d.Decode(&job) != nil || d.Decode(&struct{}{}) != io.EOF || job.Protocol != ProtocolV2 {
+		return errors.New("old v2 worker rejected PullJob JSON")
+	}
+	if seenDeadline != nil {
+		*seenDeadline = job.DeadlineMS
+	}
+	remaining := time.Until(time.UnixMilli(job.DeadlineMS))
+	lease, cancel := context.WithTimeout(ctx, min(remaining, 14*time.Second))
+	defer cancel()
+	detail, err := douyin.FetchShanghaiDetail(lease, detailExec, job.AwemeID)
+	if err != nil {
+		return err
+	}
+	out := WorkResponse{Protocol: ProtocolV2, AwemeID: job.AwemeID, Renditions: detail.Renditions, Candidates: []Candidate{}}
+	if orig, origErr := probeOriginal(lease, p, detail.VideoID); origErr == nil {
+		out.VideoID = detail.VideoID
+		out.Candidates = orig.Candidates
+	}
+	if err := lease.Err(); err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(out)
+	body, _ := json.Marshal(PullResult{PullJob: job, Result: raw})
+	ack, err := post(lease, ResultPath, body)
+	if err != nil || ack.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("result ack failed: err=%v status=%d", err, ack.StatusCode)
+	}
+	return nil
+}
+
+func TestPullProtocolV2OldNewInterop(t *testing.T) {
+	const origin = "https://japan.example.org"
+	shDetailExec := resolveExecutor(func(_ context.Context, _ fetch.Request) (fetch.Response, error) {
+		return fetch.Response{StatusCode: 200, Body: interopDetailBody("v26-web.douyinvod.com", "v11-weba.douyinvod.com")}, nil
+	})
+	jpDetailExec := resolveExecutor(func(_ context.Context, _ fetch.Request) (fetch.Response, error) {
+		return fetch.Response{StatusCode: 200, Body: interopDetailBody("v3-dy-ov.zjcdn.com", "v3-dy-ov.zjcdn.com")}, nil
+	})
+
+	// Rollout Step 1 (Shanghai upgraded first): Old Japan (213fd13, pullCapacity=4) + New Shanghai (3 workers, probe sub-budget).
+	t.Run("old_v2_japan_new_shanghai", func(t *testing.T) {
+		oldBroker := newFrozenV2OldBroker(wireToken)
+		srv := httptest.NewTLSServer(oldBroker)
+		defer srv.Close()
+
+		// Simulate stalled original probe on Shanghai; New Shanghai cuts off probe, returns Renditions,
+		// and Old Japan accepts degraded v2 WorkResponse and runs its own fallback original probe.
+		stalledProbe := resolverFunc(func(ctx context.Context, _ string) ([]unified.Object, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		})
+		newWorker, err := NewPullWorkerWithDetail(origin, wireToken, controlTransportForTLS(srv, origin), shDetailExec, stalledProbe)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wCtx, wCancel := context.WithCancel(t.Context())
+		defer wCancel()
+		wDone := make(chan error, 1)
+		go func() { wDone <- newWorker.Run(wCtx) }()
+
+		// All 3 worker loops must fit cleanly inside Old Japan's pullCapacity=4 without hitting 429.
+		deadline := time.After(3 * time.Second)
+		for {
+			oldBroker.mu.Lock()
+			n := len(oldBroker.waiting)
+			oldBroker.mu.Unlock()
+			if n == pullWorkers {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatalf("expected all %d new worker loops registered on old v2 broker", pullWorkers)
+			case <-time.After(time.Millisecond):
+			}
+		}
+
+		jpProbes := 0
+		jpRow := deliveryRow("old-jp-fallback.zjcdn.com", "objectOldJP", "ojp")
+		parser := douyin.NewWithOriginalResolver(jpDetailExec, japanProbeFunc(func(_ context.Context, _ string) (unified.Object, error) {
+			jpProbes++
+			return jpRow, nil
+		}), oldBroker)
+
+		// Tight 400ms parent deadline exercises New Shanghai's workBudget = remaining/2 = 200ms cutoff.
+		parseCtx, cancelParse := context.WithTimeout(t.Context(), 400*time.Millisecond)
+		defer cancelParse()
+		now := time.Now().Unix()
+		data, err := parser.Parse(parseCtx, interopWorkURL, now)
+		if err != nil {
+			t.Fatalf("old v2 Japan + new Shanghai degraded parse failed: %v", err)
+		}
+		if jpProbes != 1 {
+			t.Fatalf("expected old v2 Japan to run 1 local fallback probe, got %d", jpProbes)
+		}
+		raw, _ := json.Marshal(unified.PublicView(data, false, now))
+		if !bytes.Contains(raw, []byte("v26-luna.douyinvod.com")) || !bytes.Contains(raw, []byte("old-jp-fallback.zjcdn.com")) {
+			t.Fatalf("missing Shanghai renditions or Old Japan fallback original: %s", raw)
+		}
+
+		wCancel()
+		<-wDone
+	})
+
+	// Reverse interop: New Japan (WorkTimeout=9s) + Old v2 Shanghai (213fd13).
+	t.Run("new_japan_old_v2_shanghai", func(t *testing.T) {
+		newBroker, err := NewPullBroker(wireToken)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newBroker.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+		}
+		srv := httptest.NewTLSServer(newBroker)
+		defer srv.Close()
+
+		var seenDeadline int64
+		workerDone := make(chan error, 1)
+		go func() {
+			workerDone <- runFrozenV2OldWorkerOnce(t.Context(), controlTransportForTLS(srv, origin), shDetailExec, origin, wireToken,
+				resolverFunc(func(_ context.Context, _ string) ([]unified.Object, error) {
+					return []unified.Object{deliveryRow("v26-cold.douyinvod.com", "objectA", "a")}, nil
+				}), &seenDeadline)
+		}()
+		waitForPullWaiter(t, newBroker)
+
+		before := time.Now()
+		now := before.Unix()
+		parser := douyin.NewWithOriginalResolver(jpDetailExec, nil, newBroker)
+		data, err := parser.Parse(t.Context(), interopWorkURL, now)
+		if err != nil {
+			t.Fatalf("new Japan + old v2 Shanghai parse failed: %v", err)
+		}
+		if err := <-workerDone; err != nil {
+			t.Fatalf("old v2 worker error: %v", err)
+		}
+		gotBudget := time.UnixMilli(seenDeadline).Sub(before)
+		if gotBudget <= 0 || gotBudget > WorkTimeout+500*time.Millisecond {
+			t.Fatalf("expected New Japan DeadlineMS bounded by WorkTimeout (%v), got %v", WorkTimeout, gotBudget)
+		}
+		raw, _ := json.Marshal(unified.PublicView(data, false, now))
+		if !bytes.Contains(raw, []byte("v26-luna.douyinvod.com")) || !bytes.Contains(raw, []byte("v26-cold.douyinvod.com")) {
+			t.Fatalf("new Japan + old v2 Shanghai missing domestic routes: %s", raw)
+		}
+	})
+}

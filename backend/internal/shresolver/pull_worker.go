@@ -12,15 +12,18 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
 )
 
+const pullWorkers = 3
+
 var errPullAuth = errors.New("Shanghai pull credential rejected")
 
-// PullWorker handles one lease at a time. Only the pinned Japanese control
+// PullWorker runs pullWorkers concurrent lease loops. Only the pinned Japanese control
 // endpoints receive its bearer. Detail lookups and media probes use separate transports.
 type PullWorker struct {
 	origin  string
@@ -78,6 +81,9 @@ func validLeaseID(s string) bool {
 }
 
 // runOnce never retries a claimed task or replays its result on another lease.
+// The boolean result reports whether ClaimPath delivered a valid lease; post-claim
+// task timeouts or result callback errors still return claimed=true so the caller
+// immediately claims the next job without backoff.
 func (w *PullWorker) runOnce(ctx context.Context) (bool, error) {
 	res, err := w.post(ctx, ClaimPath, nil, PullWait+10*time.Second)
 	if err != nil {
@@ -95,24 +101,33 @@ func (w *PullWorker) runOnce(ctx context.Context) (bool, error) {
 	if d.Decode(&job) != nil || d.Decode(&struct{}{}) != io.EOF || !validLeaseID(job.TaskID) || !validLeaseID(job.AttemptID) {
 		return false, errUnavailable
 	}
-	deadline := time.UnixMilli(job.DeadlineMS)
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return false, errUnavailable
-	}
-	msg := PullResult{PullJob: job, Result: json.RawMessage("null")}
-	var leaseBudget time.Duration
 	switch job.Protocol {
 	case 0:
 		if job.AwemeID != "" || !ValidVideoID(job.VideoID) {
 			return false, errUnavailable
 		}
+	case ProtocolV2:
+		if w.detail == nil || job.VideoID != "" || !douyin.ValidAwemeID(job.AwemeID) {
+			return false, errUnavailable
+		}
+	default:
+		return false, errUnavailable
+	}
+	deadline := time.UnixMilli(job.DeadlineMS)
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return true, errUnavailable
+	}
+	msg := PullResult{PullJob: job, Result: json.RawMessage("null")}
+	var leaseBudget time.Duration
+	switch job.Protocol {
+	case 0:
 		leaseBudget = min(remaining, clientTimeout)
 		lease, cancel := context.WithTimeout(ctx, leaseBudget)
 		defer cancel()
 		out, probeErr := probeOriginal(lease, w.probe, job.VideoID)
 		if err := lease.Err(); err != nil {
-			return false, err
+			return true, err
 		}
 		if probeErr == nil {
 			raw, err := json.Marshal(out)
@@ -122,26 +137,23 @@ func (w *PullWorker) runOnce(ctx context.Context) (bool, error) {
 		}
 		body, err := json.Marshal(msg)
 		if err != nil {
-			return false, err
+			return true, err
 		}
 		ack, err := w.post(lease, ResultPath, body, clientTimeout)
 		if err != nil {
-			return false, err
+			return true, err
 		}
 		if ack.StatusCode != http.StatusNoContent && ack.StatusCode != http.StatusConflict {
-			return false, errUnavailable
+			return true, errUnavailable
 		}
 		return true, nil
 	case ProtocolV2:
-		if w.detail == nil || job.VideoID != "" || !douyin.ValidAwemeID(job.AwemeID) {
-			return false, errUnavailable
-		}
 		leaseBudget = min(remaining, WorkTimeout)
 		lease, cancel := context.WithTimeout(ctx, leaseBudget)
 		defer cancel()
 		out, workErr := resolveWork(lease, w.detail, w.probe, job.AwemeID)
 		if err := lease.Err(); err != nil {
-			return false, err
+			return true, err
 		}
 		if workErr == nil {
 			raw, err := json.Marshal(out)
@@ -151,14 +163,14 @@ func (w *PullWorker) runOnce(ctx context.Context) (bool, error) {
 		}
 		body, err := json.Marshal(msg)
 		if err != nil {
-			return false, err
+			return true, err
 		}
 		ack, err := w.post(lease, ResultPath, body, WorkTimeout)
 		if err != nil {
-			return false, err
+			return true, err
 		}
 		if ack.StatusCode != http.StatusNoContent && ack.StatusCode != http.StatusConflict {
-			return false, errUnavailable
+			return true, errUnavailable
 		}
 		return true, nil
 	default:
@@ -166,24 +178,24 @@ func (w *PullWorker) runOnce(ctx context.Context) (bool, error) {
 	}
 }
 
-func (w *PullWorker) Run(ctx context.Context) error {
+func (w *PullWorker) runLoop(ctx context.Context) error {
 	backoff := time.Second
 	fastEmpty := 0
 	for ctx.Err() == nil {
 		start := time.Now()
-		delivered, err := w.runOnce(ctx)
+		claimed, err := w.runOnce(ctx)
 		if ctx.Err() != nil {
 			break
 		}
 		if errors.Is(err, errPullAuth) {
 			return err
 		}
-		if err == nil && (delivered || time.Since(start) >= PullWait/2) {
+		if claimed || (err == nil && time.Since(start) >= PullWait/2) {
 			backoff = time.Second
 			fastEmpty = 0
 			continue
 		}
-		if err == nil && !delivered && time.Since(start) < time.Second {
+		if err == nil && time.Since(start) < time.Second {
 			fastEmpty++
 			if fastEmpty >= 3 {
 				fastEmpty = 0
@@ -203,6 +215,34 @@ func (w *PullWorker) Run(ctx context.Context) error {
 		case <-timer.C:
 		}
 		backoff = min(2*backoff, 10*time.Second)
+	}
+	return ctx.Err()
+}
+
+func (w *PullWorker) Run(ctx context.Context) error {
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		wg        sync.WaitGroup
+		fatalOnce sync.Once
+		fatalErr  error
+	)
+	for range pullWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := w.runLoop(runCtx); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				fatalOnce.Do(func() {
+					fatalErr = err
+					cancel()
+				})
+			}
+		}()
+	}
+	wg.Wait()
+	if fatalErr != nil {
+		return fatalErr
 	}
 	return ctx.Err()
 }

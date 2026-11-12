@@ -18,7 +18,20 @@ import (
 
 func waitForPullWaiter(t *testing.T, b *PullBroker) {
 	t.Helper()
-	waitForPullCount(t, b, 1)
+	stop := time.After(time.Second * 3)
+	for {
+		b.mu.Lock()
+		ready := len(b.waiting) >= 1
+		b.mu.Unlock()
+		if ready {
+			return
+		}
+		select {
+		case <-stop:
+			t.Fatal("did not observe a registered claim")
+		case <-time.After(time.Millisecond):
+		}
+	}
 }
 
 func waitForPullCount(t *testing.T, b *PullBroker, n int) {

@@ -21,7 +21,7 @@ const (
 	ClaimPath    = "/internal/shanghai/claim"
 	ResultPath   = "/internal/shanghai/result"
 	PullWait     = 15 * time.Second
-	pullCapacity = 4
+	pullCapacity = 8
 )
 
 // PullJob is a single-use lease. DeadlineMS is absolute; another poll cannot

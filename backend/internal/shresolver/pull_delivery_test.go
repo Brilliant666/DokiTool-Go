@@ -192,7 +192,7 @@ func TestPullDisconnectedWorkerFallsBackToJapan(t *testing.T) {
 	b, srv, _ := deliveryWorker(t, resolverFunc(func(context.Context, string) ([]unified.Object, error) {
 		return nil, errors.New("offline worker must not receive the work")
 	}))
-	waitForPullWaiter(t, b)
+	waitForPullCount(t, b, pullWorkers)
 	// Remove the listener and break the active long poll while Run is still
 	// live. No replacement poll can arrive, even if Run starts reconnecting.
 	srv.Listener.Close()
