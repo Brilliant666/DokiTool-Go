@@ -42,6 +42,8 @@ before(async () => {
   downloads = await vite.ssrLoadModule('/src/composables/useMediaDownload.ts');
   // The production coordinator stays lazy; preload it here so assertions measure transfers, not Vite compilation.
   await vite.ssrLoadModule('/src/downloads/manager.ts');
+  await vite.ssrLoadModule('/src/downloads/routeProbe.ts');
+  await vite.ssrLoadModule('/src/utils/segmentDownload.ts');
   ResultSection = (await vite.ssrLoadModule('/src/components/ResultSection.vue')).default;
   HeroSection = (await vite.ssrLoadModule('/src/components/HeroSection.vue')).default;
   DownloadCard = (await vite.ssrLoadModule('/src/components/DownloadCard.vue')).default;
@@ -2805,5 +2807,97 @@ test('image parse results preserve original aspect ratio for single images, use 
     assert.equal(cardBtn.props.style['--rs-single-img-ratio'], '900 / 1600');
   } finally {
     view.app.unmount();
+  }
+});
+
+test('file download speed-probes browser_fetch=allowed sources before starting transfer unless user explicitly pins source_id', async () => {
+  const slowUrl = 'https://v13-cold.douyinvod.com/61a60ed7/video/tos/cn/tos-cn-ve-15/oM0f/?a=1128';
+  const fastUrl = 'https://v26-cold.douyinvod.com/ab9b7783/video/tos/cn/tos-cn-ve-15/oM0f/?a=1128';
+  const backupUrl = 'https://v3-dy-o.zjcdn.com/9b433c9e/video/tos/cn/tos-cn-ve-15/oM0f/?a=1128';
+  const item = {
+    id: 'video',
+    type: 'video',
+    state: 'ready',
+    default: { variant_id: 'v-4k', source_id: 's-slow', url: slowUrl, access: 'direct' },
+    variants: [
+      {
+        id: 'v-4k',
+        label: '2160p',
+        metadata: { container: 'mp4', width: 3840, height: 2160, video_codec: 'hevc', has_audio: true, evidence: 'probed' },
+        delivery: {
+          kind: 'file',
+          sources: [
+            { id: 's-slow', url: slowUrl, access: 'direct', browser_fetch: 'allowed', size_bytes: 394316272 },
+            { id: 's-fast', url: fastUrl, access: 'direct', browser_fetch: 'allowed', size_bytes: 394316272 },
+            { id: 's-backup', url: backupUrl, access: 'direct', browser_fetch: 'allowed', size_bytes: 394316272 },
+          ],
+        },
+      },
+    ],
+  };
+
+  const rangeProbes = [];
+  const launchedRequests = [];
+  const prevManager = globalThis.__uiDownloadManager;
+  globalThis.fetch = async (url, init = {}) => {
+    rangeProbes.push({ url, range: init.headers?.Range });
+    const delayMs = url === fastUrl ? 1 : url === backupUrl ? 10 : 25;
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    const buf = new Uint8Array(64 * 1024);
+    buf[3] = 0x18;
+    return new Response(buf, {
+      status: 206,
+      headers: {
+        'content-type': 'video/mp4',
+        'content-range': `bytes 0-${buf.length - 1}/394316272`,
+      },
+    });
+  };
+  globalThis.__uiDownloadManager = {
+    async run(request, _signal, observe) {
+      launchedRequests.push(request);
+      const snap = {
+        id: request.id,
+        transport: 'browser_streaming',
+        status: 'completed',
+        filename: request.filename,
+        url: request.url,
+        loaded: 394316272,
+        total: 394316272,
+        speed: 0,
+        elapsed: 1,
+        averageSpeed: 394316272,
+      };
+      observe(snap);
+      return snap;
+    },
+  };
+
+  try {
+    const h = harness({
+      platform: 'douyin',
+      title: '4K 原画优选线路',
+      items: [item],
+      default_item_id: item.id,
+    });
+    await h.instance.downloadMainVideo();
+    await settled(h.store.downloads[0]);
+
+    assert.equal(rangeProbes.length, 3);
+    assert.equal(launchedRequests.length, 1);
+    assert.equal(launchedRequests[0].url, fastUrl);
+    assert.deepEqual(launchedRequests[0].routes, [fastUrl, backupUrl, slowUrl]);
+    assert.equal(h.store.downloads[0].url, fastUrl);
+
+    // Explicit source_id pin honors the user's chosen source without probing.
+    rangeProbes.length = 0;
+    launchedRequests.length = 0;
+    h.selection.choose({ variant_id: 'v-4k', source_id: 's-slow' }, 'video');
+    await h.instance.downloadMainVideo();
+    await settled(h.store.downloads[1]);
+    assert.equal(rangeProbes.length, 0);
+    assert.equal(launchedRequests[0].url, slowUrl);
+  } finally {
+    globalThis.__uiDownloadManager = prevManager;
   }
 });

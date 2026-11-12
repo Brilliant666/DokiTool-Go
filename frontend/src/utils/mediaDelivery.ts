@@ -10,7 +10,7 @@ import {
   sourceUrl,
   type TargetContext,
 } from "./mediaContract";
-import { resolveHlsSegments, type HlsSegment } from "./segmentDownload";
+import type { HlsSegment } from "./segmentDownload";
 
 export function declaredSource(
   sources: Source[],
@@ -84,6 +84,7 @@ export async function declaredSegments(
   if (delivery.kind === "hls") {
     if (delivery.scope !== "single")
       throw new Error("自适应 HLS 需要服务端选定完整清单，当前暂不支持");
+    const { resolveHlsSegments } = await import("./segmentDownload");
     for (const source of delivery.sources.filter((source) =>
       sourceAvailable(source, context.now),
     )) {

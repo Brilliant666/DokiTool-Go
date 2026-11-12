@@ -34,6 +34,12 @@ const summary = computed(() => activeCount.value
   : [outcomeSummary.value, props.downloads.some(item => item.recoveryExpired) ? `未确认 ${props.downloads.filter(item => item.recoveryExpired).length}` : ''].filter(Boolean).join(' · ') || '下载记录')
 const statusText = (item) => observationText(item) || (item.status === 'completed' ? '传输完成' : item.statusText)
   || ({ queued: '排队中', preparing: '准备下载', downloading: '下载中…', failed: '下载失败', cancelled: '已取消', interrupted: '下载连接已中断', 'handed-off': '已交给浏览器' }[item.status] || item.status)
+const hostOf = (item) => {
+  try {
+    const u = typeof item?.url === 'string' && new URL(item.url)
+    return u && /^https?:$/.test(u.protocol) ? u.hostname : ''
+  } catch { return '' }
+}
 
 const timingId = ref(null)
 const copyHint = ref('')
@@ -131,6 +137,14 @@ onBeforeUnmount(stopCollapseTimer)
                 <span v-if="item.progressKind === 'bytes' && item.status === 'downloading' && !item.observation" class="text-xs text-slate-400">
                   {{ formatSpeed(item.speed) }}
                 </span>
+              </div>
+              <div
+                v-if="hostOf(item)"
+                data-download-host
+                class="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500 truncate"
+                :title="hostOf(item)"
+              >
+                {{ hostOf(item) }}
               </div>
             </div>
 
