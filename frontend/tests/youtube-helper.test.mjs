@@ -7,14 +7,19 @@ import { createSSRApp, h, reactive, ref } from "vue";
 import { renderToString } from "vue/server-renderer";
 
 import {
+  DEFAULT_OPFS_CLEANUP_DELAY_MS,
+  MAX_OPFS_CLEANUP_DELAY_MS,
   MIN_YOUTUBE_HELPER_VERSION,
+  OPFS_CLEANUP_BYTES_PER_SECOND,
   OPFS_QUOTA_HEADROOM_FACTOR,
+  OPFS_STALE_TEMP_MAX_AGE_MS,
   YOUTUBE_FILE_PICKER_ID,
   YOUTUBE_HELPER_VERSION,
   YOUTUBE_OPFS_TEMP_PREFIX,
   buildTVHTML5PlayerPayload,
   cleanupLeftoverYouTubeOpfsTempFiles,
   compareSemver,
+  computeOpfsCleanupDelayMs,
   createUserscriptController,
   extractUrlClen,
   extractVisitorDataFromSwResponse,
@@ -34,20 +39,100 @@ import {
 import { generateYouTubeHelperCode } from "../scripts/build-youtube-helper.mjs";
 import * as mediabunny from "mediabunny";
 
+function createMockWebLocks() {
+  const held = new Map();
+  const queues = new Map();
+
+  function pump(name) {
+    if (held.has(name)) return;
+    const q = queues.get(name);
+    if (!q || q.length === 0) {
+      queues.delete(name);
+      return;
+    }
+    const next = q.shift();
+    if (q.length === 0) queues.delete(name);
+    next();
+  }
+
+  return {
+    request(name, optionsOrCallback, maybeCallback) {
+      const opts =
+        typeof optionsOrCallback === "function" ? {} : optionsOrCallback || {};
+      const callback =
+        typeof optionsOrCallback === "function"
+          ? optionsOrCallback
+          : maybeCallback;
+      const mode = opts.mode || "exclusive";
+      if (opts.ifAvailable) {
+        if (held.has(name)) {
+          return Promise.resolve().then(() => callback(null));
+        }
+        const lockObj = { name, mode };
+        held.set(name, lockObj);
+        return Promise.resolve()
+          .then(() => callback(lockObj))
+          .finally(() => {
+            if (held.get(name) === lockObj) held.delete(name);
+            pump(name);
+          });
+      }
+      return new Promise((resolve, reject) => {
+        const grant = () => {
+          const lockObj = { name, mode };
+          held.set(name, lockObj);
+          Promise.resolve()
+            .then(() => callback(lockObj))
+            .then(resolve, reject)
+            .finally(() => {
+              if (held.get(name) === lockObj) held.delete(name);
+              pump(name);
+            });
+        };
+        if (!held.has(name)) {
+          grant();
+        } else {
+          if (!queues.has(name)) queues.set(name, []);
+          queues.get(name).push(grant);
+        }
+      });
+    },
+    async query() {
+      return {
+        held: [...held.values()].map(({ name, mode }) => ({ name, mode })),
+        pending: [...queues.entries()].flatMap(([name, q]) =>
+          q.map(() => ({ name, mode: "exclusive" })),
+        ),
+      };
+    },
+  };
+}
+
 function createMockOpfsEnvironment({
   quota = 500_000_000,
   usage = 0,
+  now = () => Date.now(),
   initialFiles = {},
 } = {}) {
   const files = new Map();
+  const lastModifiedMap = new Map();
   const activeLocks = new Set();
-  for (const [name, content] of Object.entries(initialFiles)) {
+  const locks = createMockWebLocks();
+  for (const [name, entry] of Object.entries(initialFiles)) {
+    const isDescriptor =
+      entry &&
+      typeof entry === "object" &&
+      !(entry instanceof Uint8Array) &&
+      "content" in entry;
+    const raw = isDescriptor ? entry.content : entry;
+    const mtime = isDescriptor ? Number(entry.lastModified ?? now()) : now();
     files.set(
       name,
-      content instanceof Uint8Array
-        ? content
-        : new TextEncoder().encode(String(content)),
+      raw instanceof Uint8Array
+        ? raw
+        : new TextEncoder().encode(String(raw)),
     );
+    lastModifiedMap.set(name, mtime);
   }
 
   function currentUsageBytes() {
@@ -70,6 +155,7 @@ function createMockOpfsEnvironment({
           throw new DOMException("File not found", "NotFoundError");
         }
         files.set(name, new Uint8Array(0));
+        lastModifiedMap.set(name, now());
       }
       return {
         kind: "file",
@@ -118,6 +204,7 @@ function createMockOpfsEnvironment({
                 out.set(c.bytes, c.pos);
               }
               files.set(name, out);
+              lastModifiedMap.set(name, now());
             },
             async abort() {
               closed = true;
@@ -132,6 +219,9 @@ function createMockOpfsEnvironment({
           const bytes = files.get(name);
           const blob = new Blob([bytes]);
           Object.defineProperty(blob, "name", { value: name });
+          Object.defineProperty(blob, "lastModified", {
+            value: lastModifiedMap.get(name) ?? now(),
+          });
           return blob;
         },
       };
@@ -144,12 +234,15 @@ function createMockOpfsEnvironment({
         throw new DOMException("File not found", "NotFoundError");
       }
       files.delete(name);
+      lastModifiedMap.delete(name);
     },
   };
 
   return {
     files,
+    lastModifiedMap,
     activeLocks,
+    locks,
     storage: {
       async estimate() {
         return { quota, usage: currentUsageBytes() };
@@ -318,7 +411,7 @@ function sliceRangeFromFixture(bytes, rawUrl) {
 }
 
 describe("YouTube helper userscript static header & validation contract", () => {
-  test("static userscript file has exact v1.3.0 headers, strict @connect allowlist, MPL-2.0 notice, and build parity", async () => {
+  test("static userscript file has exact v1.3.1 headers, strict @connect allowlist, MPL-2.0 notice, and build parity", async () => {
     const scriptText = await readFile(
       new URL("../public/helper/dokitool-youtube.user.js", import.meta.url),
       "utf8",
@@ -365,9 +458,9 @@ describe("YouTube helper userscript static header & validation contract", () => 
     ].map((m) => m[1]);
     assert.deepEqual(grants.sort(), ["GM_download", "GM_xmlhttpRequest"]);
     assert.match(headerBlock, /^\/\/ @noframes$/m);
-    assert.match(headerBlock, /^\/\/ @version\s+1\.3\.0$/m);
-    assert.equal(YOUTUBE_HELPER_VERSION, "1.3.0");
-    assert.equal(MIN_YOUTUBE_HELPER_VERSION, "1.3.0");
+    assert.match(headerBlock, /^\/\/ @version\s+1\.3\.1$/m);
+    assert.equal(YOUTUBE_HELPER_VERSION, "1.3.1");
+    assert.equal(MIN_YOUTUBE_HELPER_VERSION, "1.3.1");
     assert.match(
       headerBlock,
       /^\/\/ @updateURL\s+https:\/\/snap\.dokitool\.com\/helper\/dokitool-youtube\.user\.js$/m,
@@ -901,14 +994,14 @@ describe("YouTube helper userscript static header & validation contract", () => 
       filename: "dokitool-youtube.user.js",
     });
 
-    // 1. Ping published script -> version 1.3.0, supported: true
+    // 1. Ping published script -> version 1.3.1, supported: true
     const pingRes = await pingYouTubeHelper({
       eventTarget: fakeWindow,
       timeoutMs: 100,
     });
     assert.deepEqual(pingRes, {
       installed: true,
-      version: "1.3.0",
+      version: "1.3.1",
       supported: true,
     });
 
@@ -2028,7 +2121,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       "must never show 已交给浏览器 when helper is missing",
     );
 
-    for (const outdatedVer of ["1.0.0", "1.1.0"]) {
+    for (const outdatedVer of ["1.0.0", "1.1.0", "1.3.0"]) {
       const unmountOld = createUserscriptController({
         eventTarget: env.bus,
         version: outdatedVer,
@@ -3034,19 +3127,47 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     assert.equal(OPFS_QUOTA_HEADROOM_FACTOR, 1.2);
     assert.equal(YOUTUBE_FILE_PICKER_ID, "dokitool-youtube");
 
-    // 1. Page-load sweep deletes dokitool-yt-tmp-* files while preserving unrelated OPFS files
+    // 1. Page-load sweep only deletes dokitool-yt-tmp-* files older than 1 hour (> 3,600,000 ms), keeping <= 1h temp files and unrelated OPFS files
+    const sweepNow = 1_800_000_000_000;
     const sweepOpfs = createMockOpfsEnvironment({
+      now: () => sweepNow,
       initialFiles: {
-        [`${YOUTUBE_OPFS_TEMP_PREFIX}old-task-1.mp4.part`]: "leftover-1",
-        [`${YOUTUBE_OPFS_TEMP_PREFIX}old-task-2.m4a.part`]: "leftover-2",
-        "keep-other-data.json": '{"ok":true}',
+        [`${YOUTUBE_OPFS_TEMP_PREFIX}stale-2h.mp4.part`]: {
+          content: "leftover-2h",
+          lastModified: sweepNow - 2 * 3_600_000,
+        },
+        [`${YOUTUBE_OPFS_TEMP_PREFIX}stale-1h-plus-1ms.m4a.part`]: {
+          content: "leftover-1h-plus-1ms",
+          lastModified: sweepNow - (OPFS_STALE_TEMP_MAX_AGE_MS + 1),
+        },
+        [`${YOUTUBE_OPFS_TEMP_PREFIX}exact-1h-boundary.mp4.part`]: {
+          content: "keep-exact-1h",
+          lastModified: sweepNow - OPFS_STALE_TEMP_MAX_AGE_MS,
+        },
+        [`${YOUTUBE_OPFS_TEMP_PREFIX}recent-5m.mp4.part`]: {
+          content: "keep-recent-5m",
+          lastModified: sweepNow - 5 * 60_000,
+        },
+        "keep-other-data.json": {
+          content: '{"ok":true}',
+          lastModified: sweepNow - 24 * 3_600_000,
+        },
       },
     });
     const removedCount = await cleanupLeftoverYouTubeOpfsTempFiles({
       storage: sweepOpfs.storage,
+      locks: sweepOpfs.locks,
+      now: () => sweepNow,
     });
     assert.equal(removedCount, 2);
-    assert.deepEqual([...sweepOpfs.files.keys()], ["keep-other-data.json"]);
+    assert.deepEqual(
+      [...sweepOpfs.files.keys()].sort(),
+      [
+        `${YOUTUBE_OPFS_TEMP_PREFIX}exact-1h-boundary.mp4.part`,
+        `${YOUTUBE_OPFS_TEMP_PREFIX}recent-5m.mp4.part`,
+        "keep-other-data.json",
+      ].sort(),
+    );
 
     // 2. Insufficient OPFS quota (remaining = 1.1x < 1.2x estimatedBytes) -> falls back to showSaveFilePicker({ id: "dokitool-youtube" })
     const totalEstimated =
@@ -3063,7 +3184,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       mediabunny,
       muxConfig: { chunkSize: 4096, maxRetries: 1, retryBaseDelayMs: 5 },
       pageWindow: {
-        navigator: { storage: tightOpfs.storage },
+        navigator: { storage: tightOpfs.storage, locks: tightOpfs.locks },
         async showSaveFilePicker(opts) {
           pickerInvocations.push(opts);
           return {
@@ -3104,11 +3225,12 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       assert.equal(pickerInvocations.length, 1);
       assert.equal(pickerInvocations[0].id, "dokitool-youtube");
       assert.equal(tightOpfs.files.size, 0);
+      assert.equal((await tightOpfs.locks.query()).held.length, 0);
     } finally {
       unmountTight();
     }
 
-    // 3. Cancellation mid-mux immediately unlocks & deletes the OPFS temp file (zero leftover files or active locks)
+    // 3. Cancellation mid-mux immediately unlocks (both OPFS writable and Web Lock) & deletes the OPFS temp file
     const cancelOpfs = createMockOpfsEnvironment({ quota: 500_000_000 });
     const cancelBus = new EventTarget();
     let pendingAudioLoad = null;
@@ -3123,7 +3245,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
         opfsCleanupDelayMs: 60_000,
       },
       pageWindow: {
-        navigator: { storage: cancelOpfs.storage },
+        navigator: { storage: cancelOpfs.storage, locks: cancelOpfs.locks },
         URL: { createObjectURL: () => "blob:unused", revokeObjectURL() {} },
         document: {
           body: { appendChild() {} },
@@ -3169,14 +3291,18 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       assert.equal(cancelOpfs.files.size, 1, "temp OPFS file must exist while muxing");
       const tempFileName = [...cancelOpfs.files.keys()][0];
       assert.match(tempFileName, /^dokitool-yt-tmp-cancel-opfs-99-/);
+      assert.deepEqual((await cancelOpfs.locks.query()).held, [
+        { name: tempFileName, mode: "exclusive" },
+      ]);
 
       abortController.abort();
       await assert.rejects(() => muxPromise, (err) => err.name === "AbortError");
       await new Promise((r) => setTimeout(r, 20));
       assert.equal(cancelOpfs.activeLocks.size, 0, "OPFS writable lock must be released immediately");
+      assert.equal((await cancelOpfs.locks.query()).held.length, 0, "Web Lock must be released immediately on cancel");
       assert.equal(cancelOpfs.files.size, 0, "OPFS temp file must be deleted immediately on cancel");
 
-      // 4. Error mid-mux ALSO immediately unlocks & deletes OPFS temp file
+      // 4. Error mid-mux ALSO immediately unlocks (OPFS writable + Web Lock) & deletes OPFS temp file
       pendingAudioLoad = null;
       const errPromise = sendHelperRequest(
         "mux_download",
@@ -3193,12 +3319,282 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       );
       await new Promise((r) => setTimeout(r, 20));
       assert.equal(cancelOpfs.files.size, 1);
+      assert.equal((await cancelOpfs.locks.query()).held.length, 1);
       pendingAudioLoad?.();
       await assert.rejects(() => errPromise, /HTTP 403/);
       assert.equal(cancelOpfs.activeLocks.size, 0);
+      assert.equal((await cancelOpfs.locks.query()).held.length, 0, "Web Lock must be released immediately on error");
       assert.equal(cancelOpfs.files.size, 0, "OPFS temp file must be deleted immediately on error");
     } finally {
       unmountCancel();
+    }
+  });
+
+  test("OPFS conservative post-handoff cleanup timing (120s min, size / 5 MiB/s, 30m max), multi-controller shared OPFS Web Locks protection, and lockless environment fallback", async () => {
+    const MIB = 1024 * 1024;
+    const GIB = 1024 * MIB;
+    assert.equal(DEFAULT_OPFS_CLEANUP_DELAY_MS, 120_000);
+    assert.equal(MAX_OPFS_CLEANUP_DELAY_MS, 1_800_000);
+    assert.equal(OPFS_CLEANUP_BYTES_PER_SECOND, 5 * MIB);
+    assert.equal(OPFS_STALE_TEMP_MAX_AGE_MS, 3_600_000);
+
+    // 1. Conservative formula verification across small, >600 MiB, >=1 GiB, 4.4 GB, and >9000 MiB sizes
+    assert.equal(computeOpfsCleanupDelayMs(0), 120_000);
+    assert.equal(computeOpfsCleanupDelayMs(10 * MIB), 120_000);
+    assert.equal(computeOpfsCleanupDelayMs(600 * MIB), 120_000);
+    assert.equal(computeOpfsCleanupDelayMs(601 * MIB), 121_000);
+    assert.equal(computeOpfsCleanupDelayMs(GIB), 205_000);
+    assert.equal(computeOpfsCleanupDelayMs(4_400_000_000), 840_000);
+    assert.equal(computeOpfsCleanupDelayMs(9000 * MIB), 1_800_000);
+    assert.equal(computeOpfsCleanupDelayMs(16 * GIB), 1_800_000);
+
+    // 2. Two independent controller instances sharing one OPFS directory & Web Locks manager do NOT delete each other's active or post-handoff files
+    let clockNow = 1_800_000_000_000;
+    const staleOldName = `${YOUTUBE_OPFS_TEMP_PREFIX}orphan-2h-old.mp4.part`;
+    const recentUnheldName = `${YOUTUBE_OPFS_TEMP_PREFIX}unheld-15m-old.mp4.part`;
+    const sharedOpfs = createMockOpfsEnvironment({
+      quota: 500_000_000,
+      now: () => clockNow,
+      initialFiles: {
+        [staleOldName]: {
+          content: "stale-orphan",
+          lastModified: clockNow - 2 * 3_600_000,
+        },
+        [recentUnheldName]: {
+          content: "recent-closed-tab",
+          lastModified: clockNow - 15 * 60_000,
+        },
+      },
+    });
+
+    const scheduledTimersA = [];
+    const scheduledTimersB = [];
+    const busA = new EventTarget();
+    const busB = new EventTarget();
+
+    const makeTabWindow = (timersArr, withLocks = true) => ({
+      navigator: {
+        storage: sharedOpfs.storage,
+        ...(withLocks ? { locks: sharedOpfs.locks } : {}),
+      },
+      setTimeout(fn, ms) {
+        timersArr.push({ fn, ms });
+        return { unref() {} };
+      },
+      URL: {
+        createObjectURL(file) {
+          return `blob:shared-${file.name}`;
+        },
+        revokeObjectURL() {},
+      },
+      document: {
+        body: { appendChild() {} },
+        createElement: () => ({ style: {}, click() {}, remove() {} }),
+      },
+    });
+
+    const gmMock = (details) => {
+      const itag = new URL(details.url).searchParams.get("itag");
+      const bytes =
+        itag === "299" ? fixtures.mp4VideoBytes : fixtures.m4aAudioBytes;
+      details.onload(sliceRangeFromFixture(bytes, details.url));
+      return {};
+    };
+
+    const controllerA = createUserscriptController({
+      eventTarget: busA,
+      now: () => clockNow,
+      version: YOUTUBE_HELPER_VERSION,
+      mediabunny,
+      muxConfig: { chunkSize: 4096, maxRetries: 1, retryBaseDelayMs: 5 },
+      pageWindow: makeTabWindow(scheduledTimersA, true),
+      gmXmlhttpRequest: gmMock,
+    });
+    const unmountA = controllerA.mount();
+
+    // Give controllerA's mount() sweep a turn: it must delete staleOldName (>1h) while keeping recentUnheldName (15m <= 1h)
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(sharedOpfs.files.has(staleOldName), false);
+    assert.equal(sharedOpfs.files.has(recentUnheldName), true);
+
+    let unmountB = () => {};
+    try {
+      // Tab A muxes & hands off a file (default conservative cleanup timer = 120,000 ms, NOT overridden)
+      const resA = await sendHelperRequest(
+        "mux_download",
+        {
+          taskId: "tab-a-active",
+          videoUrl: makeItagUrl(299, fixtures.mp4VideoBytes.byteLength),
+          audioUrl: makeItagUrl(140, fixtures.m4aAudioBytes.byteLength),
+          videoSize: fixtures.mp4VideoBytes.byteLength,
+          audioSize: fixtures.m4aAudioBytes.byteLength,
+          filename: "Tab_A_1080p.mp4",
+          outputContainer: "mp4",
+        },
+        { eventTarget: busA },
+      );
+      assert.equal(resA.mode, "opfs");
+      assert.equal(scheduledTimersA.length, 1);
+      assert.equal(
+        scheduledTimersA[0].ms,
+        120_000,
+        "unoverridden small/medium file cleanup timer must use conservative 120s minimum",
+      );
+
+      const tabATempName = [...sharedOpfs.files.keys()].find((k) =>
+        k.startsWith(`${YOUTUBE_OPFS_TEMP_PREFIX}tab-a-active-`),
+      );
+      assert.ok(tabATempName, "Tab A temp file must remain in OPFS during post-handoff copy window");
+      assert.equal(
+        sharedOpfs.activeLocks.size,
+        0,
+        "OPFS writable stream is already closed after handoff",
+      );
+      assert.deepEqual((await sharedOpfs.locks.query()).held, [
+        { name: tabATempName, mode: "exclusive" },
+      ]);
+
+      // Tab B also starts its own concurrent OPFS download while mounting & sweeping the shared OPFS directory!
+      // Even if clock jumps forward by +3 hours (so tabATempName's lastModified > 1h), Tab B's { ifAvailable: true } Web Lock check MUST skip tabATempName!
+      clockNow += 3 * 3_600_000;
+      const controllerB = createUserscriptController({
+        eventTarget: busB,
+        now: () => clockNow,
+        version: YOUTUBE_HELPER_VERSION,
+        mediabunny,
+        muxConfig: { chunkSize: 4096, maxRetries: 1, retryBaseDelayMs: 5 },
+        pageWindow: makeTabWindow(scheduledTimersB, true),
+        gmXmlhttpRequest: gmMock,
+      });
+      unmountB = controllerB.mount();
+      await new Promise((r) => setTimeout(r, 20));
+
+      assert.equal(
+        sharedOpfs.files.has(recentUnheldName),
+        false,
+        "unlocked file now >3h old is swept by Tab B",
+      );
+      assert.equal(
+        sharedOpfs.files.has(tabATempName),
+        true,
+        "Tab B MUST NOT delete Tab A's post-handoff temp file protected by Web Lock",
+      );
+
+      const resB = await sendHelperRequest(
+        "download",
+        {
+          taskId: "tab-b-audio",
+          url: makeItagUrl(140, fixtures.m4aAudioBytes.byteLength),
+          size: fixtures.m4aAudioBytes.byteLength,
+          filename: "Tab_B_audio.m4a",
+        },
+        { eventTarget: busB },
+      );
+      assert.equal(resB.mode, "opfs");
+      const tabBTempName = [...sharedOpfs.files.keys()].find((k) =>
+        k.startsWith(`${YOUTUBE_OPFS_TEMP_PREFIX}tab-b-audio-`),
+      );
+      assert.ok(tabBTempName);
+      assert.equal((await sharedOpfs.locks.query()).held.length, 2);
+
+      // Independent page-load sweep (e.g. App.vue onMounted in Tab C) skips BOTH locked files
+      const sweptWhileBothHeld = await cleanupLeftoverYouTubeOpfsTempFiles({
+        storage: sharedOpfs.storage,
+        locks: sharedOpfs.locks,
+        now: () => clockNow + 5 * 3_600_000,
+      });
+      assert.equal(sweptWhileBothHeld, 0);
+      assert.equal(sharedOpfs.files.has(tabATempName), true);
+      assert.equal(sharedOpfs.files.has(tabBTempName), true);
+
+      // Firing Tab A's conservative timer removes ONLY Tab A's temp file & releases Tab A's Web Lock
+      await scheduledTimersA[0].fn();
+      await new Promise((r) => setTimeout(r, 10));
+      assert.equal(sharedOpfs.files.has(tabATempName), false);
+      assert.equal(sharedOpfs.files.has(tabBTempName), true);
+      assert.deepEqual((await sharedOpfs.locks.query()).held, [
+        { name: tabBTempName, mode: "exclusive" },
+      ]);
+
+      // Firing Tab B's conservative timer removes Tab B's temp file & releases Tab B's Web Lock
+      await scheduledTimersB[0].fn();
+      await new Promise((r) => setTimeout(r, 10));
+      assert.equal(sharedOpfs.files.size, 0);
+      assert.equal((await sharedOpfs.locks.query()).held.length, 0);
+    } finally {
+      unmountB();
+      unmountA();
+    }
+
+    // 3. Graceful fallback when navigator.locks is absent or throws SecurityError
+    let noLockClock = 1_900_000_000_000;
+    const noLockOpfs = createMockOpfsEnvironment({
+      quota: 500_000_000,
+      now: () => noLockClock,
+    });
+    const noLockTimers = [];
+    const noLockBus = new EventTarget();
+    const throwingLocks = {
+      request() {
+        return Promise.reject(new DOMException("Denied", "SecurityError"));
+      },
+    };
+    const unmountNoLock = createUserscriptController({
+      eventTarget: noLockBus,
+      now: () => noLockClock,
+      webLocks: throwingLocks,
+      version: YOUTUBE_HELPER_VERSION,
+      mediabunny,
+      muxConfig: { chunkSize: 4096, maxRetries: 1, retryBaseDelayMs: 5 },
+      pageWindow: {
+        navigator: { storage: noLockOpfs.storage },
+        setTimeout(fn, ms) {
+          noLockTimers.push({ fn, ms });
+          return { unref() {} };
+        },
+        URL: { createObjectURL: () => "blob:nolock", revokeObjectURL() {} },
+        document: {
+          body: { appendChild() {} },
+          createElement: () => ({ style: {}, click() {}, remove() {} }),
+        },
+      },
+      gmXmlhttpRequest: gmMock,
+    }).mount();
+
+    try {
+      const resNoLock = await sendHelperRequest(
+        "download",
+        {
+          taskId: "nolock-task",
+          url: makeItagUrl(140, fixtures.m4aAudioBytes.byteLength),
+          size: fixtures.m4aAudioBytes.byteLength,
+          filename: "NoLock_audio.m4a",
+        },
+        { eventTarget: noLockBus },
+      );
+      assert.equal(resNoLock.mode, "opfs");
+      assert.equal(noLockOpfs.files.size, 1);
+
+      // Sweep 30m later without navigator.locks keeps file because age <= 1h
+      const removedAt30m = await cleanupLeftoverYouTubeOpfsTempFiles({
+        storage: noLockOpfs.storage,
+        locks: null,
+        now: () => noLockClock + 30 * 60_000,
+      });
+      assert.equal(removedAt30m, 0);
+      assert.equal(noLockOpfs.files.size, 1);
+
+      // Sweep >1h later with throwing navigator.locks falls back to age filter and deletes stale file
+      const removedAfter2h = await cleanupLeftoverYouTubeOpfsTempFiles({
+        storage: noLockOpfs.storage,
+        locks: throwingLocks,
+        now: () => noLockClock + 2 * 3_600_000,
+      });
+      assert.equal(removedAfter2h, 1);
+      assert.equal(noLockOpfs.files.size, 0);
+      await noLockTimers[0]?.fn?.();
+    } finally {
+      unmountNoLock();
     }
   });
 
@@ -3215,7 +3611,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     let reloadCount = 0;
     const pinger = async () =>
       helperReady
-        ? { installed: true, version: "1.3.0", supported: true }
+        ? { installed: true, version: "1.3.1", supported: true }
         : { installed: false, version: null, supported: false };
 
     const createTestParser = () =>
@@ -3264,7 +3660,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
 
     const unmountHelper = createUserscriptController({
       eventTarget: env.bus,
-      version: "1.3.0",
+      version: "1.3.1",
       gmXmlhttpRequest(details) {
         if (details.url.includes("sw.js_data")) {
           details.onload({ status: 200, responseText: '["Cgt0ZXN0"]' });
@@ -3388,5 +3784,55 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     } finally {
       unmountHelper();
     }
+  });
+
+  test("cleanupLeftoverYouTubeOpfsTempFiles protects Chromium .crswap swap files under parent .part Web Lock", async () => {
+    const locks = createMockWebLocks();
+    const opfs = createMockOpfsEnvironment(10 * 1024 * 1024);
+    const oldMtime = 1_000_000;
+    opfs.files.set("dokitool-yt-tmp-longwrite.part", new Uint8Array(0));
+    opfs.lastModifiedMap.set("dokitool-yt-tmp-longwrite.part", oldMtime);
+    opfs.files.set(
+      "dokitool-yt-tmp-longwrite.part.crswap",
+      new Uint8Array(4096),
+    );
+    opfs.lastModifiedMap.set("dokitool-yt-tmp-longwrite.part.crswap", oldMtime);
+
+    let releaseParentLock;
+    const hold = new Promise((r) => {
+      releaseParentLock = r;
+    });
+    let grantedResolve;
+    const granted = new Promise((r) => {
+      grantedResolve = r;
+    });
+    void locks.request(
+      "dokitool-yt-tmp-longwrite.part",
+      { mode: "exclusive" },
+      () => {
+        grantedResolve();
+        return hold;
+      },
+    );
+    await granted;
+
+    const removedWhileLocked = await cleanupLeftoverYouTubeOpfsTempFiles({
+      storage: opfs.storage,
+      locks,
+      now: () => oldMtime + OPFS_STALE_TEMP_MAX_AGE_MS + 60_000,
+    });
+    assert.equal(removedWhileLocked, 0);
+    assert.equal(opfs.files.has("dokitool-yt-tmp-longwrite.part.crswap"), true);
+
+    releaseParentLock();
+    await new Promise((r) => setTimeout(r, 5));
+
+    const removedAfterUnlock = await cleanupLeftoverYouTubeOpfsTempFiles({
+      storage: opfs.storage,
+      locks,
+      now: () => oldMtime + OPFS_STALE_TEMP_MAX_AGE_MS + 60_000,
+    });
+    assert.equal(removedAfterUnlock, 2);
+    assert.equal(opfs.files.size, 0);
   });
 });

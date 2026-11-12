@@ -1746,7 +1746,7 @@ onUnmounted(() => {
                 <AppIcon class="fas fa-download" />
                 <span>{{
                   youtubeHelper.status === "outdated"
-                    ? `YouTube 下载助手脚本需要更新（当前 v${youtubeHelper.version || "未知"}，要求 v${youtubeHelper.min_version || "1.3.0"}+）`
+                    ? `YouTube 下载助手脚本需要更新（当前 v${youtubeHelper.version || "未知"}，要求 v${youtubeHelper.min_version || "1.3.1"}+）`
                     : "需要安装 YouTube 下载助手脚本"
                 }}</span>
               </div>

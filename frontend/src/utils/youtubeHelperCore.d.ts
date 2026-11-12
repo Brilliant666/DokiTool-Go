@@ -6,7 +6,11 @@ export const YOUTUBE_HELPER_SCRIPT_URL: string;
 export const YOUTUBE_OPFS_TEMP_PREFIX: string;
 export const YOUTUBE_FILE_PICKER_ID: string;
 export const DEFAULT_OPFS_CLEANUP_DELAY_MS: number;
+export const MAX_OPFS_CLEANUP_DELAY_MS: number;
+export const OPFS_CLEANUP_BYTES_PER_SECOND: number;
+export const OPFS_STALE_TEMP_MAX_AGE_MS: number;
 export const OPFS_QUOTA_HEADROOM_FACTOR: number;
+export function computeOpfsCleanupDelayMs(byteLength: number): number;
 
 export const DEFAULT_MUX_CHUNK_BYTES: number;
 export const DEFAULT_MUX_VIDEO_CONCURRENCY: number;
@@ -158,6 +162,10 @@ export function sanitizePlayerApiResponse(
 ): YouTubeHelperPlayerResult;
 export function cleanupLeftoverYouTubeOpfsTempFiles(options?: {
   storage?: StorageManager | Record<string, unknown> | null;
+  locks?: LockManager | Record<string, unknown> | null;
+  now?: () => number;
+  maxAgeMs?: number;
+  activeNames?: Set<string> | null;
   pageWindow?: Window | typeof globalThis;
 }): Promise<number>;
 export function createUserscriptController(options?: {
@@ -166,6 +174,7 @@ export function createUserscriptController(options?: {
   eventTarget?: EventTarget;
   pageWindow?: Window | typeof globalThis;
   opfsStorage?: StorageManager | Record<string, unknown> | null;
+  webLocks?: LockManager | Record<string, unknown> | null;
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   now?: () => number;
   version?: string;
