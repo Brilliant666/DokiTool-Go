@@ -77,50 +77,43 @@ export const POPULAR_PLATFORM_IDS = [
   "facebook",
 ] as const;
 
-const popularOrder = new Map<string, number>(
-  POPULAR_PLATFORM_IDS.map((id, idx) => [id, idx]),
-);
+export const POPULAR_PLATFORMS: ReadonlyArray<{
+  id: (typeof POPULAR_PLATFORM_IDS)[number];
+  name: string;
+  icon: string;
+}> = [
+  { id: "douyin", name: "抖音", icon: "douyin" },
+  { id: "kuaishou", name: "快手", icon: "kuaishou" },
+  { id: "bilibili", name: "B站", icon: "bilibili" },
+  { id: "xiaohongshu", name: "小红书", icon: "xiaohongshu" },
+  { id: "weibo", name: "微博", icon: "weibo" },
+  { id: "x", name: "X", icon: "x" },
+  { id: "youtube", name: "YouTube", icon: "youtube" },
+  { id: "instagram", name: "Instagram", icon: "instagram" },
+  { id: "facebook", name: "Facebook", icon: "facebook" },
+];
 
 export interface PlatformTabItem {
   key: string;
   label: string;
   icon: string;
-}
-
-function toPlatformTab(platform: Platform, locale: string): PlatformTabItem {
-  return {
-    key: platform.id,
-    label: locale === "en" ? platform.id : platform.name,
-    icon: tabIcons[platform.icon || ""] || "fa-globe",
-  };
-}
-
-export function groupedPlatformTabs(locale: string): {
-  allTab: PlatformTabItem;
-  popularTabs: PlatformTabItem[];
-  moreTabs: PlatformTabItem[];
-} {
-  const byId = new Map(supportedPlatforms.value.map((p) => [p.id, p]));
-  const popularTabs: PlatformTabItem[] = [];
-  for (const id of POPULAR_PLATFORM_IDS) {
-    const p = byId.get(id);
-    if (p) popularTabs.push(toPlatformTab(p, locale));
-  }
-  const moreTabs = supportedPlatforms.value
-    .filter((p) => !popularOrder.has(p.id))
-    .map((p) => toPlatformTab(p, locale));
-  return {
-    allTab: {
-      key: "all",
-      label: locale === "en" ? "All" : "所有平台",
-      icon: "fa-globe",
-    },
-    popularTabs,
-    moreTabs,
-  };
+  disabled?: boolean;
 }
 
 export function platformTabs(locale: string): PlatformTabItem[] {
-  const { allTab, popularTabs, moreTabs } = groupedPlatformTabs(locale);
-  return [allTab, ...popularTabs, ...moreTabs];
+  const enabledIds = new Set(supportedPlatforms.value.map((p) => p.id));
+  return [
+    {
+      key: "all",
+      label: locale === "en" ? "All" : "所有平台",
+      icon: "fa-globe",
+      disabled: false,
+    },
+    ...POPULAR_PLATFORMS.map((p) => ({
+      key: p.id,
+      label: locale === "en" ? p.id : p.name,
+      icon: tabIcons[p.icon] || "fa-globe",
+      disabled: !enabledIds.has(p.id),
+    })),
+  ];
 }

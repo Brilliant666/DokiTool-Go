@@ -13,7 +13,7 @@ import { ref, computed, h, createSSRApp, createRenderer, nextTick, markRaw } fro
 import { renderToString } from '@vue/server-renderer';
 import JSZip from 'jszip';
 
-let vite, downloads, ResultSection, HeroSection, DownloadCard, platforms, parser, mediaSources, mediaContract, selectionModule, configuration;
+let vite, downloads, ResultSection, HeroSection, PlatformGrid, DownloadCard, platforms, parser, mediaSources, mediaContract, selectionModule, configuration;
 let clicked, blobs, fetched, nativeFrames;
 const originals = { fetch: globalThis.fetch, document: globalThis.document, window: globalThis.window, location: globalThis.location, cryptoDescriptor: Object.getOwnPropertyDescriptor(globalThis, 'crypto'), createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
 before(async () => {
@@ -46,6 +46,7 @@ before(async () => {
   await vite.ssrLoadModule('/src/utils/segmentDownload.ts');
   ResultSection = (await vite.ssrLoadModule('/src/components/ResultSection.vue')).default;
   HeroSection = (await vite.ssrLoadModule('/src/components/HeroSection.vue')).default;
+  PlatformGrid = (await vite.ssrLoadModule('/src/components/PlatformGrid.vue')).default;
   DownloadCard = (await vite.ssrLoadModule('/src/components/DownloadCard.vue')).default;
   mediaContract = await vite.ssrLoadModule('/src/utils/mediaContract.ts');
   selectionModule = await vite.ssrLoadModule('/src/composables/useVideoSelection.ts');
@@ -179,11 +180,18 @@ async function waitUntil(predicate) {
 }
 const base = { title: '示例', images: [], live_photo: [], video_backup: [], music: {}, extra: {}, url: 'https://media.test/main.mp4' };
 
-test('all nine registered platforms are visible; unsupported platform claims are absent', async () => {
-  assert.deepEqual(platforms.supportedPlatforms.value.map((item) => item.id), ['douyin', 'kuaishou', 'bilibili', 'xiaohongshu', 'toutiao', 'weibo', 'pipixia', 'pipigx', 'zuiyou']);
-  const html = await renderToString(createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all' }) }));
-  for (const platform of platforms.supportedPlatforms.value) assert.ok(html.includes(platform.name));
-  for (const name of ['微视', '西瓜视频', '好看视频', '火山小视频']) assert.ok(!html.includes(name));
+test('all fifteen online catalog platforms are visible in Supported_Platforms while HeroSection renders fixed popular tabs; unsupported platform claims are absent', async () => {
+  assert.deepEqual(platforms.supportedPlatforms.value.map((item) => item.id), [
+    'douyin', 'kuaishou', 'bilibili', 'xiaohongshu', 'toutiao', 'weibo', 'pipixia', 'pipigx', 'zuiyou',
+    'x', 'youtube', 'instagram', 'facebook', 'tumblr', 'dailymotion',
+  ]);
+  const heroHtml = await renderToString(createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all' }) }));
+  const gridHtml = await renderToString(createSSRApp({ render: () => h(PlatformGrid, { locale: 'zh-CN' }) }));
+  for (const platform of platforms.supportedPlatforms.value) assert.ok(gridHtml.includes(platform.name));
+  for (const name of ['微视', '西瓜视频', '好看视频', '火山小视频']) {
+    assert.ok(!heroHtml.includes(name));
+    assert.ok(!gridHtml.includes(name));
+  }
 });
 
 test('mixed live results retain the complete image gallery and honest metadata', async () => {
@@ -2680,47 +2688,82 @@ test('zuiyou and pipigx manual-entry filenames use .mp4 while genuinely unknown 
   }
 });
 
-test('homepage tabs show 9 popular platforms in exact order by default, fold remaining platforms under 更多平台 (N), and retain full list in prerendered HTML', async () => {
+test('homepage button row stays fixed to popular platforms without 更多平台 dropdown, disables popular tabs turned off in catalog, and keeps full platform list in Supported_Platforms', async () => {
   assert.deepEqual([...platforms.POPULAR_PLATFORM_IDS], [
     'douyin', 'kuaishou', 'bilibili', 'xiaohongshu', 'weibo', 'x', 'youtube', 'instagram', 'facebook',
   ]);
+  assert.equal(platforms.groupedPlatformTabs, undefined);
+
+  const expectedOrder = ['all', 'douyin', 'kuaishou', 'bilibili', 'xiaohongshu', 'weibo', 'x', 'youtube', 'instagram', 'facebook'];
+  const expectedLabels = ['所有平台', '抖音', '快手', 'B站', '小红书', '微博', 'X', 'YouTube', 'Instagram', 'Facebook'];
+
   const snapshotCopy = platforms.supportedPlatforms.value;
   try {
+    // 1. Default snapshot: exact 10 tabs, all enabled, no 更多平台
+    const initialTabs = platforms.platformTabs('zh-CN');
+    assert.deepEqual(initialTabs.map((t) => t.key), expectedOrder);
+    assert.deepEqual(initialTabs.map((t) => t.label), expectedLabels);
+    assert.ok(initialTabs.every((t) => !t.disabled));
+
+    const ssrPreReady = await renderToString(
+      createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all', isReady: false }) }),
+    );
+    const ssrReady = await renderToString(
+      createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all', isReady: true }) }),
+    );
+    for (const html of [ssrPreReady, ssrReady]) {
+      assert.deepEqual(
+        [...html.matchAll(/data-platform-tab="([^"]+)"/g)].map((m) => m[1]),
+        expectedOrder,
+      );
+      assert.ok(!html.includes('更多平台'));
+      assert.doesNotMatch(html, /data-more-platforms-toggle|data-more-platform-tab/);
+      for (const nonPopular of ['今日头条', '皮皮虾', '皮皮搞笑', '最右', 'Tumblr', 'Dailymotion']) {
+        assert.ok(!html.includes(nonPopular), `non-popular platform ${nonPopular} must not appear in HeroSection`);
+      }
+      assert.match(html, /data-reserve="正在准备…"[^>]*data-reserve-alt="开始解析"/);
+    }
+
+    // 2. Online catalog adds a new platform (threads): button row count & order unchanged, Supported_Platforms shows it
     platforms.supportedPlatforms.value = platforms.readPlatformCatalog({
       schema_version: '1.0',
       code: 'OK',
       data: {
         platforms: [
           ...snapshotCopy,
-          { id: 'x', name: 'X', site_url: 'https://x.com/', icon: 'x', capabilities: ['video', 'image'] },
-          { id: 'youtube', name: 'YouTube', site_url: 'https://www.youtube.com/', icon: 'youtube', capabilities: ['video'] },
-          { id: 'instagram', name: 'Instagram', site_url: 'https://www.instagram.com/', icon: 'instagram', capabilities: ['video', 'image'] },
-          { id: 'facebook', name: 'Facebook', site_url: 'https://www.facebook.com/', icon: 'facebook', capabilities: ['video'] },
-          { id: 'tumblr', name: 'Tumblr', site_url: 'https://www.tumblr.com/', icon: 'tumblr', capabilities: ['video'] },
-          { id: 'dailymotion', name: 'Dailymotion', site_url: 'https://www.dailymotion.com/', icon: 'dailymotion', capabilities: ['video'] },
           { id: 'threads', name: 'Threads', site_url: 'https://www.threads.net/', icon: 'threads', capabilities: ['video'] },
         ],
       },
     });
-    const grouped = platforms.groupedPlatformTabs('zh-CN');
-    assert.deepEqual(grouped.popularTabs.map((t) => t.label), [
-      '抖音', '快手', 'B站', '小红书', '微博', 'X', 'YouTube', 'Instagram', 'Facebook',
-    ]);
-    assert.deepEqual(grouped.moreTabs.map((t) => t.label), [
-      '今日头条', '皮皮虾', '皮皮搞笑', '最右', 'Tumblr', 'Dailymotion', 'Threads',
-    ]);
-
-    const ssrHtml = await renderToString(
-      createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all' }) }),
+    assert.deepEqual(platforms.platformTabs('zh-CN').map((t) => t.key), expectedOrder);
+    const gridWithThreads = await renderToString(
+      createSSRApp({ render: () => h(PlatformGrid, { locale: 'zh-CN' }) }),
     );
-    assert.ok(ssrHtml.includes('更多平台 (7)'));
-    for (const label of ['抖音', '快手', 'B站', '小红书', '微博', 'X', 'YouTube', 'Instagram', 'Facebook']) {
-      assert.ok(ssrHtml.includes(label), `popular platform ${label} must be in SSR HTML`);
+    for (const label of ['抖音', '今日头条', '皮皮虾', '皮皮搞笑', '最右', 'Tumblr', 'Dailymotion', 'Threads']) {
+      assert.ok(gridWithThreads.includes(label));
     }
-    for (const folded of ['今日头条', '皮皮虾', '皮皮搞笑', '最右', 'Tumblr', 'Dailymotion', 'Threads']) {
-      assert.ok(ssrHtml.includes(folded), `folded platform ${folded} must remain in prerendered HTML`);
-    }
-    assert.match(ssrHtml, /data-platform-tab="toutiao"[^>]*style="display:none;"/);
+
+    // 3. Online catalog disables a popular platform (facebook): button stays in exact position & order, marked disabled
+    platforms.supportedPlatforms.value = platforms.readPlatformCatalog({
+      schema_version: '1.0',
+      code: 'OK',
+      data: {
+        platforms: snapshotCopy.filter((p) => p.id !== 'facebook'),
+      },
+    });
+    const tabsWithoutFb = platforms.platformTabs('zh-CN');
+    assert.deepEqual(tabsWithoutFb.map((t) => t.key), expectedOrder);
+    assert.equal(tabsWithoutFb.find((t) => t.key === 'facebook')?.disabled, true);
+    assert.equal(tabsWithoutFb.find((t) => t.key === 'douyin')?.disabled, false);
+
+    const heroWithoutFb = await renderToString(
+      createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all', isReady: true }) }),
+    );
+    assert.deepEqual(
+      [...heroWithoutFb.matchAll(/data-platform-tab="([^"]+)"/g)].map((m) => m[1]),
+      expectedOrder,
+    );
+    assert.match(heroWithoutFb, /data-platform-tab="facebook"[^>]*disabled[^>]*aria-disabled="true"/);
   } finally {
     platforms.supportedPlatforms.value = snapshotCopy;
   }
