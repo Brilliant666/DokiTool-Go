@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
@@ -25,21 +26,26 @@ const (
 
 // PullJob is a single-use lease. DeadlineMS is absolute; another poll cannot
 // extend it. There is no replay or redelivery on worker disconnect.
+// Legacy v1 jobs omit Protocol and AwemeID so v1 workers with
+// DisallowUnknownFields accept them byte-for-byte unchanged.
 type PullJob struct {
+	Protocol   int    `json:"protocol,omitempty"`
 	TaskID     string `json:"task_id"`
 	AttemptID  string `json:"attempt_id"`
-	VideoID    string `json:"video_id"`
+	VideoID    string `json:"video_id,omitempty"`
+	AwemeID    string `json:"aweme_id,omitempty"`
 	DeadlineMS int64  `json:"deadline_ms"`
 }
 
 type PullResult struct {
 	PullJob
-	Result json.RawMessage `json:"result"` // #27 Response, or null on probe failure
+	Result json.RawMessage `json:"result"` // Response (v1), WorkResponse (v2), or null on failure
 }
 
 type pullWaiter struct {
-	ctx context.Context
-	job chan PullJob
+	ctx      context.Context
+	protocol int
+	job      chan PullJob
 }
 
 type pullTask struct {
@@ -93,6 +99,41 @@ func (b *PullBroker) dispatch(ctx context.Context, videoID string) *pullTask {
 	return nil
 }
 
+func (b *PullBroker) dispatchWork(ctx context.Context, awemeID string) (*pullTask, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.waiting = slices.DeleteFunc(b.waiting, func(w *pullWaiter) bool { return w.ctx.Err() != nil })
+	if len(b.pending) >= pullCapacity {
+		return nil, errUnavailable
+	}
+	for i, w := range b.waiting {
+		if w.protocol < ProtocolV2 {
+			continue
+		}
+		b.waiting = slices.Delete(b.waiting, i, i+1)
+		var ids [32]byte
+		rand.Read(ids[:])
+		deadline, _ := ctx.Deadline()
+		job := PullJob{
+			Protocol:   ProtocolV2,
+			TaskID:     hex.EncodeToString(ids[:16]),
+			AttemptID:  hex.EncodeToString(ids[16:]),
+			AwemeID:    awemeID,
+			DeadlineMS: deadline.UnixMilli(),
+		}
+		t := &pullTask{job: job, ctx: ctx, result: make(chan json.RawMessage, 1)}
+		b.pending[job.TaskID] = t
+		w.job <- job
+		return t, nil
+	}
+	if len(b.waiting) > 0 {
+		// Only legacy v1 workers are waiting; preserve their claim so
+		// ResolveOriginal can dispatch a v1 video_id lease after detail completes.
+		return nil, douyin.ErrProtocolV1
+	}
+	return nil, errUnavailable
+}
+
 func (b *PullBroker) ResolveOriginal(parent context.Context, videoID string) ([]unified.Object, error) {
 	if err := parent.Err(); err != nil {
 		return nil, err
@@ -119,6 +160,35 @@ func (b *PullBroker) ResolveOriginal(parent context.Context, videoID string) ([]
 			return nil, err
 		}
 		return b.validateResponse(ctx, videoID, data)
+	}
+}
+
+func (b *PullBroker) ResolveWork(parent context.Context, awemeID string) (*douyin.ShanghaiWork, error) {
+	if err := parent.Err(); err != nil {
+		return nil, err
+	}
+	if !douyin.ValidAwemeID(awemeID) {
+		return nil, errUnavailable
+	}
+	ctx, cancel := context.WithTimeout(parent, WorkTimeout)
+	defer cancel()
+	task, err := b.dispatchWork(ctx, awemeID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		b.mu.Lock()
+		delete(b.pending, task.job.TaskID)
+		b.mu.Unlock()
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case data := <-task.result:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return b.validateWorkResponse(ctx, awemeID, data)
 	}
 }
 
@@ -167,7 +237,11 @@ func (b *PullBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (b *PullBroker) claim(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), PullWait)
 	defer cancel()
-	waiter := &pullWaiter{ctx: ctx, job: make(chan PullJob, 1)}
+	proto := 1
+	if r.Header.Get(ProtocolHeader) == "2" {
+		proto = ProtocolV2
+	}
+	waiter := &pullWaiter{ctx: ctx, protocol: proto, job: make(chan PullJob, 1)}
 	b.mu.Lock()
 	b.waiting = append(b.waiting, waiter)
 	b.mu.Unlock()
@@ -198,17 +272,41 @@ func (b *PullBroker) receive(w http.ResponseWriter, r *http.Request) {
 	var result PullResult
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxResponseBytes+512))
 	d.DisallowUnknownFields()
-	if d.Decode(&result) != nil || d.Decode(&struct{}{}) != io.EOF || len(result.Result) == 0 || len(result.Result) > maxResponseBytes {
+	if d.Decode(&result) != nil || d.Decode(&struct{}{}) != io.EOF || len(result.Result) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	limit := maxResponseBytes
+	switch result.Protocol {
+	case 0:
+		limit = maxV1ResponseBytes
+	case ProtocolV2:
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if len(result.Result) > limit {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	if !bytes.Equal(result.Result, []byte("null")) {
-		var media struct {
-			VideoID string `json:"video_id"`
-		}
-		if json.Unmarshal(result.Result, &media) != nil || media.VideoID != result.VideoID {
-			w.WriteHeader(http.StatusConflict)
-			return
+		if result.Protocol == ProtocolV2 {
+			var work struct {
+				Protocol int    `json:"protocol"`
+				AwemeID  string `json:"aweme_id"`
+			}
+			if json.Unmarshal(result.Result, &work) != nil || work.Protocol != ProtocolV2 || work.AwemeID != result.AwemeID {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+		} else {
+			var media struct {
+				VideoID string `json:"video_id"`
+			}
+			if json.Unmarshal(result.Result, &media) != nil || media.VideoID != result.VideoID {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
 		}
 	}
 	if !b.finish(result.PullJob, result.Result) {

@@ -13,11 +13,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 )
 
-const Path = "/v1/douyin/original"
+const (
+	Path           = "/v1/douyin/original"
+	ProtocolV2     = 2
+	ProtocolHeader = "X-DokiTool-Shanghai-Protocol"
+
+	// ProbeTimeout bounds Shanghai's two-dispatch cold-storage MP4 probe.
+	// Empirical 376 MiB cold originals take 6.6-7.7s; 10s leaves ~30% margin.
+	ProbeTimeout = 10 * time.Second
+
+	// WorkTimeout bounds Shanghai's combined detail lookup (~0.26s typical,
+	// 4s cap) + cold-storage original probe (10s cap) + callback delivery,
+	// and serves as Japan's hard maximum wait before falling back to local data.
+	WorkTimeout = 14 * time.Second
+)
 
 var videoIDPattern = regexp.MustCompile(`^v[0-9a-zA-Z]{10,127}$`)
 
@@ -36,22 +50,39 @@ type Response struct {
 	Candidates []Candidate `json:"candidates"`
 }
 
+type WorkResponse struct {
+	Protocol   int                 `json:"protocol"`
+	AwemeID    string              `json:"aweme_id"`
+	VideoID    string              `json:"video_id,omitempty"`
+	Renditions map[string][]string `json:"renditions,omitempty"`
+	Candidates []Candidate         `json:"candidates"`
+}
+
 type originalProbe interface {
 	Originals(context.Context, string) ([]unified.Object, error)
 }
 
 type server struct {
-	token string
-	probe originalProbe
+	token  string
+	detail fetch.Executor
+	probe  originalProbe
 }
 
-// NewHandler authorizes the single metadata-only endpoint; the command binds
-// to loopback behind a certificate-validating, source-restricted HTTPS ingress.
+// NewHandler authorizes the legacy v1 video_id metadata-only endpoint; the
+// command binds to loopback behind a certificate-validating HTTPS ingress.
 func NewHandler(token string, p originalProbe) (http.Handler, error) {
 	if !ValidToken(token) || p == nil {
 		return nil, errors.New("missing or invalid Shanghai resolver configuration")
 	}
 	return &server{token: token, probe: p}, nil
+}
+
+// NewHandlerWithDetail authorizes both v1 (video_id) and v2 (aweme_id) requests.
+func NewHandlerWithDetail(token string, detail fetch.Executor, p originalProbe) (http.Handler, error) {
+	if !ValidToken(token) || detail == nil || p == nil {
+		return nil, errors.New("missing or invalid Shanghai resolver configuration")
+	}
+	return &server{token: token, detail: detail, probe: p}, nil
 }
 
 func ValidToken(token string) bool {
@@ -83,21 +114,73 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		VideoID string `json:"video_id"`
+		Protocol int    `json:"protocol"`
+		VideoID  string `json:"video_id"`
+		AwemeID  string `json:"aweme_id"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&req) != nil || decoder.Decode(&struct{}{}) != io.EOF || !ValidVideoID(req.VideoID) {
+	if decoder.Decode(&req) != nil || decoder.Decode(&struct{}{}) != io.EOF {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	out, err := probeOriginal(r.Context(), s.probe, req.VideoID)
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		return
+	switch req.Protocol {
+	case 0:
+		if req.AwemeID != "" || !ValidVideoID(req.VideoID) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		out, err := probeOriginal(r.Context(), s.probe, req.VideoID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(out)
+	case ProtocolV2:
+		if s.detail == nil || req.VideoID != "" || !douyin.ValidAwemeID(req.AwemeID) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		out, err := resolveWork(r.Context(), s.detail, s.probe, req.AwemeID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(out)
+	default:
+		w.WriteHeader(http.StatusBadRequest)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(out)
+}
+
+func resolveWork(ctx context.Context, detailExec fetch.Executor, p originalProbe, awemeID string) (WorkResponse, error) {
+	detail, err := douyin.FetchShanghaiDetail(ctx, detailExec, awemeID)
+	if err != nil {
+		return WorkResponse{}, err
+	}
+	out := WorkResponse{
+		Protocol:   ProtocolV2,
+		AwemeID:    awemeID,
+		Renditions: detail.Renditions,
+		Candidates: []Candidate{},
+	}
+	if detail.IsAlbum {
+		return out, nil
+	}
+	if ValidVideoID(detail.VideoID) {
+		orig, origErr := probeOriginal(ctx, p, detail.VideoID)
+		if err := ctx.Err(); err != nil {
+			return WorkResponse{}, err
+		}
+		if origErr == nil {
+			out.VideoID = detail.VideoID
+			out.Candidates = orig.Candidates
+		} else if len(out.Renditions) == 0 {
+			return WorkResponse{}, origErr
+		}
+	}
+	return out, nil
 }
 
 // Both delivery modes construct the official play URL here. Control-plane

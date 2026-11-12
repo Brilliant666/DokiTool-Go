@@ -102,6 +102,19 @@ func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Ob
 	if !awemeID.MatchString(id) {
 		return legacyError(500, "请输入作品 aweme_id，而不是合集 mix_id"), nil
 	}
+	var shState shanghaiState
+	var shCh chan shanghaiOutcome
+	var cancelSh context.CancelFunc
+	if workResolver, ok := p.resolver.(WorkResolver); ok {
+		var shCtx context.Context
+		shCtx, cancelSh = context.WithCancel(ctx)
+		defer cancelSh()
+		shCh = make(chan shanghaiOutcome, 1)
+		go func() {
+			work, err := workResolver.ResolveWork(shCtx, id)
+			shCh <- shanghaiOutcome{work: work, err: err}
+		}()
+	}
 	detail, reason, err := p.fetchDetail(ctx, id)
 	if err != nil {
 		return nil, err
@@ -109,7 +122,22 @@ func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Ob
 	if reason != "" {
 		return legacyError(500, reason), nil
 	}
-	raw, err := p.formatData(ctx, detail, id)
+	if shCh != nil {
+		if isImageOrLiveDetail(detail) {
+			cancelSh()
+		} else {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case outcome := <-shCh:
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				shState = shanghaiStateFromOutcome(outcome)
+			}
+		}
+	}
+	raw, err := p.formatDataWithShanghai(ctx, detail, id, shState)
 	if err != nil {
 		return nil, err
 	}

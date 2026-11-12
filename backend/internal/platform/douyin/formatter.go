@@ -10,6 +10,10 @@ import (
 // formatData keeps the legacy shape private so the upstream extraction can be
 // compared directly with the frozen PHP oracle. Only adapt emits public data.
 func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID string) (object, error) {
+	return p.formatDataWithShanghai(ctx, detail, fallbackVideoID, shanghaiState{})
+}
+
+func (p *Parser) formatDataWithShanghai(ctx context.Context, detail object, fallbackVideoID string, shState shanghaiState) (object, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -99,10 +103,19 @@ func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID 
 		if truthy(main) {
 			main = toHTTPS(strings.ReplaceAll(main, "playwm", "play"))
 		}
+		if !shState.resolved && ValidAwemeID(fallbackVideoID) {
+			if workResolver, ok := p.resolver.(WorkResolver); ok {
+				work, wErr := workResolver.ResolveWork(ctx, fallbackVideoID)
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				shState = shanghaiStateFromOutcome(shanghaiOutcome{work: work, err: wErr})
+			}
+		}
 		var sameObject *shanghaiSameObject
 		if fallback := OriginalPlayURL(playURI); fallback != "" {
 			var probed object
-			probed, sameObject, err = p.probeOriginal(ctx, playURI, fallback, detail, videoInfo)
+			probed, sameObject, err = p.probeOriginalWithShanghai(ctx, playURI, fallback, detail, videoInfo, shState)
 			if err != nil {
 				return nil, err
 			}
@@ -171,7 +184,11 @@ func (p *Parser) formatData(ctx context.Context, detail object, fallbackVideoID 
 		result["url"] = main
 		result["size_label"] = formatSizeLabel(result["size"])
 		result["video_backup"] = backups
-		prependSameObjectSources(result, backups, sameObject)
+		var shRenditions map[string]array
+		if shState.work != nil {
+			shRenditions = shState.work.Renditions
+		}
+		prependShanghaiSources(result, backups, sameObject, shRenditions)
 		result["private_audio_candidates"] = audioCandidates(unified.Slice(child(detail, "video", "bit_rate_audio")), child(detail, "video", "cdn_url_expired"))
 		result["video_id"] = fallbackVideoID
 		if truthy(playURI) {
