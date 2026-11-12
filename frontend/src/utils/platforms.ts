@@ -65,17 +65,62 @@ const tabIcons: Record<string, string> = {
   tumblr: "fa-tumblr",
   dailymotion: "fa-dailymotion",
 };
-export function platformTabs(locale: string) {
-  return [
-    {
+export const POPULAR_PLATFORM_IDS = [
+  "douyin",
+  "kuaishou",
+  "bilibili",
+  "xiaohongshu",
+  "weibo",
+  "x",
+  "youtube",
+  "instagram",
+  "facebook",
+] as const;
+
+const popularOrder = new Map<string, number>(
+  POPULAR_PLATFORM_IDS.map((id, idx) => [id, idx]),
+);
+
+export interface PlatformTabItem {
+  key: string;
+  label: string;
+  icon: string;
+}
+
+function toPlatformTab(platform: Platform, locale: string): PlatformTabItem {
+  return {
+    key: platform.id,
+    label: locale === "en" ? platform.id : platform.name,
+    icon: tabIcons[platform.icon || ""] || "fa-globe",
+  };
+}
+
+export function groupedPlatformTabs(locale: string): {
+  allTab: PlatformTabItem;
+  popularTabs: PlatformTabItem[];
+  moreTabs: PlatformTabItem[];
+} {
+  const byId = new Map(supportedPlatforms.value.map((p) => [p.id, p]));
+  const popularTabs: PlatformTabItem[] = [];
+  for (const id of POPULAR_PLATFORM_IDS) {
+    const p = byId.get(id);
+    if (p) popularTabs.push(toPlatformTab(p, locale));
+  }
+  const moreTabs = supportedPlatforms.value
+    .filter((p) => !popularOrder.has(p.id))
+    .map((p) => toPlatformTab(p, locale));
+  return {
+    allTab: {
       key: "all",
       label: locale === "en" ? "All" : "所有平台",
       icon: "fa-globe",
     },
-    ...supportedPlatforms.value.map((platform) => ({
-      key: platform.id,
-      label: locale === "en" ? platform.id : platform.name,
-      icon: tabIcons[platform.icon || ""] || "fa-globe",
-    })),
-  ];
+    popularTabs,
+    moreTabs,
+  };
+}
+
+export function platformTabs(locale: string): PlatformTabItem[] {
+  const { allTab, popularTabs, moreTabs } = groupedPlatformTabs(locale);
+  return [allTab, ...popularTabs, ...moreTabs];
 }

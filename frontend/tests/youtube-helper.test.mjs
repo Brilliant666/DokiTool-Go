@@ -8,8 +8,12 @@ import { renderToString } from "vue/server-renderer";
 
 import {
   MIN_YOUTUBE_HELPER_VERSION,
+  OPFS_QUOTA_HEADROOM_FACTOR,
+  YOUTUBE_FILE_PICKER_ID,
   YOUTUBE_HELPER_VERSION,
+  YOUTUBE_OPFS_TEMP_PREFIX,
   buildTVHTML5PlayerPayload,
+  cleanupLeftoverYouTubeOpfsTempFiles,
   compareSemver,
   createUserscriptController,
   extractUrlClen,
@@ -29,6 +33,133 @@ import {
 } from "../src/utils/youtubeHelperCore.js";
 import { generateYouTubeHelperCode } from "../scripts/build-youtube-helper.mjs";
 import * as mediabunny from "mediabunny";
+
+function createMockOpfsEnvironment({
+  quota = 500_000_000,
+  usage = 0,
+  initialFiles = {},
+} = {}) {
+  const files = new Map();
+  const activeLocks = new Set();
+  for (const [name, content] of Object.entries(initialFiles)) {
+    files.set(
+      name,
+      content instanceof Uint8Array
+        ? content
+        : new TextEncoder().encode(String(content)),
+    );
+  }
+
+  function currentUsageBytes() {
+    let sum = usage;
+    for (const data of files.values()) {
+      sum += data.byteLength;
+    }
+    return sum;
+  }
+
+  const rootDir = {
+    async *entries() {
+      for (const name of [...files.keys()]) {
+        yield [name, { kind: "file", name }];
+      }
+    },
+    async getFileHandle(name, options = {}) {
+      if (!files.has(name)) {
+        if (!options?.create) {
+          throw new DOMException("File not found", "NotFoundError");
+        }
+        files.set(name, new Uint8Array(0));
+      }
+      return {
+        kind: "file",
+        name,
+        async createWritable() {
+          if (activeLocks.has(name)) {
+            throw new DOMException("File already locked", "NoModificationAllowedError");
+          }
+          activeLocks.add(name);
+          const chunks = [];
+          let cursor = 0;
+          let closed = false;
+          return {
+            async write(chunk) {
+              if (closed) throw new Error("Writable already closed");
+              if (chunk && typeof chunk === "object" && chunk.type === "write") {
+                if (typeof chunk.position === "number") {
+                  cursor = chunk.position;
+                }
+                const bytes =
+                  chunk.data instanceof Uint8Array
+                    ? chunk.data
+                    : new Uint8Array(chunk.data);
+                chunks.push({ pos: cursor, bytes: bytes.slice() });
+                cursor += bytes.byteLength;
+                return;
+              }
+              const bytes =
+                chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+              chunks.push({ pos: cursor, bytes: bytes.slice() });
+              cursor += bytes.byteLength;
+            },
+            async seek(pos) {
+              cursor = Number(pos) || 0;
+            },
+            async close() {
+              if (closed) return;
+              closed = true;
+              activeLocks.delete(name);
+              let maxLen = 0;
+              for (const c of chunks) {
+                maxLen = Math.max(maxLen, c.pos + c.bytes.byteLength);
+              }
+              const out = new Uint8Array(maxLen);
+              for (const c of chunks) {
+                out.set(c.bytes, c.pos);
+              }
+              files.set(name, out);
+            },
+            async abort() {
+              closed = true;
+              activeLocks.delete(name);
+            },
+          };
+        },
+        async getFile() {
+          if (!files.has(name)) {
+            throw new DOMException("File not found", "NotFoundError");
+          }
+          const bytes = files.get(name);
+          const blob = new Blob([bytes]);
+          Object.defineProperty(blob, "name", { value: name });
+          return blob;
+        },
+      };
+    },
+    async removeEntry(name) {
+      if (activeLocks.has(name)) {
+        throw new DOMException("File is locked", "InvalidModificationError");
+      }
+      if (!files.has(name)) {
+        throw new DOMException("File not found", "NotFoundError");
+      }
+      files.delete(name);
+    },
+  };
+
+  return {
+    files,
+    activeLocks,
+    storage: {
+      async estimate() {
+        return { quota, usage: currentUsageBytes() };
+      },
+      async getDirectory() {
+        return rootDir;
+      },
+    },
+  };
+}
 
 async function createSyntheticMuxFixtures() {
   const avcC = new Uint8Array([
@@ -187,7 +318,7 @@ function sliceRangeFromFixture(bytes, rawUrl) {
 }
 
 describe("YouTube helper userscript static header & validation contract", () => {
-  test("static userscript file has exact v1.2.0 headers, strict @connect allowlist, MPL-2.0 notice, and build parity", async () => {
+  test("static userscript file has exact v1.3.0 headers, strict @connect allowlist, MPL-2.0 notice, and build parity", async () => {
     const scriptText = await readFile(
       new URL("../public/helper/dokitool-youtube.user.js", import.meta.url),
       "utf8",
@@ -226,7 +357,7 @@ describe("YouTube helper userscript static header & validation contract", () => 
     assert.deepEqual(
       connects,
       ["www.youtube.com", "googlevideo.com"],
-      "Phase 2 userscript must only declare www.youtube.com and googlevideo.com",
+      "Userscript must only declare www.youtube.com and googlevideo.com",
     );
 
     const grants = [
@@ -234,9 +365,9 @@ describe("YouTube helper userscript static header & validation contract", () => 
     ].map((m) => m[1]);
     assert.deepEqual(grants.sort(), ["GM_download", "GM_xmlhttpRequest"]);
     assert.match(headerBlock, /^\/\/ @noframes$/m);
-    assert.match(headerBlock, /^\/\/ @version\s+1\.2\.0$/m);
-    assert.equal(YOUTUBE_HELPER_VERSION, "1.2.0");
-    assert.equal(MIN_YOUTUBE_HELPER_VERSION, "1.2.0");
+    assert.match(headerBlock, /^\/\/ @version\s+1\.3\.0$/m);
+    assert.equal(YOUTUBE_HELPER_VERSION, "1.3.0");
+    assert.equal(MIN_YOUTUBE_HELPER_VERSION, "1.3.0");
     assert.match(
       headerBlock,
       /^\/\/ @updateURL\s+https:\/\/snap\.dokitool\.com\/helper\/dokitool-youtube\.user\.js$/m,
@@ -367,8 +498,15 @@ describe("YouTube helper userscript static header & validation contract", () => 
   test("userscript controller enforces strict action allowlist, anonymous requests, memory-only visitorData cache, and field stripping", async () => {
     const gmRequests = [];
     const gmDownloads = [];
+    const savedBuffers = [];
+    const sampleTrackBytes = new Uint8Array(2048);
+    for (let i = 0; i < sampleTrackBytes.length; i++) sampleTrackBytes[i] = i & 0xff;
     const controller = createUserscriptController({
-      version: "1.2.0",
+      version: "1.3.0",
+      pageWindow: {},
+      saveBuffer(buf, filename, mimeType) {
+        savedBuffers.push({ byteLength: buf.byteLength, filename, mimeType });
+      },
       gmXmlhttpRequest(details) {
         gmRequests.push(details);
         if (details.url === "https://www.youtube.com/sw.js_data") {
@@ -420,6 +558,10 @@ describe("YouTube helper userscript static header & validation contract", () => 
               },
             }),
           });
+          return;
+        }
+        if (details.url.startsWith("https://rr1---sn-test.googlevideo.com/videoplayback")) {
+          details.onload(sliceRangeFromFixture(sampleTrackBytes, details.url));
           return;
         }
         details.onerror();
@@ -522,8 +664,9 @@ describe("YouTube helper userscript static header & validation contract", () => 
     });
     assert.equal(badDlExt.ok, false);
     assert.equal(gmDownloads.length, 0);
+    assert.equal(savedBuffers.length, 0);
 
-    // Valid MP4 download (does not force mode: "native")
+    // Valid MP4, M4A, and WebM downloads use chunked anonymous GM_xmlhttpRequest (not single-connection GM_download)
     const okDl = await controller.handleRequestObject({
       requestId: "req-ok-dl",
       action: "download",
@@ -534,10 +677,11 @@ describe("YouTube helper userscript static header & validation contract", () => 
     });
     assert.equal(okDl.ok, true);
     assert.equal(okDl.data.filename, "Sample_1080p.mp4");
-    assert.equal(gmDownloads.length, 1);
-    assert.equal(gmDownloads[0].mode, undefined);
+    assert.equal(okDl.data.mode, "memory_buffer");
+    assert.equal(savedBuffers.length, 1);
+    assert.equal(savedBuffers[0].filename, "Sample_1080p.mp4");
+    assert.equal(savedBuffers[0].byteLength, sampleTrackBytes.byteLength);
 
-    // Valid M4A and WebM downloads (force mode: "native" so Chrome preserves extension)
     const okM4aDl = await controller.handleRequestObject({
       requestId: "req-ok-m4a-dl",
       action: "download",
@@ -548,8 +692,8 @@ describe("YouTube helper userscript static header & validation contract", () => 
     });
     assert.equal(okM4aDl.ok, true);
     assert.equal(okM4aDl.data.filename, "Sample_audio.m4a");
-    assert.equal(gmDownloads.length, 2);
-    assert.equal(gmDownloads[1].mode, "native");
+    assert.equal(okM4aDl.data.mode, "memory_buffer");
+    assert.equal(savedBuffers[1].mimeType, "audio/mp4");
 
     const okWebmDl = await controller.handleRequestObject({
       requestId: "req-ok-webm-dl",
@@ -561,8 +705,25 @@ describe("YouTube helper userscript static header & validation contract", () => 
     });
     assert.equal(okWebmDl.ok, true);
     assert.equal(okWebmDl.data.filename, "Sample_2160p.webm");
-    assert.equal(gmDownloads.length, 3);
-    assert.equal(gmDownloads[2].mode, "native");
+    assert.equal(okWebmDl.data.mode, "memory_buffer");
+    assert.equal(savedBuffers[2].mimeType, "video/webm");
+    assert.equal(gmDownloads.length, 0);
+    assert.ok(gmRequests.every((r) => r.anonymous === true));
+
+    // Only when >= 1 GiB and both OPFS & showSaveFilePicker are unavailable does download fall back to gmDownload
+    const hugeM4aDl = await controller.handleRequestObject({
+      requestId: "req-huge-m4a-dl",
+      action: "download",
+      payload: {
+        url: "https://rr1---sn-test.googlevideo.com/videoplayback?itag=140&clen=1200000000",
+        filename: "Huge_audio.m4a",
+        size: 1_200_000_000,
+      },
+    });
+    assert.equal(hugeM4aDl.ok, true);
+    assert.equal(hugeM4aDl.data.mode, "gm_download");
+    assert.equal(gmDownloads.length, 1);
+    assert.equal(gmDownloads[0].mode, "native");
   });
 
   test("published frontend/public/helper/dokitool-youtube.user.js executes in node:vm and passes rejection, player, download, and lossless mux_download cases", async () => {
@@ -576,12 +737,14 @@ describe("YouTube helper userscript static header & validation contract", () => 
     const gmRequests = [];
     const gmDownloads = [];
     const streamedChunks = [];
+    const pickerCalls = [];
     let localStorageAccessed = false;
 
     const fakePageWindow = {
-      async showSaveFilePicker({ suggestedName }) {
+      async showSaveFilePicker(opts) {
+        pickerCalls.push(opts);
         return {
-          name: suggestedName,
+          name: opts.suggestedName,
           async createWritable() {
             return {
               async write(chunk) {
@@ -715,7 +878,7 @@ describe("YouTube helper userscript static header & validation contract", () => 
         if (details.url.startsWith("https://rr2---sn-vm.googlevideo.com/videoplayback")) {
           const u = new URL(details.url);
           const itag = u.searchParams.get("itag");
-          if (itag === "137") {
+          if (itag === "137" || itag === "299") {
             details.onload(sliceRangeFromFixture(fixtures.mp4VideoBytes, details.url));
             return {};
           }
@@ -738,14 +901,14 @@ describe("YouTube helper userscript static header & validation contract", () => 
       filename: "dokitool-youtube.user.js",
     });
 
-    // 1. Ping published script -> version 1.2.0, supported: true
+    // 1. Ping published script -> version 1.3.0, supported: true
     const pingRes = await pingYouTubeHelper({
       eventTarget: fakeWindow,
       timeoutMs: 100,
     });
     assert.deepEqual(pingRes, {
       installed: true,
-      version: "1.2.0",
+      version: "1.3.0",
       supported: true,
     });
 
@@ -864,24 +1027,25 @@ describe("YouTube helper userscript static header & validation contract", () => 
     );
     assert.equal(gmRequests.length, 3);
 
-    // 4. Happy-path MP4 and M4A download on published script
+    // 4. Happy-path MP4 and M4A download on published script (chunked streaming -> showSaveFilePicker with id: "dokitool-youtube" when OPFS absent)
     const mp4Dl = await sendHelperRequest(
       "download",
       {
-        url: "https://rr2---sn-vm.googlevideo.com/videoplayback?itag=299",
+        url: `https://rr2---sn-vm.googlevideo.com/videoplayback?itag=299&clen=${fixtures.mp4VideoBytes.byteLength}`,
         filename: "VM Test Title_1080p.mp4",
       },
       { eventTarget: fakeWindow },
     );
     assert.equal(mp4Dl.filename, "VM_Test_Title_1080p.mp4");
-    assert.equal(gmDownloads.length, 1);
-    assert.equal(gmDownloads[0].mode, undefined);
+    assert.equal(mp4Dl.mode, "stream_picker");
+    assert.equal(pickerCalls[0].id, "dokitool-youtube");
+    assert.equal(gmDownloads.length, 0);
 
     const progressEvents = [];
     const m4aDl = await sendHelperRequest(
       "download",
       {
-        url: "https://rr2---sn-vm.googlevideo.com/videoplayback?itag=140",
+        url: `https://rr2---sn-vm.googlevideo.com/videoplayback?itag=140&clen=${fixtures.m4aAudioBytes.byteLength}`,
         filename: "VM Test Title_audio.m4a",
       },
       {
@@ -892,10 +1056,10 @@ describe("YouTube helper userscript static header & validation contract", () => 
       },
     );
     assert.equal(m4aDl.filename, "VM_Test_Title_audio.m4a");
-    assert.equal(gmDownloads.length, 2);
-    assert.equal(gmDownloads[1].mode, "native");
-    assert.equal(progressEvents.length, 1);
-    assert.equal(progressEvents[0].loaded, 41367);
+    assert.equal(m4aDl.mode, "stream_picker");
+    assert.equal(pickerCalls[1].id, "dokitool-youtube");
+    assert.ok(progressEvents.length >= 1);
+    assert.equal(progressEvents[progressEvents.length - 1].loaded, fixtures.m4aAudioBytes.byteLength);
 
     // 5. Happy-path lossless mux_download inside node:vm using bundled Mediabunny
     const muxRes = await sendHelperRequest(
@@ -912,6 +1076,7 @@ describe("YouTube helper userscript static header & validation contract", () => 
     );
     assert.equal(muxRes.filename, "VM_Muxed_1080p.mp4");
     assert.equal(muxRes.mode, "stream_picker");
+    assert.equal(pickerCalls[2].id, "dokitool-youtube");
     assert.ok(streamedChunks.length > 0, "StreamTarget must stream chunks into picker writable");
     assert.ok(gmRequests.every((r) => r.anonymous === true), "every GM_xmlhttpRequest must set anonymous: true");
   });
@@ -1952,21 +2117,50 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     }
   });
 
-  test("with helper v1.2.0 ready: renders 合并保存 + 分开保存 for split tracks, muxes 1080p into a single MP4, and supports explicit 分开保存 & M4A", async () => {
+  test("with helper v1.3.0 ready: renders single primary 合并保存 button (no 分开保存), streams 1080p mux & 仅音频 M4A via OPFS default path, and displays savePathLabel on DownloadCard", async () => {
     const env = setupEnvironment();
+    const opfs = createMockOpfsEnvironment({ quota: 500_000_000 });
     const gmSaved = [];
-    const muxSavedBuffers = [];
+    const opfsClicked = [];
     const itag299Url = makeItagUrl(299, fixtures.mp4VideoBytes.byteLength);
     const itag140Url = makeItagUrl(140, fixtures.m4aAudioBytes.byteLength);
 
+    const fakePageWindow = {
+      navigator: { storage: opfs.storage },
+      URL: {
+        createObjectURL(file) {
+          return `blob:opfs-${file.name}-${file.size}`;
+        },
+        revokeObjectURL() {},
+      },
+      document: {
+        body: { appendChild() {} },
+        createElement(tag) {
+          return {
+            tag,
+            href: "",
+            download: "",
+            rel: "",
+            style: {},
+            click() {
+              opfsClicked.push({ href: this.href, download: this.download });
+            },
+            remove() {},
+          };
+        },
+      },
+    };
+
     const unmount = createUserscriptController({
       eventTarget: env.bus,
-      pageWindow: {},
+      pageWindow: fakePageWindow,
       version: YOUTUBE_HELPER_VERSION,
       mediabunny,
-      muxConfig: { chunkSize: 4096, maxRetries: 2, retryBaseDelayMs: 5 },
-      saveBuffer(buf, filename, mimeType) {
-        muxSavedBuffers.push({ buf, filename, mimeType });
+      muxConfig: {
+        chunkSize: 4096,
+        maxRetries: 2,
+        retryBaseDelayMs: 5,
+        opfsCleanupDelayMs: 25,
       },
       gmXmlhttpRequest(details) {
         if (details.url.includes("sw.js_data")) {
@@ -2035,7 +2229,6 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
           name: details.name,
           mode: details.mode,
         });
-        details.onprogress?.({ loaded: 50000, total: 100000 });
         details.onload();
       },
     }).mount();
@@ -2085,9 +2278,12 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       ]);
       assert.equal(env.store.resultData.extra.youtube_helper.status, "ready");
 
-      // 1. Default 360p (itag=18) -> shows 下载视频, uses _blank browser native handoff
+      // 1. Default 360p (itag=18) -> updated top notice without 分开保存 or 受 2 倍码率限速
       const html360 = await renderResultHtml(env.store, env.selection);
-      assert.ok(html360.includes("受 2 倍码率限速，预计耗时较长"));
+      assert.ok(html360.includes("默认分块并发无损「合并保存」至浏览器默认下载目录"));
+      assert.ok(html360.includes("仅音频"));
+      assert.ok(!html360.includes("受 2 倍码率限速"));
+      assert.ok(!html360.includes("分开保存"));
       assert.ok(html360.includes("下载视频"));
       assert.ok(!html360.includes("data-youtube-separate-save"));
 
@@ -2103,58 +2299,62 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       assert.equal(env.clickedAnchors[0].href, itag18Url);
       assert.equal(env.clickedAnchors[0].target, "_blank");
 
-      // 2. Select 1080p60 split track (v-299) -> ResultSection renders BOTH 合并保存 and 分开保存
+      // 2. Select 1080p60 split track (v-299) -> ResultSection renders ONLY 合并保存 (NO 分开保存) + keeps 仅音频
       env.selection.choose({ variant_id: "v-299", source_id: "s-299" });
       const html1080 = await renderResultHtml(env.store, env.selection, false);
       assert.ok(html1080.includes("data-youtube-mux-save"));
       assert.ok(html1080.includes("合并保存"));
-      assert.ok(html1080.includes("data-youtube-separate-save"));
-      assert.ok(html1080.includes("分开保存"));
+      assert.ok(!html1080.includes("data-youtube-separate-save"));
+      assert.ok(!html1080.includes("分开保存"));
 
-      // Primary 合并保存 muxes video + audio into a single MP4
+      env.selection.choose({ variant_id: "v-140", source_id: "s-140" });
+      const htmlAudioOnly = await renderResultHtml(env.store, env.selection, false);
+      assert.ok(htmlAudioOnly.includes("data-youtube-audio-only-save"));
+      assert.ok(htmlAudioOnly.includes("仅音频"));
+      env.selection.choose({ variant_id: "v-299", source_id: "s-299" });
+
+      // Primary 合并保存 streams mux output into OPFS temp file named with task ID and hands off via <a download>
       await env.downloader.downloadMainVideo();
       assert.equal(env.store.downloads.length, 2);
-      assert.equal(env.store.downloads[1].status, "completed");
-      assert.equal(
-        env.store.downloads[1].filename,
-        "Sample_YouTube_Video_1080p.mp4",
-      );
-      assert.equal(env.store.downloads[1].fallbackReason, null);
-      assert.equal(muxSavedBuffers.length, 1);
-      assert.equal(
-        muxSavedBuffers[0].filename,
-        "Sample_YouTube_Video_1080p.mp4",
-      );
+      const muxTask = env.store.downloads[1];
+      assert.equal(muxTask.status, "completed");
+      assert.equal(muxTask.filename, "Sample_YouTube_Video_1080p.mp4");
+      assert.equal(muxTask.fallbackReason, null);
+      assert.equal(muxTask.savePath, "opfs");
+      assert.equal(muxTask.savePathLabel, "保存路径：默认下载目录（OPFS 流式写盘）");
+      assert.equal(opfsClicked.length, 1);
+      assert.equal(opfsClicked[0].download, "Sample_YouTube_Video_1080p.mp4");
+      assert.match(opfsClicked[0].href, /dokitool-yt-tmp-[0-9a-z-]+-\d+-\d+\.part/);
       assert.equal(gmSaved.length, 0);
 
-      // 3. Explicit 分开保存 saves video track + M4A audio track separately via GM_download
-      await env.downloader.downloadYouTubeSeparate();
-      assert.equal(env.store.downloads.length, 4);
-      assert.equal(env.store.downloads[2].status, "completed");
-      assert.equal(env.store.downloads[2].fallbackReason, null);
-      assert.equal(env.store.downloads[3].status, "completed");
-      assert.equal(env.store.downloads[3].fallbackReason, null);
-      assert.equal(gmSaved.length, 2);
-      assert.equal(gmSaved[0].name, "Sample_YouTube_Video_1080p.mp4");
-      assert.equal(gmSaved[0].mode, undefined);
-      assert.equal(gmSaved[1].name, "Sample_YouTube_Video_audio.m4a");
-      assert.equal(gmSaved[1].mode, "native");
+      const cardHtml = await renderDownloadCardHtml(env.store);
+      assert.ok(cardHtml.includes("data-download-save-path"));
+      assert.ok(cardHtml.includes("默认下载目录（OPFS 流式写盘）"));
 
-      // 4. Standalone M4A attachment save
+      // 3. Standalone M4A attachment ("仅音频") ALSO streams via chunked GM_xmlhttpRequest + OPFS (no GM_download)
       env.downloader.downloadMusic(env.store.resultData.attachments[0]);
-      await new Promise((r) => setTimeout(r, 20));
-      assert.equal(gmSaved.length, 3);
-      assert.equal(gmSaved[2].name, "Sample_YouTube_Video_audio.m4a");
-      assert.equal(gmSaved[2].mode, "native");
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(env.store.downloads.length, 3);
+      assert.equal(env.store.downloads[2].status, "completed");
+      assert.equal(env.store.downloads[2].savePath, "opfs");
+      assert.equal(opfsClicked.length, 2);
+      assert.equal(opfsClicked[1].download, "Sample_YouTube_Video_audio.m4a");
+      assert.match(opfsClicked[1].href, /dokitool-yt-tmp-[0-9a-z-]+-\d+-\d+\.part/);
+      assert.equal(gmSaved.length, 0);
+
+      // Delayed OPFS cleanup removes temp files after handoff -> OPFS usage returns to 0
+      await new Promise((r) => setTimeout(r, 40));
+      assert.equal(opfs.files.size, 0);
     } finally {
       unmount();
     }
   });
 
-  test("automatic 2-file fallback: missing same-container audio, >= 1 GiB without picker, or chunk 403 retry exhaustion falls back to separate tracks and renders fallbackReason on DownloadCard; user cancel does NOT fall back", async () => {
+  test("automatic 2-file fallback: missing same-container audio, >= 1 GiB without OPFS/picker, or chunk 403 retry exhaustion falls back to separate tracks and renders fallbackReason on DownloadCard; user cancel does NOT fall back", async () => {
     const env = setupEnvironment();
     const gmSaved = [];
-    let force403 = false;
+    const savedBuffers = [];
+    let failVideoRangeRemaining = 0;
     let forceUserCancel = false;
     const itag315Url = makeItagUrl(315, fixtures.webmVideoBytes.byteLength);
 
@@ -2171,8 +2371,13 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       version: YOUTUBE_HELPER_VERSION,
       mediabunny,
       muxConfig: { chunkSize: 4096, maxRetries: 1, retryBaseDelayMs: 5 },
+      saveBuffer(buf, filename, mimeType) {
+        savedBuffers.push({ filename, mimeType, size: buf.byteLength });
+      },
       gmXmlhttpRequest(details) {
-        if (force403) {
+        const itag = new URL(details.url).searchParams.get("itag");
+        if (itag === "299" && failVideoRangeRemaining > 0) {
+          failVideoRangeRemaining -= 1;
           details.onload({
             status: 403,
             responseHeaders: "",
@@ -2180,9 +2385,12 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
           });
           return;
         }
-        const itag = new URL(details.url).searchParams.get("itag");
         const bytes =
-          itag === "299" ? fixtures.mp4VideoBytes : fixtures.m4aAudioBytes;
+          itag === "299"
+            ? fixtures.mp4VideoBytes
+            : itag === "315"
+              ? fixtures.webmVideoBytes
+              : fixtures.m4aAudioBytes;
         details.onload(sliceRangeFromFixture(bytes, details.url));
       },
       gmDownload(details) {
@@ -2228,17 +2436,21 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
           },
         ],
       });
-      dataA.extra = { youtube_helper: { status: "ready", version: "1.2.0" } };
+      dataA.extra = { youtube_helper: { status: "ready", version: "1.3.0" } };
       env.store.setResult(dataA);
       env.selection.syncResult();
       env.selection.choose({ variant_id: "v-315", source_id: "s-315" });
 
       await env.downloader.downloadMainVideo();
-      assert.equal(gmSaved.length, 2);
-      assert.equal(gmSaved[0].name, "Sample_YouTube_Video_2160p.webm");
-      assert.equal(gmSaved[0].mode, "native");
-      assert.equal(gmSaved[1].name, "Sample_YouTube_Video_audio.m4a");
-      assert.equal(gmSaved[1].mode, "native");
+      assert.equal(savedBuffers.length, 2);
+      assert.deepEqual(
+        savedBuffers.map((b) => b.filename).sort(),
+        [
+          "Sample_YouTube_Video_2160p.webm",
+          "Sample_YouTube_Video_audio.m4a",
+        ],
+      );
+      assert.equal(gmSaved.length, 0);
       assert.match(
         env.store.downloads[0].fallbackReason,
         /不做跨容器合流.*已自动回退为音视频分开保存/,
@@ -2247,22 +2459,24 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       assert.ok(cardHtmlA.includes("data-download-fallback-reason"));
       assert.ok(cardHtmlA.includes("已自动回退为音视频分开保存"));
 
-      // Case B: >= 1 GiB without showSaveFilePicker -> MUX_TOO_LARGE_FOR_MEMORY -> 2-file fallback
+      // Case B: >= 1 GiB without OPFS or showSaveFilePicker -> MUX_TOO_LARGE_FOR_MEMORY -> 2-file fallback
       env.store.downloads.splice(0);
+      savedBuffers.splice(0);
       gmSaved.splice(0);
       const dataB = sampleYouTubeUnifiedData({
-        videoClen: 900_000_000,
-        audioClen: 250_000_000,
+        videoClen: 1_100_000_000,
+        audioClen: fixtures.m4aAudioBytes.byteLength,
       });
-      dataB.extra = { youtube_helper: { status: "ready", version: "1.2.0" } };
+      dataB.extra = { youtube_helper: { status: "ready", version: "1.3.0" } };
       env.store.setResult(dataB);
       env.selection.syncResult();
       env.selection.choose({ variant_id: "v-299", source_id: "s-299" });
 
       await env.downloader.downloadMainVideo();
-      assert.equal(gmSaved.length, 2);
+      assert.equal(gmSaved.length, 1);
       assert.equal(gmSaved[0].name, "Sample_YouTube_Video_1080p.mp4");
-      assert.equal(gmSaved[1].name, "Sample_YouTube_Video_audio.m4a");
+      assert.equal(savedBuffers.length, 1);
+      assert.equal(savedBuffers[0].filename, "Sample_YouTube_Video_audio.m4a");
       assert.match(
         env.store.downloads[0].fallbackReason,
         /1 GB.*已自动回退为音视频分开保存/,
@@ -2270,19 +2484,20 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       const cardHtmlB = await renderDownloadCardHtml(env.store);
       assert.ok(cardHtmlB.includes("data-download-fallback-reason"));
 
-      // Case C: Chunk HTTP 403 exhausting retries -> 2-file fallback
+      // Case C: Chunk HTTP 403 exhausting mux retries -> 2-file chunked fallback
       env.store.downloads.splice(0);
+      savedBuffers.splice(0);
       gmSaved.splice(0);
-      force403 = true;
+      failVideoRangeRemaining = 2; // Exhausts maxRetries: 1 (2 attempts on itag 299) in mux_download, then succeeds in 2-file fallback
       const dataC = sampleYouTubeUnifiedData();
-      dataC.extra = { youtube_helper: { status: "ready", version: "1.2.0" } };
+      dataC.extra = { youtube_helper: { status: "ready", version: "1.3.0" } };
       env.store.setResult(dataC);
       env.selection.syncResult();
       env.selection.choose({ variant_id: "v-299", source_id: "s-299" });
 
       await env.downloader.downloadMainVideo();
-      force403 = false;
-      assert.equal(gmSaved.length, 2);
+      failVideoRangeRemaining = 0;
+      assert.equal(savedBuffers.length, 2);
       assert.match(
         env.store.downloads[0].fallbackReason,
         /HTTP 403.*已自动回退为音视频分开保存/,
@@ -2290,10 +2505,12 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
 
       // Case D: User cancelling showSaveFilePicker -> cancelled, NO 2-file fallback
       env.store.downloads.splice(0);
+      savedBuffers.splice(0);
       gmSaved.splice(0);
       forceUserCancel = true;
       await env.downloader.downloadMainVideo();
       forceUserCancel = false;
+      assert.equal(savedBuffers.length, 0);
       assert.equal(gmSaved.length, 0);
       assert.equal(env.store.downloads.length, 1);
       assert.equal(env.store.downloads[0].status, "cancelled");
@@ -2432,16 +2649,17 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     );
   });
 
-  test("split-save (分开保存) passes exact <title>_<quality>.<ext> filenames to download bridge and published userscript GM_download, and video-track retry does not duplicate audio", async () => {
+  test("2-file fallback path streams both tracks via chunked GM_xmlhttpRequest + OPFS in published userscript with exact <title>_<quality>.<ext> filenames, and video-track retry does not duplicate audio", async () => {
     const env = setupEnvironment();
     const scriptPath = new URL(
       "../public/helper/dokitool-youtube.user.js",
       import.meta.url,
     );
     const scriptText = await readFile(scriptPath, "utf8");
+    const opfs = createMockOpfsEnvironment({ quota: 500_000_000 });
     const bridgeDownloads = [];
-    const gmDownloads = [];
-    let failNextMp4Once = false;
+    const opfsDownloads = [];
+    let failMp4Requests = false;
 
     env.bus.addEventListener("dokitool:youtube-helper:request", (evt) => {
       const detail =
@@ -2450,22 +2668,50 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
         bridgeDownloads.push({
           url: detail.payload?.url,
           filename: detail.payload?.filename,
+          taskId: detail.payload?.taskId,
         });
       }
     });
+
+    const fakePageWin = {
+      navigator: { storage: opfs.storage },
+      URL: {
+        createObjectURL(file) {
+          return `blob:opfs-${file.name}`;
+        },
+        revokeObjectURL() {},
+      },
+      document: {
+        body: { appendChild() {} },
+        createElement(tag) {
+          return {
+            tag,
+            href: "",
+            download: "",
+            rel: "",
+            style: {},
+            click() {
+              opfsDownloads.push({ href: this.href, download: this.download });
+            },
+            remove() {},
+          };
+        },
+      },
+    };
 
     const sandboxWindow = {
       addEventListener: env.bus.addEventListener.bind(env.bus),
       removeEventListener: env.bus.removeEventListener.bind(env.bus),
       dispatchEvent: env.bus.dispatchEvent.bind(env.bus),
       CustomEvent: globalThis.CustomEvent,
-      document: { defaultView: {} },
+      document: { defaultView: fakePageWin },
     };
 
     vm.runInNewContext(
       scriptText,
       {
         window: sandboxWindow,
+        document: { defaultView: fakePageWin },
         CustomEvent: globalThis.CustomEvent,
         URL: globalThis.URL,
         Blob: globalThis.Blob,
@@ -2507,43 +2753,44 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
         ReadableStream: globalThis.ReadableStream,
         WritableStream: globalThis.WritableStream,
         TransformStream: globalThis.TransformStream,
-        setTimeout: globalThis.setTimeout,
+        setTimeout: (fn, ms) => globalThis.setTimeout(fn, Math.min(Number(ms) || 0, 5)),
         clearTimeout: globalThis.clearTimeout,
         queueMicrotask: globalThis.queueMicrotask,
         performance: globalThis.performance,
         console: globalThis.console,
         GM_xmlhttpRequest(details) {
-          details.onerror?.();
+          assert.equal(details.anonymous, true);
+          const itag = new URL(details.url).searchParams.get("itag");
+          if (failMp4Requests && itag === "137") {
+            details.onload({
+              status: 403,
+              responseHeaders: "",
+              response: new ArrayBuffer(0),
+            });
+            return {};
+          }
+          const bytes =
+            itag === "137"
+              ? fixtures.mp4VideoBytes
+              : itag === "313"
+                ? fixtures.webmVideoBytes
+                : itag === "251"
+                  ? fixtures.webmAudioBytes
+                  : fixtures.m4aAudioBytes;
+          details.onload(sliceRangeFromFixture(bytes, details.url));
           return {};
         },
-        GM_download(details) {
-          gmDownloads.push({
-            url: details.url,
-            name: details.name,
-            mode: details.mode,
-            saveAs: details.saveAs,
-            anonymous: details.anonymous,
-          });
-          if (failNextMp4Once && String(details.name).endsWith(".mp4")) {
-            failNextMp4Once = false;
-            details.onerror?.({ error: "network_interrupted" });
-            return;
-          }
-          details.onprogress?.({ loaded: 10000, total: 10000 });
-          details.onload?.();
+        GM_download() {
+          throw new Error("GM_download must not be called when OPFS streaming is available");
         },
       },
       { filename: "dokitool-youtube.user.js" },
     );
 
-    const itag137Url =
-      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlender1080p&itag=137&source=youtube&gir=yes&clen=10558182&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=CCC";
-    const itag313Url =
-      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlender2160p&itag=313&source=youtube&gir=yes&clen=32000000&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=DDD";
-    const itag140Url =
-      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlenderAudio&itag=140&source=youtube&gir=yes&clen=473790&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=EEE";
-    const itag251Url =
-      "https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlenderOpus&itag=251&source=youtube&gir=yes&clen=450000&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=FFF";
+    const itag137Url = `https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlender1080p&itag=137&source=youtube&gir=yes&clen=${fixtures.mp4VideoBytes.byteLength}&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=CCC`;
+    const itag313Url = `https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlender2160p&itag=313&source=youtube&gir=yes&clen=${fixtures.webmVideoBytes.byteLength}&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=DDD`;
+    const itag140Url = `https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlenderAudio&itag=140&source=youtube&gir=yes&clen=${fixtures.m4aAudioBytes.byteLength}&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=EEE`;
+    const itag251Url = `https://rr2---sn-o097znz7.googlevideo.com/videoplayback?expire=1794238131&ei=abc&ip=198.51.100.7&id=o-ABlenderOpus&itag=251&source=youtube&gir=yes&clen=${fixtures.webmAudioBytes.byteLength}&c=TVHTML5&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Cgir%2Cclen&sig=FFF`;
 
     const blenderData = {
       platform: "youtube",
@@ -2553,7 +2800,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       title: "THE DREAM - A Short Film Trailer I Blender",
       author: { name: "Blender Studio", id: "blender" },
       default_item_id: "video-u2qFOq_rVBM",
-      extra: { youtube_helper: { status: "ready", version: "1.2.0" } },
+      extra: { youtube_helper: { status: "ready", version: "1.3.0" } },
       items: [
         {
           id: "video-u2qFOq_rVBM",
@@ -2589,7 +2836,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
                     id: "s-313",
                     url: itag313Url,
                     access: "direct",
-                    size_bytes: 32000000,
+                    size_bytes: fixtures.webmVideoBytes.byteLength,
                   },
                 ],
               },
@@ -2616,7 +2863,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
                     id: "s-137",
                     url: itag137Url,
                     access: "direct",
-                    size_bytes: 10558182,
+                    size_bytes: fixtures.mp4VideoBytes.byteLength,
                   },
                 ],
               },
@@ -2668,7 +2915,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
                     id: "s-140",
                     url: itag140Url,
                     access: "direct",
-                    size_bytes: 473790,
+                    size_bytes: fixtures.m4aAudioBytes.byteLength,
                   },
                 ],
               },
@@ -2692,7 +2939,7 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
                     id: "s-251",
                     url: itag251Url,
                     access: "direct",
-                    size_bytes: 450000,
+                    size_bytes: fixtures.webmAudioBytes.byteLength,
                   },
                 ],
               },
@@ -2706,50 +2953,38 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     env.store.setResult(blenderData);
     env.selection.syncResult();
 
-    // 1. Primary 分开保存 on selected 1080p MP4 passes exact <title>_1080p.mp4 + <title>_audio.m4a
+    // 1. 2-file fallback on selected 1080p MP4 passes exact <title>_1080p.mp4 + <title>_audio.m4a and saves via OPFS
     env.selection.choose({ variant_id: "v-137", source_id: "s-137" });
     await env.downloader.downloadYouTubeSeparate();
 
-    assert.deepEqual(bridgeDownloads, [
-      {
-        url: itag137Url,
-        filename: "THE DREAM - A Short Film Trailer I Blender_1080p.mp4",
-      },
-      {
-        url: itag140Url,
-        filename: "THE DREAM - A Short Film Trailer I Blender_audio.m4a",
-      },
-    ]);
-    assert.deepEqual(gmDownloads, [
-      {
-        url: itag137Url,
-        name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4",
-        mode: undefined,
-        saveAs: false,
-        anonymous: true,
-      },
-      {
-        url: itag140Url,
-        name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.m4a",
-        mode: "native",
-        saveAs: false,
-        anonymous: true,
-      },
-    ]);
+    assert.deepEqual(
+      bridgeDownloads.map((d) => ({ url: d.url, filename: d.filename })),
+      [
+        {
+          url: itag137Url,
+          filename: "THE DREAM - A Short Film Trailer I Blender_1080p.mp4",
+        },
+        {
+          url: itag140Url,
+          filename: "THE DREAM - A Short Film Trailer I Blender_audio.m4a",
+        },
+      ],
+    );
+    assert.deepEqual(
+      opfsDownloads.map((d) => d.download),
+      [
+        "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4",
+        "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.m4a",
+      ],
+    );
     assert.equal(env.store.downloads.length, 2);
-    assert.equal(
-      env.store.downloads[0].filename,
-      "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4",
-    );
-    assert.equal(
-      env.store.downloads[1].filename,
-      "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.m4a",
-    );
+    assert.equal(env.store.downloads[0].savePath, "opfs");
+    assert.equal(env.store.downloads[1].savePath, "opfs");
 
-    // 2. Quality-row explicit choice 分开保存 for 2160p WebM while 360p is selected
+    // 2. Explicit choice 2160p WebM while 360p is selected
     env.store.downloads.splice(0);
     bridgeDownloads.splice(0);
-    gmDownloads.splice(0);
+    opfsDownloads.splice(0);
     env.selection.choose({ variant_id: "v-18", source_id: "s-18" });
     await env.downloader.downloadYouTubeSeparate({
       variant_id: "v-313",
@@ -2757,31 +2992,21 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     });
 
     assert.deepEqual(
-      bridgeDownloads.map((d) => d.filename),
+      opfsDownloads.map((d) => d.download),
       [
-        "THE DREAM - A Short Film Trailer I Blender_2160p.webm",
-        "THE DREAM - A Short Film Trailer I Blender_audio.webm",
-      ],
-    );
-    assert.deepEqual(
-      gmDownloads.map((d) => ({ name: d.name, mode: d.mode })),
-      [
-        {
-          name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_2160p.webm",
-          mode: "native",
-        },
-        {
-          name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.webm",
-          mode: "native",
-        },
+        "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_2160p.webm",
+        "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_audio.webm",
       ],
     );
 
-    // 3. Video-track retry retries ONLY the failed video track with <title>_1080p.mp4 without duplicating audio
+    // 3. Video-track retry retries ONLY the failed video track without duplicating audio, and failed OPFS temp file was immediately cleaned up
     env.store.downloads.splice(0);
     bridgeDownloads.splice(0);
-    gmDownloads.splice(0);
-    failNextMp4Once = true;
+    opfsDownloads.splice(0);
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(opfs.files.size, 0);
+
+    failMp4Requests = true;
     env.selection.choose({ variant_id: "v-137", source_id: "s-137" });
     await env.downloader.downloadYouTubeSeparate();
 
@@ -2789,7 +3014,8 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
     assert.equal(env.store.downloads[0].status, "failed");
     assert.equal(env.store.downloads[1].status, "completed");
 
-    gmDownloads.splice(0);
+    failMp4Requests = false;
+    opfsDownloads.splice(0);
     await env.downloader.handleRetryDownload(env.store.downloads[0].id);
 
     assert.equal(
@@ -2798,14 +3024,369 @@ describe("YouTube frontend parser, ResultSection UI states, and download flows",
       "retrying video track must not spawn a duplicate audio task",
     );
     assert.equal(env.store.downloads[0].status, "completed");
-    assert.deepEqual(gmDownloads, [
-      {
-        url: itag137Url,
-        name: "THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4",
-        mode: undefined,
-        saveAs: false,
-        anonymous: true,
+    assert.deepEqual(
+      opfsDownloads.map((d) => d.download),
+      ["THE_DREAM_-_A_Short_Film_Trailer_I_Blender_1080p.mp4"],
+    );
+  });
+
+  test("OPFS quota headroom (< 1.2x -> showSaveFilePicker with id 'dokitool-youtube'), immediate temp-file deletion on cancel/error, and page-load leftover temp-file sweep", async () => {
+    assert.equal(OPFS_QUOTA_HEADROOM_FACTOR, 1.2);
+    assert.equal(YOUTUBE_FILE_PICKER_ID, "dokitool-youtube");
+
+    // 1. Page-load sweep deletes dokitool-yt-tmp-* files while preserving unrelated OPFS files
+    const sweepOpfs = createMockOpfsEnvironment({
+      initialFiles: {
+        [`${YOUTUBE_OPFS_TEMP_PREFIX}old-task-1.mp4.part`]: "leftover-1",
+        [`${YOUTUBE_OPFS_TEMP_PREFIX}old-task-2.m4a.part`]: "leftover-2",
+        "keep-other-data.json": '{"ok":true}',
       },
-    ]);
+    });
+    const removedCount = await cleanupLeftoverYouTubeOpfsTempFiles({
+      storage: sweepOpfs.storage,
+    });
+    assert.equal(removedCount, 2);
+    assert.deepEqual([...sweepOpfs.files.keys()], ["keep-other-data.json"]);
+
+    // 2. Insufficient OPFS quota (remaining = 1.1x < 1.2x estimatedBytes) -> falls back to showSaveFilePicker({ id: "dokitool-youtube" })
+    const totalEstimated =
+      fixtures.mp4VideoBytes.byteLength + fixtures.m4aAudioBytes.byteLength;
+    const tightOpfs = createMockOpfsEnvironment({
+      quota: Math.floor(totalEstimated * 1.1),
+      usage: 0,
+    });
+    const pickerInvocations = [];
+    const tightBus = new EventTarget();
+    const unmountTight = createUserscriptController({
+      eventTarget: tightBus,
+      version: YOUTUBE_HELPER_VERSION,
+      mediabunny,
+      muxConfig: { chunkSize: 4096, maxRetries: 1, retryBaseDelayMs: 5 },
+      pageWindow: {
+        navigator: { storage: tightOpfs.storage },
+        async showSaveFilePicker(opts) {
+          pickerInvocations.push(opts);
+          return {
+            name: opts.suggestedName,
+            async createWritable() {
+              return {
+                async write() {},
+                async close() {},
+                async abort() {},
+              };
+            },
+          };
+        },
+      },
+      gmXmlhttpRequest(details) {
+        const itag = new URL(details.url).searchParams.get("itag");
+        const bytes =
+          itag === "299" ? fixtures.mp4VideoBytes : fixtures.m4aAudioBytes;
+        details.onload(sliceRangeFromFixture(bytes, details.url));
+      },
+    }).mount();
+
+    try {
+      const res = await sendHelperRequest(
+        "mux_download",
+        {
+          taskId: "quota-check-1",
+          videoUrl: makeItagUrl(299, fixtures.mp4VideoBytes.byteLength),
+          audioUrl: makeItagUrl(140, fixtures.m4aAudioBytes.byteLength),
+          videoSize: fixtures.mp4VideoBytes.byteLength,
+          audioSize: fixtures.m4aAudioBytes.byteLength,
+          filename: "Quota_Test_1080p.mp4",
+          outputContainer: "mp4",
+        },
+        { eventTarget: tightBus },
+      );
+      assert.equal(res.mode, "stream_picker");
+      assert.equal(pickerInvocations.length, 1);
+      assert.equal(pickerInvocations[0].id, "dokitool-youtube");
+      assert.equal(tightOpfs.files.size, 0);
+    } finally {
+      unmountTight();
+    }
+
+    // 3. Cancellation mid-mux immediately unlocks & deletes the OPFS temp file (zero leftover files or active locks)
+    const cancelOpfs = createMockOpfsEnvironment({ quota: 500_000_000 });
+    const cancelBus = new EventTarget();
+    let pendingAudioLoad = null;
+    const unmountCancel = createUserscriptController({
+      eventTarget: cancelBus,
+      version: YOUTUBE_HELPER_VERSION,
+      mediabunny,
+      muxConfig: {
+        chunkSize: 4096,
+        maxRetries: 0,
+        retryBaseDelayMs: 5,
+        opfsCleanupDelayMs: 60_000,
+      },
+      pageWindow: {
+        navigator: { storage: cancelOpfs.storage },
+        URL: { createObjectURL: () => "blob:unused", revokeObjectURL() {} },
+        document: {
+          body: { appendChild() {} },
+          createElement: () => ({ style: {}, click() {}, remove() {} }),
+        },
+      },
+      gmXmlhttpRequest(details) {
+        const itag = new URL(details.url).searchParams.get("itag");
+        if (itag === "140") {
+          pendingAudioLoad = () =>
+            details.onload({
+              status: 403,
+              responseHeaders: "",
+              response: new ArrayBuffer(0),
+            });
+          return {
+            abort() {
+              details.onabort?.();
+            },
+          };
+        }
+        details.onload(sliceRangeFromFixture(fixtures.mp4VideoBytes, details.url));
+        return {};
+      },
+    }).mount();
+
+    try {
+      const abortController = new AbortController();
+      const muxPromise = sendHelperRequest(
+        "mux_download",
+        {
+          taskId: "cancel-opfs-99",
+          videoUrl: makeItagUrl(299, fixtures.mp4VideoBytes.byteLength),
+          audioUrl: makeItagUrl(140, fixtures.m4aAudioBytes.byteLength),
+          videoSize: fixtures.mp4VideoBytes.byteLength,
+          audioSize: fixtures.m4aAudioBytes.byteLength,
+          filename: "Cancel_Test_1080p.mp4",
+          outputContainer: "mp4",
+        },
+        { eventTarget: cancelBus, signal: abortController.signal },
+      );
+      await new Promise((r) => setTimeout(r, 20));
+      assert.equal(cancelOpfs.files.size, 1, "temp OPFS file must exist while muxing");
+      const tempFileName = [...cancelOpfs.files.keys()][0];
+      assert.match(tempFileName, /^dokitool-yt-tmp-cancel-opfs-99-/);
+
+      abortController.abort();
+      await assert.rejects(() => muxPromise, (err) => err.name === "AbortError");
+      await new Promise((r) => setTimeout(r, 20));
+      assert.equal(cancelOpfs.activeLocks.size, 0, "OPFS writable lock must be released immediately");
+      assert.equal(cancelOpfs.files.size, 0, "OPFS temp file must be deleted immediately on cancel");
+
+      // 4. Error mid-mux ALSO immediately unlocks & deletes OPFS temp file
+      pendingAudioLoad = null;
+      const errPromise = sendHelperRequest(
+        "mux_download",
+        {
+          taskId: "error-opfs-100",
+          videoUrl: makeItagUrl(299, fixtures.mp4VideoBytes.byteLength),
+          audioUrl: makeItagUrl(140, fixtures.m4aAudioBytes.byteLength),
+          videoSize: fixtures.mp4VideoBytes.byteLength,
+          audioSize: fixtures.m4aAudioBytes.byteLength,
+          filename: "Error_Test_1080p.mp4",
+          outputContainer: "mp4",
+        },
+        { eventTarget: cancelBus },
+      );
+      await new Promise((r) => setTimeout(r, 20));
+      assert.equal(cancelOpfs.files.size, 1);
+      pendingAudioLoad?.();
+      await assert.rejects(() => errPromise, /HTTP 403/);
+      assert.equal(cancelOpfs.activeLocks.size, 0);
+      assert.equal(cancelOpfs.files.size, 0, "OPFS temp file must be deleted immediately on error");
+    } finally {
+      unmountCancel();
+    }
+  });
+
+  test("centered YouTube helper modal & sessionStorage install-return state machine: handshake on return, single auto-reload guard, URL restore + auto-re-parse, and manual refresh button when still missing", async () => {
+    const env = setupEnvironment();
+    const storageMap = new Map();
+    const mockSessionStorage = {
+      getItem: (k) => (storageMap.has(k) ? storageMap.get(k) : null),
+      setItem: (k, v) => storageMap.set(k, String(v)),
+      removeItem: (k) => storageMap.delete(k),
+    };
+
+    let helperReady = false;
+    let reloadCount = 0;
+    const pinger = async () =>
+      helperReady
+        ? { installed: true, version: "1.3.0", supported: true }
+        : { installed: false, version: null, supported: false };
+
+    const createTestParser = () =>
+      parser.useVideoParser({
+        videoStore: env.store,
+        locale: ref("zh-CN"),
+        showToast: (msg, type = "success") => env.toasts.push([msg, type]),
+        sessionStorage: mockSessionStorage,
+        pingHelper: pinger,
+        reloadPage: () => {
+          reloadCount += 1;
+        },
+      });
+
+    // 1. Parse without helper -> renders centered modal (role="dialog", aria-modal="true", data-yt-helper-modal)
+    globalThis.fetch = async (url) => {
+      const u = new URL(url, "https://snap.dokitool.com");
+      if (u.pathname === "/api/parse") {
+        return Response.json({
+          schema_version: "1.0",
+          code: "OK",
+          data: sampleYouTubeUnifiedData(),
+        });
+      }
+      if (u.pathname === "/api/youtube/context") {
+        return Response.json({
+          schema_version: "1.0",
+          code: "OK",
+          data: {
+            player_id: "22f02d3d",
+            signature_timestamp: 20760,
+            client: { name: "TVHTML5", version: "7.20260728.13.00" },
+            expires_at: "2026-11-09T06:00:00Z",
+          },
+        });
+      }
+      if (u.pathname === "/api/youtube/finalize") {
+        return Response.json({
+          schema_version: "1.0",
+          code: "OK",
+          data: sampleYouTubeUnifiedData(),
+        });
+      }
+      throw new Error(`unexpected ${u.pathname}`);
+    };
+
+    const unmountHelper = createUserscriptController({
+      eventTarget: env.bus,
+      version: "1.3.0",
+      gmXmlhttpRequest(details) {
+        if (details.url.includes("sw.js_data")) {
+          details.onload({ status: 200, responseText: '["Cgt0ZXN0"]' });
+          return;
+        }
+        details.onload({
+          status: 200,
+          responseText: JSON.stringify({
+            playabilityStatus: { status: "OK" },
+            videoDetails: {
+              title: "Sample YouTube Video",
+              author: "Sample Channel",
+              lengthSeconds: "19",
+              thumbnail: { thumbnails: [{ url: "https://i.ytimg.com/vi/I9JvDaciaFk/hqdefault.jpg" }] },
+            },
+            streamingData: { formats: [], adaptiveFormats: [] },
+          }),
+        });
+      },
+    }).mount();
+
+    try {
+      const p1 = createTestParser();
+      p1.inputUrl.value = "https://www.youtube.com/watch?v=I9JvDaciaFk";
+      await p1.parseVideo();
+
+      const modalHtml = await renderToString(
+        createSSRApp({
+          render: () =>
+            h(ResultSection, {
+              resultData: env.store.resultData,
+              resultVersion: env.store.resultVersion,
+              locale: "zh-CN",
+              selection: env.selection,
+              needsManualHelperRefresh: p1.needsManualHelperRefresh.value,
+              formatNumber: String,
+              formatDuration: String,
+            }),
+        }),
+      );
+      assert.ok(modalHtml.includes("data-yt-helper-modal"));
+      assert.ok(modalHtml.includes('role="dialog"'));
+      assert.ok(modalHtml.includes('aria-modal="true"'));
+      assert.ok(!modalHtml.includes("data-yt-helper-manual-refresh"));
+
+      // 2. Click install button -> records waiting state + URL in sessionStorage
+      p1.markWaitingForYouTubeHelperInstall();
+      const savedRaw = mockSessionStorage.getItem(parser.YT_HELPER_INSTALL_WAIT_KEY);
+      assert.ok(savedRaw);
+      assert.equal(JSON.parse(savedRaw).reloaded, false);
+      assert.equal(
+        JSON.parse(savedRaw).url,
+        "https://www.youtube.com/watch?v=I9JvDaciaFk",
+      );
+
+      // 3. Return to tab while Tampermonkey hasn't injected into existing page -> handshakes once, fails, auto-reloads ONCE
+      await p1.handleYouTubeHelperTabReturn();
+      assert.equal(reloadCount, 1);
+      assert.equal(
+        JSON.parse(mockSessionStorage.getItem(parser.YT_HELPER_INSTALL_WAIT_KEY)).reloaded,
+        true,
+      );
+
+      // 4. Loop-guard check: if reloaded page STILL fails handshake -> NO second auto-reload, restores URL, and renders 刷新页面 button
+      const pReloadedStillMissing = createTestParser();
+      await pReloadedStillMissing.resumePendingYouTubeHelperInstall();
+      assert.equal(reloadCount, 1, "must NOT auto-reload a second time");
+      assert.equal(
+        pReloadedStillMissing.inputUrl.value,
+        "https://www.youtube.com/watch?v=I9JvDaciaFk",
+      );
+      assert.equal(pReloadedStillMissing.needsManualHelperRefresh.value, true);
+
+      // Further tab focus events also do NOT trigger another reload loop
+      await pReloadedStillMissing.handleYouTubeHelperTabReturn();
+      assert.equal(reloadCount, 1);
+
+      const fallbackModalHtml = await renderToString(
+        createSSRApp({
+          render: () =>
+            h(ResultSection, {
+              resultData: env.store.resultData,
+              resultVersion: env.store.resultVersion,
+              locale: "zh-CN",
+              selection: env.selection,
+              needsManualHelperRefresh:
+                pReloadedStillMissing.needsManualHelperRefresh.value,
+              formatNumber: String,
+              formatDuration: String,
+            }),
+        }),
+      );
+      assert.ok(fallbackModalHtml.includes("data-yt-helper-manual-refresh"));
+      assert.ok(fallbackModalHtml.includes("刷新页面"));
+
+      // 5. Happy path after reload when helper v1.3.0 IS now active -> restores URL, clears sessionStorage, and auto-re-parses to ready!
+      helperReady = true;
+      mockSessionStorage.setItem(
+        parser.YT_HELPER_INSTALL_WAIT_KEY,
+        JSON.stringify({
+          waiting: true,
+          url: "https://www.youtube.com/watch?v=I9JvDaciaFk",
+          platform: "all",
+          reloaded: true,
+          updatedAt: Date.now(),
+        }),
+      );
+      env.store.clearResult();
+      const pReadyAfterReload = createTestParser();
+      await pReadyAfterReload.resumePendingYouTubeHelperInstall();
+      assert.equal(
+        pReadyAfterReload.inputUrl.value,
+        "https://www.youtube.com/watch?v=I9JvDaciaFk",
+      );
+      assert.equal(
+        mockSessionStorage.getItem(parser.YT_HELPER_INSTALL_WAIT_KEY),
+        null,
+      );
+      assert.equal(pReadyAfterReload.needsManualHelperRefresh.value, false);
+      assert.equal(env.store.resultData?.extra?.youtube_helper?.status, "ready");
+    } finally {
+      unmountHelper();
+    }
   });
 });

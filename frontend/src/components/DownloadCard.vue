@@ -169,6 +169,14 @@ onBeforeUnmount(stopCollapseTimer)
           </div>
 
           <div
+            v-if="item.savePathLabel"
+            :data-download-save-path="item.savePath || undefined"
+            class="mt-1.5 text-xs text-slate-500 dark:text-slate-400"
+          >
+            {{ item.savePathLabel }}
+          </div>
+
+          <div
             v-if="item.fallbackReason"
             data-download-fallback-reason
             class="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 rounded-lg px-2.5 py-1.5 leading-snug"

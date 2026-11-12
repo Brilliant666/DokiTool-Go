@@ -6,6 +6,7 @@ import {
   inject,
   ref,
   onMounted,
+  onUnmounted,
   watch,
 } from "vue";
 import { useVideoStore } from "./stores/video";
@@ -23,6 +24,7 @@ import { useVideoParser } from "./composables/useVideoParser";
 import { useMediaDownload } from "./composables/useMediaDownload";
 import { useVideoSelection } from "./composables/useVideoSelection";
 import { refreshPlatformCatalog } from "./utils/platforms";
+import { cleanupLeftoverYouTubeOpfsTempFiles } from "./utils/youtubeHelperCore";
 import {
   homeInitialStateKey,
   readBrowserPreferences,
@@ -88,10 +90,15 @@ const {
   inputUrl,
   parseError,
   currentPlatform,
+  needsManualHelperRefresh,
   parseButton,
   parseVideo,
   selectPlatform,
   resolveItem,
+  markWaitingForYouTubeHelperInstall,
+  handleYouTubeHelperTabReturn,
+  resumePendingYouTubeHelperInstall,
+  triggerManualHelperRefresh,
 } = useVideoParser({
   videoStore,
   locale,
@@ -222,9 +229,20 @@ const setLocale = (lang) => {
   document.documentElement.lang = lang;
 };
 
+const onVisibilityOrFocus = () => {
+  if (
+    typeof document !== "undefined" &&
+    document.visibilityState === "hidden"
+  ) {
+    return;
+  }
+  void handleYouTubeHelperTabReturn();
+};
+
 onMounted(() => {
   void refreshPlatformCatalog();
   void restoreDownloads();
+  void cleanupLeftoverYouTubeOpfsTempFiles().catch(() => {});
   // Static HTML and the first client render use the same language and controls.
   // Restore preferences only after hydration; the head bootstrap already applied
   // the background theme before CSS, without mutating the hydrated subtree.
@@ -235,6 +253,14 @@ onMounted(() => {
   document.documentElement.style.colorScheme = isDark.value ? "dark" : "light";
   document.documentElement.lang = locale.value;
   isReady.value = true;
+  document.addEventListener("visibilitychange", onVisibilityOrFocus);
+  window.addEventListener("focus", onVisibilityOrFocus);
+  void resumePendingYouTubeHelperInstall();
+});
+
+onUnmounted(() => {
+  document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+  window.removeEventListener("focus", onVisibilityOrFocus);
 });
 </script>
 
@@ -280,12 +306,15 @@ onMounted(() => {
         :result-data="videoStore.resultData"
         :result-version="videoStore.resultVersion"
         :is-downloading="isDownloading"
+        :needs-manual-helper-refresh="needsManualHelperRefresh"
         :locale="locale"
         :selection="selection"
         :format-number="formatNumber"
         :format-duration="formatDuration"
         :resolving-ids="videoStore.resolvingItems"
         @refresh-item="resolveSelectedItem"
+        @install-youtube-helper="markWaitingForYouTubeHelperInstall"
+        @refresh-youtube-helper-page="triggerManualHelperRefresh"
         @download-main="downloadMainVideo"
         @download-backup="downloadBackupVideo"
         @download-separate="downloadYouTubeSeparate"

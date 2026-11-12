@@ -3,6 +3,10 @@ import type { Attachment, ReadyVariant, Source, Variant } from "../types/media";
 export const YOUTUBE_HELPER_VERSION: string;
 export const MIN_YOUTUBE_HELPER_VERSION: string;
 export const YOUTUBE_HELPER_SCRIPT_URL: string;
+export const YOUTUBE_OPFS_TEMP_PREFIX: string;
+export const YOUTUBE_FILE_PICKER_ID: string;
+export const DEFAULT_OPFS_CLEANUP_DELAY_MS: number;
+export const OPFS_QUOTA_HEADROOM_FACTOR: number;
 
 export const DEFAULT_MUX_CHUNK_BYTES: number;
 export const DEFAULT_MUX_VIDEO_CONCURRENCY: number;
@@ -62,16 +66,25 @@ export interface YouTubeHelperPlayerResult {
   videoDetails?: YouTubeHelperVideoDetails;
 }
 
+export type YouTubeHelperSaveMode =
+  | "opfs"
+  | "stream_picker"
+  | "memory_buffer"
+  | "gm_download";
+
 export interface YouTubeHelperProgressDetail {
   requestId: string;
   loaded: number;
   total: number;
   percent: number;
+  mode?: YouTubeHelperSaveMode;
 }
 
 export interface YouTubeHelperDownloadPayload {
   url: string;
   filename: string;
+  size?: number;
+  taskId?: string;
   onProgress?: (detail: YouTubeHelperProgressDetail) => void;
   signal?: AbortSignal;
 }
@@ -83,6 +96,7 @@ export interface YouTubeHelperMuxDownloadPayload {
   audioSize?: number;
   filename: string;
   outputContainer: "mp4" | "webm";
+  taskId?: string;
   onProgress?: (detail: YouTubeHelperProgressDetail) => void;
   signal?: AbortSignal;
 }
@@ -142,11 +156,16 @@ export function buildTVHTML5PlayerPayload(params: {
 export function sanitizePlayerApiResponse(
   raw: unknown,
 ): YouTubeHelperPlayerResult;
+export function cleanupLeftoverYouTubeOpfsTempFiles(options?: {
+  storage?: StorageManager | Record<string, unknown> | null;
+  pageWindow?: Window | typeof globalThis;
+}): Promise<number>;
 export function createUserscriptController(options?: {
   gmXmlhttpRequest?: (details: Record<string, unknown>) => unknown;
   gmDownload?: (details: Record<string, unknown>) => { abort?: () => void } | void;
   eventTarget?: EventTarget;
   pageWindow?: Window | typeof globalThis;
+  opfsStorage?: StorageManager | Record<string, unknown> | null;
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   now?: () => number;
   version?: string;
@@ -159,11 +178,18 @@ export function createUserscriptController(options?: {
     retryBaseDelayMs?: number;
     chunkTimeoutMs?: number;
     maxBufferBytes?: number;
+    opfsCleanupDelayMs?: number;
   };
   saveBuffer?: (
     buffer: ArrayBuffer,
     filename: string,
     mimeType: string,
+  ) => void | Promise<void>;
+  saveOpfsFile?: (
+    file: File | Blob,
+    filename: string,
+    mimeType: string,
+    tempName: string,
   ) => void | Promise<void>;
 }): {
   mount: () => () => void;
@@ -197,10 +223,10 @@ export function downloadViaYouTubeHelper(
   options?: {
     eventTarget?: EventTarget;
   },
-): Promise<{ filename: string }>;
+): Promise<{ filename: string; mode?: YouTubeHelperSaveMode }>;
 export function muxDownloadViaYouTubeHelper(
   payload: YouTubeHelperMuxDownloadPayload,
   options?: {
     eventTarget?: EventTarget;
   },
-): Promise<{ filename: string; mode: "stream_picker" | "memory_buffer" }>;
+): Promise<{ filename: string; mode: YouTubeHelperSaveMode }>;

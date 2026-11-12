@@ -206,6 +206,23 @@ function canAttemptDirectAttachment(rawUrl: string): boolean {
   }
 }
 
+function formatYouTubeSavePathLabel(mode?: string): string | undefined {
+  switch (mode) {
+    case "opfs":
+      return "保存路径：默认下载目录（OPFS 流式写盘）";
+    case "stream_picker":
+      return "保存路径：保存对话框流式写盘";
+    case "memory_buffer":
+      return "保存路径：内存合成后浏览器下载";
+    case "gm_download":
+      return "保存路径：助手直接下载";
+    case "browser_native":
+      return "保存路径：默认下载目录（浏览器附件直下）";
+    default:
+      return undefined;
+  }
+}
+
 export function useMediaDownload({
   videoStore,
   showToast,
@@ -526,12 +543,19 @@ export function useMediaDownload({
         return;
       }
       if (canAttemptDirectAttachment(url)) {
+        const isYtNative = !isToutiaovodAttachmentUrl(url);
         if (triggerBrowserDownload(url, filename, true)) {
           videoStore.updateDownload(downloadId, {
             deliveryId,
             transport: "browser_native",
             status: "handed-off",
             statusText: "已交给浏览器",
+            ...(isYtNative
+              ? {
+                  savePath: "browser_native",
+                  savePathLabel: formatYouTubeSavePathLabel("browser_native"),
+                }
+              : {}),
             abortController: null,
             percent: 0,
             loaded: 0,
@@ -586,14 +610,19 @@ export function useMediaDownload({
       if (ytHelper?.status === "ready") {
         let lastBytes = 0;
         let lastSampleAt = startedAt;
+        const ctxSources = sourceContexts.get(downloadId)?.sources ?? [];
+        const matchedSource = ctxSources.find(
+          (s) => comparableUrl(sourceUrl(s, apiContext)) === comparableUrl(url),
+        );
+        const knownSize = matchedSource?.size_bytes || 0;
         videoStore.updateDownload(downloadId, {
           deliveryId,
           abortController: controller,
           status: "downloading",
-          statusText: "通过助手保存中（受 2 倍码率限速，预计耗时较长）...",
+          statusText: "通过助手分块并发保存中...",
           percent: 0,
           loaded: 0,
-          total: 0,
+          total: knownSize,
           speed: 0,
           elapsed: 0,
           averageSpeed: 0,
@@ -610,6 +639,8 @@ export function useMediaDownload({
           const saved = await downloadViaYouTubeHelper({
             url,
             filename,
+            size: knownSize || undefined,
+            taskId: deliveryId,
             signal: controller.signal,
             onProgress(detail) {
               if (!ownsTask(downloadId, controller)) return;
@@ -627,16 +658,29 @@ export function useMediaDownload({
                 elapsed,
                 speed,
                 averageSpeed: detail.loaded / elapsed,
-                statusText: `通过助手保存中（${detail.percent}% · 受 2 倍码率限速）...`,
+                ...(detail.mode
+                  ? {
+                      savePath: detail.mode,
+                      savePathLabel: formatYouTubeSavePathLabel(detail.mode),
+                    }
+                  : {}),
+                statusText: `通过助手分块并发保存中（${detail.percent}%）...`,
               });
             },
           });
           if (!ownsTask(downloadId, controller)) return;
           const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
+          const finalMode = saved?.mode || taskFor(downloadId)?.savePath;
           videoStore.updateDownload(downloadId, {
             filename: saved?.filename || filename,
             status: "completed",
             statusText: "已完成",
+            ...(finalMode
+              ? {
+                  savePath: finalMode,
+                  savePathLabel: formatYouTubeSavePathLabel(finalMode),
+                }
+              : {}),
             percent: 100,
             speed: 0,
             elapsed,
@@ -1408,6 +1452,17 @@ export function useMediaDownload({
       error: null,
       refreshAvailable: false,
     });
+    sourceContexts.set(videoTaskId, {
+      routes: videoTarget.routes,
+      selectedUrl: videoTarget.url,
+      resultVersion: snapshot.version,
+      itemId: item.id,
+      variantId: videoTarget.variant.id,
+      sources:
+        videoTarget.variant.delivery.kind === "file"
+          ? videoTarget.variant.delivery.sources
+          : [],
+    });
     videoRetries.set(videoTaskId, async () => {
       await downloadFile(
         videoTarget.url,
@@ -1447,6 +1502,17 @@ export function useMediaDownload({
       fallbackReason: effectiveReason,
       statusText: "准备下载音轨...",
       abortController: audioController,
+    });
+    sourceContexts.set(audioTaskId, {
+      routes: [audioCand.url],
+      selectedUrl: audioCand.url,
+      resultVersion: snapshot.version,
+      itemId: item.id,
+      variantId: audioCand.variant.id,
+      sources:
+        audioCand.variant.delivery.kind === "file"
+          ? audioCand.variant.delivery.sources
+          : [],
     });
     videoRetries.set(audioTaskId, async () => {
       await downloadFile(
@@ -1556,9 +1622,11 @@ export function useMediaDownload({
             url: syncTarget.url,
             abortController: controller,
             status: "downloading",
-            statusText: "浏览器内无损合流保存中（受 2 倍码率限速）...",
+            statusText: "浏览器内无损合流保存中...",
             error: null,
             fallbackReason: null,
+            savePath: undefined,
+            savePathLabel: undefined,
             nativeAvailable: false,
             refreshAvailable: false,
             loaded: 0,
@@ -1578,8 +1646,6 @@ export function useMediaDownload({
             enqueueItem(snapshot, id, forceRefresh),
           );
 
-          // Invoke muxDownloadViaYouTubeHelper synchronously before any await so
-          // document.defaultView.showSaveFilePicker retains transient user activation.
           const muxPromise = muxDownloadViaYouTubeHelper({
             videoUrl: syncTarget.url,
             audioUrl: sourceUrl(pair.audioSource, apiContext),
@@ -1587,6 +1653,7 @@ export function useMediaDownload({
             audioSize: pair.audioSource.size_bytes,
             filename: mergedFilename,
             outputContainer: pair.outputContainer,
+            taskId: deliveryId,
             signal: controller.signal,
             onProgress(detail) {
               if (!ownsTask(id, controller)) return;
@@ -1604,7 +1671,13 @@ export function useMediaDownload({
                 elapsed,
                 speed,
                 averageSpeed: detail.loaded / elapsed,
-                statusText: `浏览器内无损合流保存中（${detail.percent}% · 受 2 倍码率限速）...`,
+                ...(detail.mode
+                  ? {
+                      savePath: detail.mode,
+                      savePathLabel: formatYouTubeSavePathLabel(detail.mode),
+                    }
+                  : {}),
+                statusText: `浏览器内无损合流保存中（${detail.percent}%）...`,
               });
             },
           });
@@ -1613,10 +1686,17 @@ export function useMediaDownload({
             const saved = await muxPromise;
             if (!ownsTask(id, controller)) return false;
             const elapsed = Math.max(0, (Date.now() - startedAt) / 1000);
+            const finalMode = saved?.mode || taskFor(id)?.savePath;
             videoStore.updateDownload(id, {
               filename: saved?.filename || mergedFilename,
               status: "completed",
               statusText: "已完成",
+              ...(finalMode
+                ? {
+                    savePath: finalMode,
+                    savePathLabel: formatYouTubeSavePathLabel(finalMode),
+                  }
+                : {}),
               percent: 100,
               speed: 0,
               elapsed,

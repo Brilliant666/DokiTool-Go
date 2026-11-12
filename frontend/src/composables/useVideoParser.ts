@@ -203,6 +203,16 @@ function buildFallbackYouTubeMedia(
   };
 }
 
+export const YT_HELPER_INSTALL_WAIT_KEY = "dokitool.yt_helper_install_wait";
+
+interface PendingYouTubeHelperInstallState {
+  waiting: boolean;
+  url: string;
+  platform: string;
+  reloaded: boolean;
+  updatedAt: number;
+}
+
 export function resolveApiUrl(raw: string): string {
   if (!raw.startsWith("/api/resolve?") || /[\\\s#]/.test(raw))
     throw new Error("条目解析地址无效");
@@ -218,11 +228,79 @@ export function useVideoParser(options: {
   videoStore: ReturnType<typeof useVideoStore>;
   locale: Ref<string>;
   showToast: (message: string, type?: ToastType, duration?: number) => unknown;
+  sessionStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
+  reloadPage?: () => void;
+  pingHelper?: typeof pingYouTubeHelper;
 }) {
   const { videoStore, showToast } = options;
+  const resolveSessionStorage = () => {
+    if (options.sessionStorage !== undefined) return options.sessionStorage;
+    try {
+      return typeof window !== "undefined" ? window.sessionStorage : null;
+    } catch {
+      return null;
+    }
+  };
+  const reloadPage =
+    options.reloadPage ??
+    (() => {
+      if (typeof window !== "undefined" && window.location) {
+        window.location.reload();
+      }
+    });
+  const pingHelper = options.pingHelper ?? pingYouTubeHelper;
+
   const inputUrl = shallowRef(""),
     parseError = shallowRef(""),
-    currentPlatform = shallowRef("all");
+    currentPlatform = shallowRef("all"),
+    needsManualHelperRefresh = shallowRef(false);
+  let checkingHelperInstall = false;
+
+  function readHelperWaitState(): PendingYouTubeHelperInstallState | null {
+    const store = resolveSessionStorage();
+    if (!store) return null;
+    try {
+      const raw = store.getItem(YT_HELPER_INSTALL_WAIT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || parsed.waiting !== true) {
+        return null;
+      }
+      return {
+        waiting: true,
+        url: typeof parsed.url === "string" ? parsed.url.trim() : "",
+        platform:
+          typeof parsed.platform === "string" && parsed.platform.trim()
+            ? parsed.platform.trim()
+            : "all",
+        reloaded: parsed.reloaded === true,
+        updatedAt:
+          typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function writeHelperWaitState(state: PendingYouTubeHelperInstallState): void {
+    const store = resolveSessionStorage();
+    if (!store) return;
+    try {
+      store.setItem(YT_HELPER_INSTALL_WAIT_KEY, JSON.stringify(state));
+    } catch {
+      // Ignore storage quota / privacy mode errors
+    }
+  }
+
+  function clearHelperWaitState(): void {
+    const store = resolveSessionStorage();
+    if (!store) return;
+    try {
+      store.removeItem(YT_HELPER_INSTALL_WAIT_KEY);
+    } catch {
+      // Ignore storage errors
+    }
+  }
   const parseButton = useButtonControl({
     action: "parse",
     timeout: 0,
@@ -268,7 +346,7 @@ export function useVideoParser(options: {
     run: number,
     controller: AbortController,
   ): Promise<void> {
-    const ping = await pingYouTubeHelper();
+    const ping = await pingHelper();
     if (run !== generation || controller.signal.aborted) return;
 
     if (!ping.installed || !ping.supported) {
@@ -279,7 +357,7 @@ export function useVideoParser(options: {
         script_url: YOUTUBE_HELPER_SCRIPT_URL,
         message: ping.installed
           ? `当前已安装的 YouTube 助手版本（v${ping.version}）低于最低要求（v${MIN_YOUTUBE_HELPER_VERSION}），请更新脚本后重试`
-          : "当前未检测到 YouTube 下载助手脚本，请按下方说明安装并启用后重试",
+          : "当前未检测到 YouTube 下载助手脚本，请按说明安装并启用后重试",
       };
       let media: UnifiedMedia;
       try {
@@ -294,6 +372,9 @@ export function useVideoParser(options: {
       }
       return;
     }
+
+    clearHelperWaitState();
+    needsManualHelperRefresh.value = false;
 
     let contextData: YouTubeHelperContextResponse;
     try {
@@ -474,13 +555,126 @@ export function useVideoParser(options: {
     if (!resolved) throw new Error("解析响应缺少所请求条目");
     return resolved;
   }
+  function markWaitingForYouTubeHelperInstall(): void {
+    const candidateUrl =
+      inputUrl.value.trim() || videoStore.resultData?.source_url || "";
+    needsManualHelperRefresh.value = false;
+    writeHelperWaitState({
+      waiting: true,
+      url: candidateUrl,
+      platform: currentPlatform.value || "all",
+      reloaded: false,
+      updatedAt: Date.now(),
+    });
+  }
+
+  async function handleYouTubeHelperTabReturn(): Promise<boolean> {
+    if (checkingHelperInstall) return false;
+    const state = readHelperWaitState();
+    if (!state?.waiting) return false;
+
+    checkingHelperInstall = true;
+    try {
+      const ping = await pingHelper();
+      if (ping.installed && ping.supported) {
+        clearHelperWaitState();
+        needsManualHelperRefresh.value = false;
+        if (state.platform && state.platform !== currentPlatform.value) {
+          currentPlatform.value = state.platform;
+        }
+        if (state.url && state.url !== inputUrl.value) {
+          inputUrl.value = state.url;
+        }
+        if (inputUrl.value.trim()) {
+          await parseVideo();
+        }
+        return true;
+      }
+
+      if (!state.reloaded) {
+        writeHelperWaitState({
+          ...state,
+          reloaded: true,
+          updatedAt: Date.now(),
+        });
+        reloadPage();
+        return false;
+      }
+
+      needsManualHelperRefresh.value = true;
+      return false;
+    } finally {
+      checkingHelperInstall = false;
+    }
+  }
+
+  async function resumePendingYouTubeHelperInstall(): Promise<boolean> {
+    if (checkingHelperInstall) return false;
+    const state = readHelperWaitState();
+    if (!state?.waiting) return false;
+
+    checkingHelperInstall = true;
+    try {
+      if (state.platform && state.platform !== currentPlatform.value) {
+        currentPlatform.value = state.platform;
+      }
+      if (state.url && state.url !== inputUrl.value) {
+        inputUrl.value = state.url;
+      }
+
+      const ping = await pingHelper();
+      if (ping.installed && ping.supported) {
+        clearHelperWaitState();
+        needsManualHelperRefresh.value = false;
+        if (inputUrl.value.trim()) {
+          await parseVideo();
+        }
+        return true;
+      }
+
+      writeHelperWaitState({
+        ...state,
+        reloaded: true,
+        updatedAt: Date.now(),
+      });
+      needsManualHelperRefresh.value = true;
+      if (inputUrl.value.trim()) {
+        await parseVideo();
+      }
+      return false;
+    } finally {
+      checkingHelperInstall = false;
+    }
+  }
+
+  function triggerManualHelperRefresh(): void {
+    const candidateUrl =
+      inputUrl.value.trim() ||
+      readHelperWaitState()?.url ||
+      videoStore.resultData?.source_url ||
+      "";
+    writeHelperWaitState({
+      waiting: true,
+      url: candidateUrl,
+      platform: currentPlatform.value || "all",
+      reloaded: true,
+      updatedAt: Date.now(),
+    });
+    reloadPage();
+  }
+
   return {
     inputUrl,
     parseError,
     currentPlatform,
+    needsManualHelperRefresh,
     parseButton,
     parseVideo,
     resolveItem,
+    markWaitingForYouTubeHelperInstall,
+    handleYouTubeHelperTabReturn,
+    resumePendingYouTubeHelperInstall,
+    triggerManualHelperRefresh,
     selectPlatform: (platform: string) => {
       currentPlatform.value = platform;
     },
