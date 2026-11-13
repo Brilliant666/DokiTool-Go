@@ -2771,6 +2771,31 @@ test('homepage button row stays fixed to popular platforms without 更多平台 
   } finally {
     platforms.supportedPlatforms.value = snapshotCopy;
   }
+
+  // 4. English mode uses capitalized English display names on platform buttons
+  const enTabs = platforms.platformTabs('en');
+  assert.deepEqual(enTabs.map((t) => t.key), expectedOrder);
+  assert.deepEqual(enTabs.map((t) => t.label), [
+    'All', 'Douyin', 'Kuaishou', 'Bilibili', 'Xiaohongshu', 'Weibo', 'X', 'YouTube', 'Instagram', 'Facebook',
+  ]);
+  const heroEn = await renderToString(
+    createSSRApp({ render: () => h(HeroSection, { locale: 'en', currentPlatform: 'all', isReady: true }) }),
+  );
+  for (const enLabel of ['All', 'Douyin', 'Kuaishou', 'Bilibili', 'Xiaohongshu', 'Weibo', 'X', 'YouTube', 'Instagram', 'Facebook']) {
+    assert.match(heroEn, new RegExp(`>${enLabel}</span>`), `English HeroSection must render ${enLabel}`);
+  }
+
+  // 5. While parsing (isLoading=true), the parse button stays clickable as a cancel trigger
+  const heroLoading = await renderToString(
+    createSSRApp({ render: () => h(HeroSection, { locale: 'zh-CN', currentPlatform: 'all', isReady: true, isLoading: true }) }),
+  );
+  assert.match(heroLoading, /data-cancel-parse/);
+  assert.match(heroLoading, /取消解析/);
+
+  // 6. HeaderNav uses Tailwind sm:block (never non-existent xs:block)
+  const headerSource = await readFile(new URL('../src/components/HeaderNav.vue', import.meta.url), 'utf8');
+  assert.doesNotMatch(headerSource, /\bxs:block\b/);
+  assert.match(headerSource, /\bhidden sm:block\b/);
 });
 
 test('image parse results preserve original aspect ratio for single images, use contain grid for multi-image albums, and update aspect ratio smoothly on @load when metadata dimensions are absent', async () => {

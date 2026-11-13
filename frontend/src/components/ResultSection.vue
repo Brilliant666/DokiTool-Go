@@ -59,6 +59,13 @@ const emit = defineEmits([
 ]);
 const context = { apiOrigin: apiConfig.baseUrl };
 const urlOf = (source) => (source ? sourceUrl(source, context) : "");
+const brokenImageUrls = ref({});
+const safeImageUrl = (raw) => (raw && !brokenImageUrls.value[raw] ? raw : "");
+const markImageBroken = (raw) => {
+  if (raw && !brokenImageUrls.value[raw]) {
+    brokenImageUrls.value = { ...brokenImageUrls.value, [raw]: true };
+  }
+};
 const currentItem = computed(() => props.selection?.currentVideo.value || null);
 const target = computed(() => props.selection?.currentTarget.value || null);
 const youtubeHelper = computed(() =>
@@ -443,10 +450,14 @@ const playerKey = computed(() =>
     manualSelection.value,
   ]),
 );
+const mainPosterUrl = computed(() =>
+  safeImageUrl(urlOf(currentItem.value?.cover || props.resultData?.cover)),
+);
 const attemptedSources = new Set();
 watch(mediaIdentity, () => {
   attemptedSources.clear();
   playbackFailed.value = false;
+  brokenImageUrls.value = {};
   activeTab.value = "info";
   showAllQualityVariants.value = false;
 });
@@ -1053,14 +1064,21 @@ onUnmounted(() => {
               controls
               referrerpolicy="no-referrer"
               class="rs-video"
-              :poster="
-                urlOf(currentItem.cover || resultData.cover) || undefined
-              "
+              :poster="mainPosterUrl || undefined"
               @error="updatePlaybackStatus($event, true)"
               @loadeddata="updatePlaybackStatus($event, false)"
             >
               <track kind="captions" :src="undefined" />
             </video>
+            <img
+              v-if="mainPosterUrl"
+              :src="mainPosterUrl"
+              referrerpolicy="no-referrer"
+              hidden
+              alt=""
+              class="rs-poster-probe"
+              @error="markImageBroken(mainPosterUrl)"
+            />
             <div v-if="isResolving || !activeVideoUrl" class="rs-stage-overlay">
               <div v-if="isResolving" class="rs-stage-spinner"></div>
               <span>{{
@@ -1224,14 +1242,17 @@ onUnmounted(() => {
               :aria-label="`${t(locale, 'preview')} ${idx + 1}`"
             >
               <img
-                :src="imageUrl(item)"
+                v-if="safeImageUrl(imageUrl(item))"
+                :src="safeImageUrl(imageUrl(item))"
                 :data-gallery-item-id="item.id"
                 :width="declaredImageDimensions(item)?.width || undefined"
                 :height="declaredImageDimensions(item)?.height || undefined"
                 class="rs-gallery-img"
                 :alt="`${t(locale, 'imagesTitle')} ${idx + 1}`"
+                referrerpolicy="no-referrer"
                 loading="lazy"
                 @load="onGalleryImageLoad($event, item.id)"
+                @error="markImageBroken(imageUrl(item))"
               />
               <div class="rs-gallery-mask">
                 <AppIcon class="fas fa-search-plus"></AppIcon>
@@ -1327,19 +1348,34 @@ onUnmounted(() => {
                 <template v-if="liveViewMode === 'video'">
                   <video
                     :src="liveUrl(liveItems[activeLiveIndex], 'motion')"
-                    :poster="liveUrl(liveItems[activeLiveIndex], 'image')"
+                    :poster="
+                      safeImageUrl(liveUrl(liveItems[activeLiveIndex], 'image')) ||
+                      undefined
+                    "
                     controls
                     referrerpolicy="no-referrer"
                     class="rs-live-carousel-video"
                   >
                     <track kind="captions" :src="undefined" />
                   </video>
+                  <img
+                    v-if="safeImageUrl(liveUrl(liveItems[activeLiveIndex], 'image'))"
+                    :src="safeImageUrl(liveUrl(liveItems[activeLiveIndex], 'image'))"
+                    referrerpolicy="no-referrer"
+                    hidden
+                    alt=""
+                    class="rs-poster-probe"
+                    @error="markImageBroken(liveUrl(liveItems[activeLiveIndex], 'image'))"
+                  />
                 </template>
                 <template v-else>
                   <img
-                    :src="liveUrl(liveItems[activeLiveIndex], 'image')"
+                    v-if="safeImageUrl(liveUrl(liveItems[activeLiveIndex], 'image'))"
+                    :src="safeImageUrl(liveUrl(liveItems[activeLiveIndex], 'image'))"
+                    referrerpolicy="no-referrer"
                     class="rs-live-carousel-image"
                     :alt="`${t(locale, 'live')} ${activeLiveIndex + 1}`"
+                    @error="markImageBroken(liveUrl(liveItems[activeLiveIndex], 'image'))"
                   />
                 </template>
               </div>
@@ -1389,11 +1425,12 @@ onUnmounted(() => {
           <div class="rs-author-inner">
             <div class="rs-author-avatar-wrap">
               <img
-                v-if="author.avatar"
-                :src="urlOf(author.avatar)"
+                v-if="safeImageUrl(urlOf(author.avatar))"
+                :src="safeImageUrl(urlOf(author.avatar))"
                 class="rs-author-avatar"
                 :alt="author.name || 'Author'"
                 referrerpolicy="no-referrer"
+                @error="markImageBroken(urlOf(author.avatar))"
               />
               <div v-else class="rs-author-avatar-fb">
                 <AppIcon class="fas fa-user" />
@@ -1537,11 +1574,7 @@ onUnmounted(() => {
                     <span
                       v-if="option.variant.provenance === 'original_endpoint'"
                       class="rs-backup-meta-tag"
-                      >原始入口</span
-                    ><span
-                      v-if="option.variant.delivery?.sources?.length > 1"
-                      class="rs-backup-meta-tag"
-                      >{{ option.variant.delivery.sources.length }} 条线路</span
+                      >{{ locale === "en" ? "Original" : "原画" }}</span
                     ><span
                       v-for="rate in qualityBitrates(option.variant.metadata)"
                       :key="rate.key"
@@ -1550,14 +1583,13 @@ onUnmounted(() => {
                       {{ rate.label }} {{ formatBitrate(rate.value) }}
                     </span
                     ><span
-                      v-if="
-                        option.variant.metadata?.width &&
-                        option.variant.metadata?.height
-                      "
+                      v-if="option.variant.metadata?.width"
                       class="rs-backup-meta-tag"
                       ><AppIcon class="fas fa-arrows-alt" />{{
-                        option.variant.metadata.width
-                      }}×{{ option.variant.metadata.height }}</span
+                        option.variant.metadata.height
+                          ? `${option.variant.metadata.width}×${option.variant.metadata.height}`
+                          : `${option.variant.metadata.width}w`
+                      }}</span
                     ><span
                       v-if="option.variant.metadata?.video_codec"
                       class="rs-backup-meta-tag"
@@ -1696,9 +1728,12 @@ onUnmounted(() => {
           </button>
           <div class="rs-modal-body">
             <img
-              :src="imageUrl(imageItems[activeImageIndex])"
+              v-if="safeImageUrl(imageUrl(imageItems[activeImageIndex]))"
+              :src="safeImageUrl(imageUrl(imageItems[activeImageIndex]))"
+              referrerpolicy="no-referrer"
               class="rs-modal-img"
               :alt="imageItems[activeImageIndex].title || 'Image'"
+              @error="markImageBroken(imageUrl(imageItems[activeImageIndex]))"
             />
           </div>
           <button

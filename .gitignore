@@ -197,6 +197,7 @@
 !/frontend/public/dokitool-icon.svg
 !/frontend/public/dokitool.svg
 !/frontend/public/downloads/
+!/frontend/public/favicon.ico
 !/frontend/public/helper/
 !/frontend/public/licenses/
 !/frontend/public/robots.txt
@@ -547,6 +548,7 @@
 !/frontend/src/utils/mediaContract.ts
 !/frontend/src/utils/mediaDelivery.ts
 !/frontend/src/utils/mediaSources.ts
+!/frontend/src/utils/parseHelpers.ts
 !/frontend/src/utils/platforms.ts
 !/frontend/src/utils/rateLimit.js
 !/frontend/src/utils/segmentDownload.ts

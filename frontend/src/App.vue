@@ -95,6 +95,7 @@ const {
   needsManualHelperRefresh,
   parseButton,
   parseVideo,
+  cancelParse,
   selectPlatform,
   resolveItem,
   markWaitingForYouTubeHelperInstall,
@@ -314,6 +315,7 @@ onUnmounted(() => {
         :locale="locale"
         :current-platform="currentPlatform"
         @parse="parseVideo"
+        @cancel="cancelParse"
         @select-platform="selectPlatform"
       />
 

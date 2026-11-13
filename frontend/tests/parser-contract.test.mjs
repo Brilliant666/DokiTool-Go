@@ -6,7 +6,7 @@ import {reactive, ref} from 'vue';
 
 // Real composables, synthetic network responses; no live platform requests.
 describe('unified frontend request contract', () => {
-let vite, parser, config, contract, selection;
+let vite, parser, config, contract, selection, parseHelpers, ytHelperCore;
 const originalFetch=globalThis.fetch, originalWindow=globalThis.window;
 const media='https://media.example.test/video.mp4';
 const file=(id='one',url=media)=>({id,type:'video',variants:[{id:'main',delivery:{kind:'file',sources:[{url}]}}],default:{variant_id:'main',url}});
@@ -17,18 +17,21 @@ before(async()=>{
   config=await vite.ssrLoadModule('/src/services/apiConfig.ts');
   contract=await vite.ssrLoadModule('/src/utils/mediaContract.ts');
   selection=await vite.ssrLoadModule('/src/composables/useVideoSelection.ts');
+  parseHelpers=await vite.ssrLoadModule('/src/utils/parseHelpers.ts');
+  ytHelperCore=await vite.ssrLoadModule('/src/utils/youtubeHelperCore.js');
   (await vite.ssrLoadModule('/src/services/operationLogger.js')).operationLogger.enableConsole=false;
   globalThis.window={setTimeout,clearTimeout};
 });
 after(async()=>{globalThis.fetch=originalFetch;globalThis.window=originalWindow;await vite?.close();});
-function harness(source='https://source.example.test/work?signature=a%2Bb%3D') {
+function harness(source='https://source.example.test/work?signature=a%2Bb%3D', lang='zh-CN') {
   const store=reactive({resultData:null,resultVersion:0,
     clearResult(){this.resultData=null;this.resultVersion++;}, setResult(data){this.resultData=data;this.resultVersion++;},
     replaceItem(item,version){if(version!==this.resultVersion||!this.resultData)return false;this.resultData={...this.resultData,items:this.resultData.items.map(old=>old.id===item.id?item:old)};return true;},
   });
   const toasts=[];
-  const instance=parser.useVideoParser({videoStore:store,locale:ref('zh-CN'),showToast:(...args)=>toasts.push(args)});
-  instance.inputUrl.value=source;return {store,instance,toasts};
+  const localeRef=ref(lang);
+  const instance=parser.useVideoParser({videoStore:store,locale:localeRef,showToast:(...args)=>toasts.push(args)});
+  instance.inputUrl.value=source;return {store,instance,toasts,locale:localeRef};
 }
 test('all existing and future platform IDs use one versioned parse endpoint',async()=>{
   assert.equal(config.resolveApiConfig({}).parseUrl,'/api/parse');
@@ -223,6 +226,212 @@ test('#91 PR1 item 3: fetchJSON surfaces retry_after_seconds and resolveItem ret
   await flush();
   abortController.abort();
   await abortHandled;
+});
+
+test('pasting another platform link while a specific platform is selected prompts switching back to 所有平台, while unsupported fb.com returns null',async()=>{
+  assert.equal(parseHelpers.detectUrlPlatform('https://fb.watch/abc123/'),'facebook');
+  assert.equal(parseHelpers.detectUrlPlatform('https://www.facebook.com/watch/?v=123'),'facebook');
+  assert.equal(parseHelpers.detectUrlPlatform('https://fb.com/watch/?v=123'),null);
+  assert.equal(parseHelpers.detectUrlPlatform('https://www.fb.com/watch/?v=123'),null);
+
+  let fetchCount=0;
+  globalThis.fetch=async()=>{fetchCount++;return Response.json(good());};
+
+  const {instance,toasts}=harness('https://www.bilibili.com/video/BV1xx411c7mD');
+  instance.selectPlatform('douyin');
+  await instance.parseVideo();
+  assert.equal(fetchCount,0);
+  assert.match(instance.parseError.value,/所有平台/);
+  assert.equal(toasts.at(-1)?.[1],'error');
+
+  const ytMismatch=harness('https://youtu.be/I9JvDaciaFk');
+  ytMismatch.instance.selectPlatform('douyin');
+  await ytMismatch.instance.parseVideo();
+  assert.equal(fetchCount,0);
+  assert.match(ytMismatch.instance.parseError.value,/所有平台/);
+
+  const enMismatch=harness('https://xhslink.com/a/abc123','en');
+  enMismatch.instance.selectPlatform('douyin');
+  await enMismatch.instance.parseVideo();
+  assert.equal(fetchCount,0);
+  assert.match(enMismatch.instance.parseError.value,/\bAll\b/);
+
+  // Unsupported fb.com must NOT falsely trigger platform mismatch; backend handles it as unsupported link
+  const fbDotCom=harness('https://fb.com/watch/?v=123');
+  fbDotCom.instance.selectPlatform('douyin');
+  globalThis.fetch=async()=>{fetchCount++;return Response.json({schema_version:'1.0',code:'UNSUPPORTED_PLATFORM',error:{code:'UNSUPPORTED_PLATFORM',message:'暂不支持该平台链接'}},{status:400});};
+  await fbDotCom.instance.parseVideo();
+  assert.equal(fetchCount,1);
+  assert.equal(fbDotCom.instance.parseError.value,'暂不支持该平台链接');
+  assert.doesNotMatch(fbDotCom.instance.parseError.value,/不匹配|所有平台/);
+
+  // Backend mismatch fallback for opaque domains when a specific platform is selected
+  const backendMismatch=harness('https://short.example.test/opaque');
+  backendMismatch.instance.selectPlatform('douyin');
+  globalThis.fetch=async()=>Response.json({schema_version:'1.0',code:'PLATFORM_MISMATCH',error:{code:'PLATFORM_MISMATCH',message:'平台不匹配'}},{status:400});
+  await backendMismatch.instance.parseVideo();
+  assert.match(backendMismatch.instance.parseError.value,/所有平台/);
+
+  const legacyMismatch=harness('https://short.example.test/opaque2');
+  legacyMismatch.instance.selectPlatform('douyin');
+  globalThis.fetch=async()=>Response.json({schema_version:'1.0',code:'INVALID_INPUT',error:{code:'INVALID_INPUT',message:'请输入对应平台的有效分享链接'}},{status:400});
+  await legacyMismatch.instance.parseVideo();
+  assert.match(legacyMismatch.instance.parseError.value,/所有平台/);
+});
+
+test('cancelParse aborts in-flight request cleanly without error banner or toast',async()=>{
+  const {instance,store,toasts}=harness('https://source.example.test/cancel-target');
+  let capturedSignal;
+  globalThis.fetch=async(_url,{signal})=>{
+    capturedSignal=signal;
+    return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true}));
+  };
+  const pending=instance.parseVideo();
+  assert.equal(instance.parseButton.isLoading.value,true);
+  instance.cancelParse();
+  await pending;
+  assert.equal(capturedSignal.aborted,true);
+  assert.equal(instance.parseButton.isLoading.value,false);
+  assert.equal(instance.parseError.value,'');
+  assert.equal(toasts.length,0);
+  assert.equal(instance.inputUrl.value,'https://source.example.test/cancel-target');
+
+  globalThis.fetch=async()=>Response.json(good({title:'After Cancel'}));
+  await instance.parseVideo();
+  assert.equal(store.resultData?.title,'After Cancel');
+
+  // Specific platform (currentPlatform !== 'all'): isLoading becomes true synchronously while lazy parseHelpers loads, and cancelParse + subsequent retry never deadlock active
+  const spec=harness('https://www.douyin.com/video/7400000000000000000');
+  spec.instance.selectPlatform('douyin');
+  let specFetchCalls=0;
+  globalThis.fetch=async()=>{specFetchCalls++;return Response.json(good({platform:'douyin',title:'Douyin After Cancel'}));};
+  const specPending=spec.instance.parseVideo();
+  assert.equal(spec.instance.parseButton.isLoading.value,true);
+  spec.instance.cancelParse();
+  await specPending;
+  assert.equal(specFetchCalls,0);
+  assert.equal(spec.instance.parseButton.isLoading.value,false);
+  assert.equal(spec.instance.parseError.value,'');
+  await spec.instance.parseVideo();
+  assert.equal(specFetchCalls,1);
+  assert.equal(spec.store.resultData?.title,'Douyin After Cancel');
+});
+
+test('YouTube mobile & desktop helper detection: mobile UA + helper succeeds identically to desktop; mobile UA without helper shows userscript/desktop prompt; desktop UA without helper keeps install guide',async()=>{
+  const origNavDesc=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const prevWin=globalThis.window;
+  try {
+    // 1. 手机 UA + 已检测到助手时不被拦截（与桌面走完全相同的 context -> player -> finalize 路径）
+    for (const mobileUa of [
+      'Mozilla/5.0 (Android 14; Mobile; rv:131.0) Gecko/131.0 Firefox/131.0',
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 EdgA/131.0.0.0',
+    ]) {
+      Object.defineProperty(globalThis,'navigator',{configurable:true,value:{userAgent:mobileUa}});
+      const bus=new EventTarget();
+      bus.setTimeout=setTimeout;
+      bus.clearTimeout=clearTimeout;
+      globalThis.window=bus;
+      const unmount=ytHelperCore.createUserscriptController({
+        eventTarget:bus,
+        version:ytHelperCore.YOUTUBE_HELPER_VERSION,
+        gmXmlhttpRequest(details){
+          if(details.url.includes('sw.js_data')){
+            details.onload({status:200,responseText:'["Cgt0ZXN0VmlzaXRvckRhdGFTdHJpbmc%3D"]'});
+            return;
+          }
+          details.onload({
+            status:200,
+            responseText:JSON.stringify({
+              playabilityStatus:{status:'OK'},
+              videoDetails:{title:'Mobile Firefox Helper Video',author:'Creator',lengthSeconds:'42'},
+              streamingData:{formats:[{itag:18,url:'https://rr1---sn-test.googlevideo.com/videoplayback?itag=18',mimeType:'video/mp4; codecs="avc1.42001E, mp4a.40.2"',width:640,height:360}],adaptiveFormats:[]},
+            }),
+          });
+        },
+      }).mount();
+      try {
+        const apiPaths=[];
+        globalThis.fetch=async(url,init)=>{
+          const u=new URL(url,'https://snap.example.test');
+          apiPaths.push(u.pathname);
+          if(u.pathname==='/api/youtube/context'){
+            return Response.json({schema_version:'1.0',code:'OK',data:{player_id:'22f02d3d',signature_timestamp:20760,client:{name:'TVHTML5',version:'7.20260728.13.00'}}});
+          }
+          if(u.pathname==='/api/youtube/finalize'){
+            const body=JSON.parse(init.body);
+            assert.equal(body.video_id,'I9JvDaciaFk');
+            return Response.json(good({platform:'youtube',title:body.title,items:[file('yt-1','https://rr1---sn-test.googlevideo.com/videoplayback?itag=18')]}));
+          }
+          throw new Error(`unexpected request: ${u.pathname}`);
+        };
+        const mobileReady=harness('https://www.youtube.com/watch?v=I9JvDaciaFk');
+        await mobileReady.instance.parseVideo();
+        assert.deepEqual(apiPaths,['/api/youtube/context','/api/youtube/finalize']);
+        assert.equal(mobileReady.instance.parseError.value,'');
+        assert.equal(mobileReady.store.resultData?.title,'Mobile Firefox Helper Video');
+        assert.equal(mobileReady.store.resultData?.extra?.youtube_helper?.status,'ready');
+      } finally {
+        unmount();
+      }
+    }
+
+    // 2. 手机 UA + 未检测到助手时把安装说明换成提示（不发 /api/parse，不弹桌面安装说明）
+    globalThis.window={setTimeout,clearTimeout};
+    let fetchCount=0;
+    globalThis.fetch=async()=>{fetchCount++;return Response.json(good());};
+    for(const ua of [
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    ]) {
+      Object.defineProperty(globalThis,'navigator',{configurable:true,value:{userAgent:ua}});
+      let pingCalls=0;
+      const zhStore=reactive({resultData:null,resultVersion:0,clearResult(){this.resultData=null;this.resultVersion++;},setResult(d){this.resultData=d;this.resultVersion++;}});
+      const zhToasts=[];
+      const zhInst=parser.useVideoParser({
+        videoStore:zhStore,
+        locale:ref('zh-CN'),
+        showToast:(...a)=>zhToasts.push(a),
+        pingHelper:async()=>{pingCalls++;return {installed:false,version:null,supported:false};},
+      });
+      zhInst.inputUrl.value='https://www.youtube.com/watch?v=I9JvDaciaFk';
+      await zhInst.parseVideo();
+      assert.equal(pingCalls,1,'must enter parseYouTubeWithHelper and ping helper before deciding');
+      assert.equal(fetchCount,0);
+      assert.equal(zhStore.resultData,null);
+      assert.match(zhInst.parseError.value,/用户脚本管理器/);
+      assert.match(zhInst.parseError.value,/电脑/);
+      assert.equal(zhToasts.at(-1)?.[1],'error');
+
+      const en=harness('https://youtu.be/I9JvDaciaFk','en');
+      await en.instance.parseVideo();
+      assert.equal(fetchCount,0);
+      assert.equal(en.store.resultData,null);
+      assert.match(en.instance.parseError.value,/userscript manager/i);
+    }
+
+    // 3. 桌面 UA + 未检测到助手时仍显示原安装说明
+    Object.defineProperty(globalThis,'navigator',{configurable:true,value:{userAgent:'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}});
+    globalThis.fetch=async()=>Response.json(good({platform:'youtube',items:[file('yt-1','https://rr1---sn-test.googlevideo.com/videoplayback?itag=18')]}));
+    const desktopMissing=harness('https://www.youtube.com/watch?v=I9JvDaciaFk');
+    await desktopMissing.instance.parseVideo();
+    assert.equal(desktopMissing.instance.parseError.value,'');
+    assert.equal(desktopMissing.store.resultData?.extra?.youtube_helper?.status,'missing');
+    assert.match(desktopMissing.store.resultData?.extra?.youtube_helper?.message || '',/请按说明安装并启用后重试/);
+    assert.doesNotMatch(JSON.stringify(desktopMissing.store.resultData),/googlevideo\.com/);
+
+    // 4. Non-YouTube links on mobile still parse normally
+    fetchCount=0;
+    Object.defineProperty(globalThis,'navigator',{configurable:true,value:{userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Mobile/15E148'}});
+    globalThis.fetch=async()=>{fetchCount++;return Response.json(good({platform:'douyin',title:'Mobile Douyin'}));};
+    const dy=harness('https://www.douyin.com/video/7400000000000000000');
+    await dy.instance.parseVideo();
+    assert.equal(fetchCount,1);
+    assert.equal(dy.store.resultData?.title,'Mobile Douyin');
+  } finally {
+    globalThis.window=prevWin;
+    if(origNavDesc) Object.defineProperty(globalThis,'navigator',origNavDesc);
+    else delete globalThis.navigator;
+  }
 });
 
 });

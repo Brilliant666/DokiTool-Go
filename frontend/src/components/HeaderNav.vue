@@ -94,7 +94,7 @@ const handleKeydown = (e) => {
           <div class="w-24 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
             <BrandWordmark />
           </div>
-          <div class="hidden xs:block">
+          <div class="hidden sm:block">
             <h1 class="theme-colors font-bold text-lg text-slate-800 dark:text-white tracking-tight">
               {{ getLabel(locale, 'brand') }}
             </h1>
