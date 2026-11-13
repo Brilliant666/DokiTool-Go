@@ -4,6 +4,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({ downloads: { type: Array, default: () => [] } })
 const emit = defineEmits(['cancel', 'retry', 'refresh', 'query', 'handoff', 'clear-completed'])
+const isDebug = () => {
+  try { if (new URLSearchParams(window.location?.search).get('debug') === '1') return true } catch {}
+  try { return window.localStorage?.getItem('dokitool:debug') === '1' } catch { return false }
+}
 const formatBytes = (bytes) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -139,7 +143,7 @@ onBeforeUnmount(stopCollapseTimer)
                 </span>
               </div>
               <div
-                v-if="hostOf(item)"
+                v-if="isDebug() && hostOf(item)"
                 data-download-host
                 class="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500 truncate"
                 :title="hostOf(item)"
@@ -228,7 +232,7 @@ onBeforeUnmount(stopCollapseTimer)
             <div v-if="item.status === 'handed-off'" class="text-xs text-slate-500 mt-2">
               请在浏览器下载列表确认进度和结果，本站无法追踪。
             </div>
-            <div v-if="item.timing" class="mt-2 text-xs">
+            <div v-if="isDebug() && item.timing" class="mt-2 text-xs">
               <button type="button" @click="toggleTiming(item.id)" :aria-expanded="timingId === item.id"
                 class="text-indigo-600 dark:text-indigo-400 hover:underline">分段计时</button>
               <template v-if="timingId === item.id">

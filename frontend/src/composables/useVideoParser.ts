@@ -3,33 +3,35 @@ import { useButtonControl } from "./useButtonControl";
 import { apiConfig } from "../services/apiConfig";
 import { secureApiClient } from "../services/secureApiClient";
 import { withTbvideoItems } from "../services/tbvideo";
-import { validateMediaEnvelope, readyItem, readyVariant } from "../utils/mediaContract";
+import { validateMediaEnvelope, readyItem } from "../utils/mediaContract";
 import {
-  MIN_YOUTUBE_HELPER_VERSION,
-  YOUTUBE_HELPER_SCRIPT_URL,
   extractYouTubeVideoId,
   pingYouTubeHelper,
-  requestYouTubePlayerViaHelper,
-  type YouTubeHelperContextResponse,
 } from "../utils/youtubeHelperCore";
 import type { useVideoStore } from "../stores/video";
 import type {
   MediaItem,
   ToastType,
   UnifiedMedia,
-  YouTubeHelperState,
 } from "../types/media";
 
 export class HttpStatusError extends Error {
   status: number;
   retry_after_seconds?: number;
   rateLimitRetried?: boolean;
-  constructor(message: string, status: number, retryAfterSeconds?: number) {
+  code?: string;
+  constructor(
+    message: string,
+    status: number,
+    retryAfterSeconds?: number,
+    code?: string,
+  ) {
     super(message);
     this.status = status;
     if (retryAfterSeconds! > 0 && Number.isFinite(retryAfterSeconds)) {
       this.retry_after_seconds = Math.ceil(retryAfterSeconds!);
     }
+    this.code = code;
   }
 }
 
@@ -115,154 +117,13 @@ export async function fetchJSON(
         (payload as any)?.error?.message || `解析失败（HTTP ${response.status}）`,
         response.status,
         parseRetryAfterSeconds(response, payload),
+        (payload as any)?.error?.code || (payload as any)?.code,
       );
     return payload;
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", abort);
   }
-}
-
-function isGooglevideoUrl(rawUrl: string): boolean {
-  try {
-    const host = new URL(rawUrl).hostname.toLowerCase();
-    return host === "googlevideo.com" || host.endsWith(".googlevideo.com");
-  } catch {
-    return false;
-  }
-}
-
-export function redactServerBoundYouTubeMedia(
-  data: UnifiedMedia,
-  helperState: YouTubeHelperState,
-  videoId: string,
-): UnifiedMedia {
-  const safeBase = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
-  let counter = 0;
-  const nextPlaceholder = (tag: string) =>
-    `${safeBase}&helper_required=${encodeURIComponent(tag)}_${++counter}`;
-
-  const items: MediaItem[] = data.items.map((item) => {
-    if (!readyItem(item)) return item;
-    const variants = item.variants.map((variant) => {
-      if (!readyVariant(variant) || variant.delivery.kind !== "file") {
-        return variant;
-      }
-      const sources = variant.delivery.sources.map((source) => {
-        const redactedUrl = isGooglevideoUrl(source.url)
-          ? nextPlaceholder(source.id || variant.id)
-          : source.url;
-        const { fallback_urls: _drop, ...rest } = source;
-        return {
-          ...rest,
-          url: redactedUrl,
-        };
-      });
-      return {
-        ...variant,
-        delivery: {
-          ...variant.delivery,
-          sources,
-        },
-      };
-    });
-
-    let nextDefault = item.default;
-    if (nextDefault) {
-      const matchedVariant = variants.find(
-        (v) => v.id === nextDefault!.variant_id,
-      );
-      if (
-        readyVariant(matchedVariant) &&
-        matchedVariant.delivery.kind === "file"
-      ) {
-        const matchedSource = nextDefault.source_id
-          ? matchedVariant.delivery.sources.find(
-              (s) => s.id === nextDefault!.source_id,
-            )
-          : matchedVariant.delivery.sources[0];
-        if (matchedSource) {
-          nextDefault = {
-            ...nextDefault,
-            url: matchedSource.url,
-          };
-        }
-      }
-    }
-
-    return {
-      ...item,
-      variants,
-      default: nextDefault,
-    };
-  });
-
-  const attachments = data.attachments?.map((att) => {
-    if (att.resource.delivery.kind !== "file") return att;
-    const sources = att.resource.delivery.sources.map((source) => {
-      const redactedUrl = isGooglevideoUrl(source.url)
-        ? nextPlaceholder(source.id || att.id)
-        : source.url;
-      const { fallback_urls: _drop, ...rest } = source;
-      return {
-        ...rest,
-        url: redactedUrl,
-      };
-    });
-    return {
-      ...att,
-      resource: {
-        ...att.resource,
-        delivery: {
-          ...att.resource.delivery,
-          sources,
-        },
-      },
-    };
-  });
-
-  return {
-    ...data,
-    items,
-    ...(attachments ? { attachments } : {}),
-    extra: {
-      ...(data.extra || {}),
-      youtube_helper: helperState,
-    },
-  };
-}
-
-function buildFallbackYouTubeMedia(
-  videoId: string,
-  helperState: YouTubeHelperState,
-): UnifiedMedia {
-  return {
-    platform: "youtube",
-    content_id: videoId,
-    source_url: `https://www.youtube.com/watch?v=${videoId}`,
-    title: `YouTube (${videoId})`,
-    items: [
-      {
-        id: `video-${videoId}`,
-        type: "video",
-        state: "unavailable",
-        default: null,
-        default_unavailable_reason: "unavailable",
-        error: {
-          code:
-            helperState.status === "login_required"
-              ? "LOGIN_REQUIRED"
-              : "HELPER_REQUIRED",
-          message:
-            helperState.message ||
-            "需要安装并启用 DokiTool YouTube 助手脚本后方可解析下载",
-        },
-      },
-    ],
-    extra: {
-      youtube_helper: helperState,
-    },
-  };
 }
 
 export const YT_HELPER_INSTALL_WAIT_KEY = "dokitool.yt_helper_install_wait";
@@ -408,152 +269,27 @@ export function useVideoParser(options: {
     run: number,
     controller: AbortController,
   ): Promise<void> {
-    const ping = await pingHelper();
+    const { runYouTubeHelperParse } = await import("../utils/parseHelpers");
     if (run !== generation || controller.signal.aborted) return;
-
-    if (!ping.installed || !ping.supported) {
-      const helperState: YouTubeHelperState = {
-        status: ping.installed ? "outdated" : "missing",
-        version: ping.version,
-        min_version: MIN_YOUTUBE_HELPER_VERSION,
-        script_url: YOUTUBE_HELPER_SCRIPT_URL,
-        message: ping.installed
-          ? `当前已安装的 YouTube 助手版本（v${ping.version}）低于最低要求（v${MIN_YOUTUBE_HELPER_VERSION}），请更新脚本后重试`
-          : "当前未检测到 YouTube 下载助手脚本，请按说明安装并启用后重试",
-      };
-      let media: UnifiedMedia;
-      try {
-        const parsed = await requestStandardParse(url, controller.signal);
-        media = redactServerBoundYouTubeMedia(parsed, helperState, videoId);
-      } catch {
-        if (run !== generation || controller.signal.aborted) return;
-        media = buildFallbackYouTubeMedia(videoId, helperState);
-      }
-      if (run === generation && !controller.signal.aborted) {
-        videoStore.setResult(media);
-      }
-      return;
-    }
-
-    clearHelperWaitState();
-    needsManualHelperRefresh.value = false;
-
-    let contextData: YouTubeHelperContextResponse;
-    try {
-      const contextEnvelope = (await fetchJSON(
-        `${apiConfig.baseUrl}/api/youtube/context?schema_version=1.0`,
-        controller.signal,
-      )) as {
-        schema_version?: string;
-        code?: string;
-        data?: YouTubeHelperContextResponse;
-      };
-      if (
-        !contextEnvelope ||
-        contextEnvelope.schema_version !== "1.0" ||
-        contextEnvelope.code !== "OK" ||
-        !contextEnvelope.data?.player_id
-      ) {
-        throw new Error("获取 YouTube 解析上下文失败");
-      }
-      contextData = contextEnvelope.data;
-    } catch (error) {
-      if (error instanceof HttpStatusError && error.status === 404) {
-        const data = await requestStandardParse(url, controller.signal);
-        if (run === generation && !controller.signal.aborted) {
-          videoStore.setResult(data);
-        }
-        return;
-      }
-      throw error;
-    }
-
-    if (run !== generation || controller.signal.aborted) return;
-
-    const playerResult = await requestYouTubePlayerViaHelper(
-      {
-        video_id: videoId,
-        signature_timestamp: contextData.signature_timestamp,
-        client: contextData.client,
+    await runYouTubeHelperParse({
+      videoId,
+      locale: options.locale.value,
+      signal: controller.signal,
+      isCurrent: () => run === generation && !controller.signal.aborted,
+      pingHelper,
+      requestStandardParse: () => requestStandardParse(url, controller.signal),
+      fetchJSON,
+      baseUrl: apiConfig.baseUrl,
+      onHelperReady: () => {
+        clearHelperWaitState();
+        needsManualHelperRefresh.value = false;
       },
-      { signal: controller.signal },
-    );
-
-    if (run !== generation || controller.signal.aborted) return;
-
-    const playStatus = playerResult?.playabilityStatus?.status || "ERROR";
-    if (playStatus === "LOGIN_REQUIRED") {
-      const loginMsg = "当前网络出口被 YouTube 要求验证，请更换节点后重试";
-      const helperState: YouTubeHelperState = {
-        status: "login_required",
-        version: ping.version,
-        min_version: MIN_YOUTUBE_HELPER_VERSION,
-        script_url: YOUTUBE_HELPER_SCRIPT_URL,
-        message: loginMsg,
-      };
-      parseError.value = loginMsg;
-      videoStore.setResult(buildFallbackYouTubeMedia(videoId, helperState));
-      showToast(loginMsg, "error", 5000);
-      return;
-    }
-    if (playStatus !== "OK") {
-      throw new Error(
-        playerResult?.playabilityStatus?.reason ||
-          `YouTube 返回不可播放状态（${playStatus}）`,
-      );
-    }
-
-    const vd = playerResult.videoDetails;
-    const finalizeBody: Record<string, unknown> = {
-      video_id: videoId,
-      player_id: contextData.player_id,
-      formats: playerResult.streamingData?.formats || [],
-      adaptiveFormats: playerResult.streamingData?.adaptiveFormats || [],
-    };
-    if (typeof vd?.title === "string" && vd.title.trim()) {
-      finalizeBody.title = vd.title.trim();
-    }
-    if (typeof vd?.author === "string" && vd.author.trim()) {
-      finalizeBody.author = vd.author.trim();
-    }
-    if (
-      typeof vd?.lengthSeconds === "number" &&
-      Number.isInteger(vd.lengthSeconds) &&
-      vd.lengthSeconds > 0
-    ) {
-      finalizeBody.duration_seconds = vd.lengthSeconds;
-    }
-    if (typeof vd?.thumbnail === "string" && vd.thumbnail.trim()) {
-      finalizeBody.thumbnail = vd.thumbnail.trim();
-    }
-
-    const finalizePayload = await fetchJSON(
-      `${apiConfig.baseUrl}/api/youtube/finalize?schema_version=1.0`,
-      controller.signal,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(finalizeBody),
+      setResult: (media) => videoStore.setResult(media),
+      setError: (msg, duration) => {
+        parseError.value = msg;
+        showToast(msg, "error", duration);
       },
-    );
-
-    const finalized = withTbvideoItems(validateMediaEnvelope(finalizePayload));
-    const readyState: YouTubeHelperState = {
-      status: "ready",
-      version: ping.version,
-      min_version: MIN_YOUTUBE_HELPER_VERSION,
-      script_url: YOUTUBE_HELPER_SCRIPT_URL,
-    };
-    const data: UnifiedMedia = {
-      ...finalized,
-      extra: {
-        ...(finalized.extra || {}),
-        youtube_helper: readyState,
-      },
-    };
-    if (run === generation && !controller.signal.aborted) {
-      videoStore.setResult(data);
-    }
+    });
   }
 
   async function parseVideo() {
@@ -574,6 +310,10 @@ export function useVideoParser(options: {
       return;
     }
     if (url !== inputUrl.value) inputUrl.value = url;
+    const isEn = options.locale.value === "en";
+    const mismatchMsg = isEn
+      ? 'Link does not match the selected platform. Please switch back to "All".'
+      : "链接与所选平台不匹配，请切回「所有平台」再试";
     const run = ++generation,
       controller = new AbortController();
     active = controller;
@@ -581,6 +321,17 @@ export function useVideoParser(options: {
     parseError.value = "";
     parseButton.setLoading(true);
     try {
+      if (currentPlatform.value !== "all") {
+        const { detectUrlPlatform } = await import("../utils/parseHelpers");
+        if (run !== generation || controller.signal.aborted) return;
+        const detected = detectUrlPlatform(url);
+        if (detected && detected !== currentPlatform.value) {
+          invalidate();
+          parseError.value = mismatchMsg;
+          showToast(mismatchMsg, "error");
+          return;
+        }
+      }
       const youtubeVideoId =
         currentPlatform.value === "all" || currentPlatform.value === "youtube"
           ? extractYouTubeVideoId(url)
@@ -594,7 +345,16 @@ export function useVideoParser(options: {
       }
     } catch (error) {
       if (run !== generation || controller.signal.aborted) return;
-      parseError.value = error instanceof Error ? error.message : "解析失败";
+      const rawMsg = error instanceof Error ? error.message : "解析失败";
+      const isMismatch =
+        currentPlatform.value !== "all" &&
+        ((error instanceof HttpStatusError &&
+          error.code === "PLATFORM_MISMATCH") ||
+          /对应平台|平台不匹配|platform mismatch/i.test(rawMsg));
+      parseError.value =
+        isMismatch && (isEn || !rawMsg.includes("所有平台"))
+          ? mismatchMsg
+          : rawMsg;
       showToast(parseError.value, "error");
     } finally {
       if (run === generation) {
@@ -602,6 +362,9 @@ export function useVideoParser(options: {
         parseButton.reset();
       }
     }
+  }
+  function cancelParse(): void {
+    if (active) invalidate();
   }
   async function resolveItem(
     item: MediaItem,
@@ -742,6 +505,7 @@ export function useVideoParser(options: {
     needsManualHelperRefresh,
     parseButton,
     parseVideo,
+    cancelParse,
     resolveItem,
     markWaitingForYouTubeHelperInstall,
     handleYouTubeHelperTabReturn,

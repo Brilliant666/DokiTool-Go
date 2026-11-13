@@ -34,12 +34,13 @@ const textOf = node => [node.text || '', ...(node.children || []).map(textOf)].j
 const descendants = (node, predicate) => [...(predicate(node) ? [node] : []), ...(node.children || []).flatMap(child => descendants(child, predicate))];
 const visible = node => !node || (![true, 'hidden', ''].includes(node.props?.hidden) && node.style?.display !== 'none' && visible(node.parent));
 
-async function mount(t, downloads = [], { storageBlocked = false, preference } = {}) {
+async function mount(t, downloads = [], { storageBlocked = false, preference, search = '', debug = false } = {}) {
   const saved = { window: Object.getOwnPropertyDescriptor(globalThis, 'window'), document: Object.getOwnPropertyDescriptor(globalThis, 'document') };
   const values = new Map();
   if (preference) values.set('dokitool.download-panel', preference);
+  if (debug) values.set('dokitool:debug', '1');
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
-  const browser = {};
+  const browser = { location: { search } };
   for (const key of ['sessionStorage', 'localStorage']) Object.defineProperty(browser, key, { get() {
     if (storageBlocked) throw new DOMException('Storage blocked', 'SecurityError');
     return storage;
@@ -126,7 +127,7 @@ test('completed stream timing exposes byte intervals and waits without source cr
       { from: 1000000, to: 1000000, ms: 2000, readMs: 0, demandMs: 2000 },
     ] },
   })
-  const view = await mount(t, [finished, task('legacy', 'completed')], { preference: 'expanded' })
+  const view = await mount(t, [finished, task('legacy', 'completed')], { preference: 'expanded', debug: true })
   assert.equal(view.button('分段计时', view.row('legacy')), undefined)
   await view.click(view.button('分段计时', view.row('one')))
   const [{ props: { value: report } }] = descendants(view.row('one'), node => node.type === 'textarea')
@@ -389,7 +390,7 @@ test('download card displays actual CDN hostname without leaking path or signed 
     task('active-route', 'downloading', {
       url: 'https://v26-cold.douyinvod.com/ab9b7783/video/tos/cn/tos-cn-ve-15/oM0f/?x-expires=1800000000&sig=secretToken123',
     }),
-  ]);
+  ], { debug: true });
   const rowText = textOf(view.row('active-route'));
   assert.ok(rowText.includes('v26-cold.douyinvod.com'));
   assert.equal(rowText.includes('secretToken123'), false);
@@ -403,4 +404,30 @@ test('download card displays actual CDN hostname without leaking path or signed 
   const settledText = textOf(view.row('active-route'));
   assert.ok(settledText.includes('v13-cold.douyinvod.com'));
   assert.equal(settledText.includes('anotherSecret'), false);
+});
+
+test('debug switch hides data-download-host and 分段计时 by default and shows them only with ?debug=1 or dokitool:debug=1', async t => {
+  const sample = task('dbg', 'completed', {
+    url: 'https://v26-cold.douyinvod.com/video/sample.mp4?sig=secret',
+    workerBuild: 'worker-a',
+    timing: { firstBlockMs: 120, windows: [{ from: 0, to: 1024, ms: 50, readMs: 40, demandMs: 10 }] },
+  });
+
+  const hiddenByDefault = await mount(t, [sample], { preference: 'expanded' });
+  assert.equal(descendants(hiddenByDefault.row('dbg'), n => n.props['data-download-host'] !== undefined).length, 0);
+  assert.equal(textOf(hiddenByDefault.row('dbg')).includes('v26-cold.douyinvod.com'), false);
+  assert.equal(hiddenByDefault.button('分段计时', hiddenByDefault.row('dbg')), undefined);
+  hiddenByDefault.stop();
+
+  const shownByQuery = await mount(t, [sample], { search: '?debug=1', storageBlocked: true });
+  if (!shownByQuery.expanded()) await shownByQuery.click(shownByQuery.toggle());
+  assert.equal(descendants(shownByQuery.row('dbg'), n => n.props['data-download-host'] !== undefined).length, 1);
+  assert.equal(textOf(shownByQuery.row('dbg')).includes('v26-cold.douyinvod.com'), true);
+  assert.ok(shownByQuery.button('分段计时', shownByQuery.row('dbg')));
+  shownByQuery.stop();
+
+  const shownByStorage = await mount(t, [sample], { preference: 'expanded', debug: true });
+  assert.equal(descendants(shownByStorage.row('dbg'), n => n.props['data-download-host'] !== undefined).length, 1);
+  assert.ok(shownByStorage.button('分段计时', shownByStorage.row('dbg')));
+  shownByStorage.stop();
 });

@@ -328,7 +328,14 @@ test('compact quality cards preserve the server source, explicit versions and ac
     assert.equal(view.choices().length, 4, 'only downloadable files participate in compact display cards');
     assert.equal(view.selection.currentSelection.value, null);
     assert.equal(view.selection.currentTarget.value.url, url('hevc-b'));
-    assert.match(view.text(), /原始入口/); assert.match(view.text(), /原始资源待解析/); assert.match(view.text(), /暂不支持/);
+    assert.match(view.text(), /原画/);
+    assert.doesNotMatch(view.text(), /原始入口/);
+    assert.doesNotMatch(view.text(), /条线路/);
+    assert.match(view.text(), /原始资源待解析/); assert.match(view.text(), /暂不支持/);
+    view.state.value = { ...view.state.value, locale: 'en' }; await nextTick();
+    assert.match(view.text(), /Original/);
+    assert.doesNotMatch(view.text(), /条线路/);
+    view.state.value = { ...view.state.value, locale: 'zh-CN' }; await nextTick();
     assert.equal(view.elements('rs-other-version').length, 2);
     await view.click('全部可下载版本 (5)');
     assert.equal(view.choices().length, 5);
@@ -385,5 +392,82 @@ test('credential alternatives stay within the chosen source and precede mirror r
   for (const fallback of [[], [url('b')], [url('b-renewed'),url('b-renewed')], [url('1'),url('2'),url('3')], ['https://other.test/b.mp4'], ['http://media.example.test/b.mp4'], ['https://user:pass@media.example.test/b.mp4']]) {
     value.variants[0].delivery.sources[1].fallback_urls = fallback;
     assert.equal(contract.getDownloadTarget(value, {variant_id:'hd',source_id:'b'}).kind, 'invalid');
+  }
+});
+
+test('Weibo internal quality keys map to readable labels and Instagram width-only image shows 1080w', async () => {
+  assert.equal(labels.variantLabel({ ...variant('wb-hd'), label: 'mp4_hd' }, 'zh-CN'), '高清');
+  assert.equal(labels.variantLabel({ ...variant('wb-hd'), label: 'mp4_hd' }, 'en'), 'HD');
+  assert.equal(labels.variantLabel({ ...variant('wb-hd-url'), label: 'mp4_hd_url' }, 'zh-CN'), '高清');
+  assert.equal(labels.variantLabel({ ...variant('wb-stream-hd'), label: 'stream_url_hd' }, 'zh-CN'), '高清');
+  assert.equal(labels.variantLabel({ ...variant('wb-hevc-hd'), label: 'hevc_mp4_hd' }, 'zh-CN'), '高清');
+  assert.equal(labels.variantLabel({ ...variant('wb-sd'), label: 'mp4_sd_url' }, 'zh-CN'), '标清');
+  assert.equal(labels.variantLabel({ ...variant('wb-sd'), label: 'mp4_sd_url' }, 'en'), 'SD');
+  assert.equal(labels.variantLabel({ ...variant('wb-stream'), label: 'stream_url' }, 'zh-CN'), '标清');
+  assert.equal(labels.variantLabel({ ...variant('wb-ld'), label: 'mp4_ld' }, 'zh-CN'), '流畅');
+  assert.equal(labels.variantLabel({ ...variant('wb-ld'), label: 'mp4_ld' }, 'en'), 'LD');
+  assert.equal(labels.variantLabel({ ...variant('wb-720'), label: 'mp4_720p_mp4' }, 'zh-CN'), '720p');
+  assert.equal(labels.variantLabel({ ...variant('wb-1080'), label: 'mp4_1080p_mp4' }, 'zh-CN'), '1080p');
+  assert.equal(labels.variantLabel({ ...variant('wb-2k'), label: 'mp4_2k_mp4' }, 'zh-CN'), '2K');
+  assert.equal(labels.variantLabel({ ...variant('wb-4k'), label: 'mp4_4k_mp4' }, 'zh-CN'), '4K');
+
+  const igVariant = variant('image-1080w', ['ig-img'], { width: 1080 });
+  assert.equal(labels.variantLabel(igVariant, 'zh-CN'), '1080w');
+  assert.equal(labels.variantLabel(igVariant, 'en'), '1080w');
+  assert.equal(labels.variantLabel({ ...igVariant, metadata: { width: 1080, height: 0, evidence: 'upstream' } }, 'zh-CN'), '1080w');
+
+  const igItem = {
+    id: 'image-1',
+    type: 'image',
+    variants: [igVariant],
+    default: { variant_id: 'image-1080w', source_id: 'ig-img', url: url('ig-img') },
+  };
+  const view = await mount({ platform: 'instagram', items: [igItem] });
+  try {
+    assert.match(view.text(), /1080w/);
+    assert.doesNotMatch(view.text(), /画质未知/);
+  } finally {
+    view.app.unmount();
+  }
+});
+
+test('failed cover, video poster, avatar, and gallery images hide broken visuals without server relay', async () => {
+  const brokenCover = 'https://wx1.sinaimg.cn/large/broken-cover.jpg';
+  const brokenAvatar = 'https://wx3.sinaimg.cn/large/broken-avatar.jpg';
+  const brokenGallery = 'https://wx2.sinaimg.cn/large/broken-gallery.jpg';
+  const vidItem = {
+    ...item([variant('hd', ['v1'])]),
+    cover: { url: brokenCover },
+  };
+  const imgItem = {
+    id: 'img-1',
+    type: 'image',
+    variants: [{ id: 'v-img', delivery: { kind: 'file', sources: [{ id: 's-img', url: brokenGallery }] } }],
+    default: { variant_id: 'v-img', source_id: 's-img', url: brokenGallery },
+  };
+  const view = await mount({
+    platform: 'weibo',
+    author: { name: '测试博主', avatar: { url: brokenAvatar } },
+    default_item_id: vidItem.id,
+    items: [vidItem, imgItem],
+  });
+  try {
+    assert.equal(view.player().props.poster, brokenCover);
+    assert.equal(view.elements('rs-author-avatar').length, 1);
+    assert.equal(view.elements('rs-gallery-img').length, 1);
+
+    const probes = view.elements('rs-poster-probe');
+    assert.ok(probes.length >= 1, 'poster probe img should watch cover load errors');
+    probes[0].props.onError();
+    view.elements('rs-author-avatar')[0].props.onError();
+    view.elements('rs-gallery-img')[0].props.onError();
+    await nextTick();
+
+    assert.equal(view.player().props.poster, undefined);
+    assert.equal(view.elements('rs-author-avatar').length, 0);
+    assert.equal(view.elements('rs-author-avatar-fb').length, 1);
+    assert.equal(view.elements('rs-gallery-img').length, 0);
+  } finally {
+    view.app.unmount();
   }
 });

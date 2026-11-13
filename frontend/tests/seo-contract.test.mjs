@@ -88,3 +88,11 @@ test('Caddy routes crawler and share files directly, before the SPA fallback', a
     assert.ok(blocks[0].index < caddy.indexOf('try_files {path} /index.html'));
   }
 });
+
+test('public favicon.ico exists with a valid ICO header and non-empty icon directory', async () => {
+  const ico = await readFile(new URL('../public/favicon.ico', import.meta.url));
+  assert.ok(ico.byteLength >= 70, 'favicon.ico must contain header, directory entry, and image payload');
+  assert.equal(ico.readUInt16LE(0), 0, 'ICO reserved field must be 0');
+  assert.equal(ico.readUInt16LE(2), 1, 'ICO type field must be 1');
+  assert.ok(ico.readUInt16LE(4) >= 1, 'ICO must declare at least one icon image');
+});

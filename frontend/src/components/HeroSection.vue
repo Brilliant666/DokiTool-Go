@@ -13,7 +13,7 @@ const props = defineProps({
   currentPlatform: String
 })
 
-const emit = defineEmits(['update:inputUrl', 'parse', 'select-platform'])
+const emit = defineEmits(['update:inputUrl', 'parse', 'cancel', 'select-platform'])
 
 const content = {
   'zh-CN': {
@@ -28,7 +28,7 @@ const content = {
     inputLabel: '视频链接',
     placeholder: '粘贴分享链接或含链接的文本…',
     button: '开始解析',
-    loading: '正在解析…',
+    cancel: '取消解析',
     error: '解析失败',
     errorTitle: '解析没有完成',
     errorHint: '请检查作品是否公开可访问，或切换平台后再试一次。',
@@ -50,7 +50,7 @@ const content = {
     inputLabel: 'Video URL',
     placeholder: 'Paste a share link or text containing a link…',
     button: 'Start Parsing',
-    loading: 'Parsing…',
+    cancel: 'Cancel',
     error: 'Failed',
     errorTitle: 'Parsing did not finish',
     errorHint: 'Check that the post is public, or switch platform and try again.',
@@ -153,27 +153,30 @@ const selectPlatform = (tab) => {
               :disabled="isLoading"
             />
             <button
-              @click="emit('parse')"
-              :disabled="!isReady || isLoading"
-              :aria-label="!isReady ? (locale === 'en' ? 'Preparing…' : '正在准备…') : getContent(locale).button"
+              @click="isLoading ? emit('cancel') : emit('parse')"
+              :disabled="!isReady"
+              :data-cancel-parse="isLoading ? 'true' : undefined"
+              :aria-label="!isReady ? (locale === 'en' ? 'Preparing…' : '正在准备…') : isLoading ? getContent(locale).cancel : getContent(locale).button"
               class="m-1 sm:m-1.5 px-5 sm:px-7 py-2.5 sm:py-3 rounded-xl font-semibold flex items-center gap-2 whitespace-nowrap enterprise-btn"
-              :class="isLoading
+              :class="!isReady
                 ? 'bg-slate-400 dark:bg-slate-500 cursor-not-allowed opacity-60'
-                : isError
-                  ? 'bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-800 text-white shadow-lg shadow-rose-500/20 dark:shadow-rose-900/30 border border-rose-500/30 dark:border-rose-600/30 error-state-btn'
-                  : 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25 dark:shadow-indigo-900/40 border border-indigo-500/40 dark:border-indigo-500/30 parse-state-btn'"
+                : isLoading
+                  ? 'bg-slate-600 hover:bg-slate-700 text-white'
+                  : isError
+                    ? 'bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-800 text-white shadow-lg shadow-rose-500/20 dark:shadow-rose-900/30 border border-rose-500/30 dark:border-rose-600/30 error-state-btn'
+                    : 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25 dark:shadow-indigo-900/40 border border-indigo-500/40 dark:border-indigo-500/30 parse-state-btn'"
             >
               <AppIcon :class="['fas text-xs sm:text-sm transition-transform duration-300', isLoading ? 'fa-spinner fa-spin' : isError ? 'fa-exclamation-circle' : 'fa-bolt']"></AppIcon>
               <span
                 class="parse-btn-label parse-btn-label--desktop text-sm"
                 :data-reserve="locale === 'en' ? 'Preparing…' : '正在准备…'"
                 :data-reserve-alt="getContent(locale).button"
-              ><span>{{ !isReady ? (locale === 'en' ? 'Preparing…' : '正在准备…') : isLoading ? getContent(locale).loading : isError ? getContent(locale).error : getContent(locale).button }}</span></span>
+              ><span>{{ !isReady ? (locale === 'en' ? 'Preparing…' : '正在准备…') : isLoading ? getContent(locale).cancel : isError ? getContent(locale).error : getContent(locale).button }}</span></span>
               <span
                 class="parse-btn-label parse-btn-label--mobile text-sm"
                 data-reserve="..."
                 data-reserve-alt=">"
-              ><span>{{ !isReady || isLoading ? '...' : isError ? '!' : '>' }}</span></span>
+              ><span>{{ !isReady ? '...' : isLoading ? '×' : isError ? '!' : '>' }}</span></span>
             </button>
           </div>
         </div>

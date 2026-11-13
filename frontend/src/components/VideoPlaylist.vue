@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppIcon from "./AppIcon.vue";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { sourceUrl, readyItem } from "../utils/mediaContract";
 import { variantLabel } from "../utils/mediaSources";
 import { apiConfig } from "../services/apiConfig";
@@ -78,9 +78,11 @@ const handleKeydown = (e: KeyboardEvent, index: number): void => {
   }
 };
 
-const onCoverError = (e: Event): void => {
-  const target = e.target as HTMLImageElement | null;
-  if (target) target.style.display = "none";
+const brokenCovers = ref<Record<string, boolean>>({});
+const markCoverBroken = (raw: string): void => {
+  if (raw && !brokenCovers.value[raw]) {
+    brokenCovers.value = { ...brokenCovers.value, [raw]: true };
+  }
 };
 </script>
 
@@ -159,11 +161,12 @@ const onCoverError = (e: Event): void => {
 
         <div class="vlib-card-cover">
           <img
-            v-if="v.cover"
+            v-if="cover(v) && !brokenCovers[cover(v)]"
             :src="cover(v)"
+            referrerpolicy="no-referrer"
             class="vlib-card-img"
             :alt="v.title || `P${idx + 1}`"
-            @error="onCoverError"
+            @error="markCoverBroken(cover(v))"
           />
           <div v-else class="vlib-card-cover-fb">
             <AppIcon class="fas fa-film"></AppIcon>

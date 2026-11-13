@@ -93,6 +93,9 @@ export const POPULAR_PLATFORMS: ReadonlyArray<{
   { id: "facebook", name: "Facebook", icon: "facebook" },
 ];
 
+export const platformEnName = (id: string, name = ""): string =>
+  /^[a-z0-9 ._-]+$/i.test(name) ? name : id ? id[0].toUpperCase() + id.slice(1) : name;
+
 export interface PlatformTabItem {
   key: string;
   label: string;
@@ -111,7 +114,7 @@ export function platformTabs(locale: string): PlatformTabItem[] {
     },
     ...POPULAR_PLATFORMS.map((p) => ({
       key: p.id,
-      label: locale === "en" ? p.id : p.name,
+      label: locale === "en" ? platformEnName(p.id, p.name) : p.name,
       icon: tabIcons[p.icon] || "fa-globe",
       disabled: !enabledIds.has(p.id),
     })),
