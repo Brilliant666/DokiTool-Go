@@ -124,11 +124,12 @@
 
 ---
 
-## 四、前端构建期环境变量
+## 四、前端构建与开发期环境变量
 
-源码定义：`frontend/src/services/apiConfig.ts`
+源码定义：`frontend/src/services/apiConfig.ts`、`frontend/vite.config.js`
 
 | 名称 | 作用 | 是否敏感 |
 | --- | --- | --- |
 | `VITE_API_MODE` | 前端构建期选择接口路由模式（同源兼容路由模式或独立跨域安全路由模式） | 否 |
 | `VITE_API_BASE_URL` | 前端构建期指定后端 API 基础源站地址（同源部署时留空） | 否 |
+| `DEV_API_TARGET` | 本地前端开发服务器将同源接口请求代理转发至本地后端实例的目标源站地址 | 否 |

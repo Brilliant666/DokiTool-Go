@@ -120,8 +120,8 @@ variant 的 `state:"deferred"` 是待解析能力预留，只有 ID、可选标�
 | 业务错误码 | HTTP 状态码 | 触发场景与契约语义 |
 | --- | --- | --- |
 | `INVALID_INPUT` | `400` / `405` / `409` / `410` | 缺少或非法的 `url` / `item_id`；链接与显式指定的 `platform` 不匹配；缺少或不匹配的 `schema_version`（`409`）；不支持的 HTTP 方法（`405`）；已退役旧路径（`410`）；以及特定需先展开的短链提示（如 Facebook `fb.watch` 短链需登录展开，接口本地直接返回 `400 INVALID_INPUT` 提示先在浏览器打开后复制 `facebook.com` 完整视频链接，抖音 `mix_id` 合集链接、小红书缺失 `xsec_token` 同属此类）。 |
-| `UNSUPPORTED_PLATFORM` | `400` | 输入包含合法的 `http(s)` 公开域名链接，但该域名不属于任何当前已启用的平台（例如未接入站点，或 X 的 `t.co` 短链），或查询参数显式传入了未注册的 `platform` ID。 |
-| `UPSTREAM_BLOCKED` | `403` | 上游平台拒绝匿名公开读取或要求登录验证：<br>• **X 受限推文（`TweetTombstone`）**：年龄限制、敏感内容或需登录查看的推文在默认配置（`-x-tombstone-fallback=off`）下返回 `403 UPSTREAM_BLOCKED`；若服务端显式启用 `-x-tombstone-fallback=fxtwitter`，则在遇到 `TweetTombstone` 时向 `api.fxtwitter.com` 查询公开元数据，仍被拒绝或不可读时保持失败关闭。<br>• **Facebook / Instagram 登录与权限限制**：Facebook 私密/年龄受限视频、Instagram Stories（`/stories/`）、私密帖及跳转登录页的 `instagr.am` 短链均返回 `403 UPSTREAM_BLOCKED`。 |
+| `UNSUPPORTED_PLATFORM` | `400` | 输入包含合法的 `http(s)` 公开域名链接，但该域名不属于任何当前已启用的平台（例如未接入站点，或 X 的 `t.co`、Instagram 的 `instagr.am` 短链），或查询参数显式传入了未注册的 `platform` ID。 |
+| `UPSTREAM_BLOCKED` | `403` | 上游平台拒绝匿名公开读取或要求登录验证：<br>• **X 受限推文（`TweetTombstone`）**：年龄限制、敏感内容或需登录查看的推文在默认配置（`-x-tombstone-fallback=off`）下返回 `403 UPSTREAM_BLOCKED`；若服务端显式启用 `-x-tombstone-fallback=fxtwitter`，则在遇到 `TweetTombstone` 时向 `api.fxtwitter.com` 查询公开元数据，仍被拒绝或不可读时保持失败关闭。<br>• **Facebook / Instagram 登录与权限限制**：Facebook 私密/年龄受限视频，以及 Instagram Stories（`/stories/`）、私密长短码链接与需登录查看的帖子均返回 `403 UPSTREAM_BLOCKED`。 |
 | `NO_MEDIA` | `404` | 目标内容公开可访问，但作品本身不包含任何受支持的媒体资源：例如 **X 纯文本推文**（无视频也无图片）、**Dailymotion 仅提供非 fMP4（如 TS 分片）HLS 流**的视频，或空图文帖。 |
 | `CONTENT_UNAVAILABLE` | `404` | 目标作品不存在、已被作者或平台删除，或 `/api/resolve` 请求的 `item_id` 在作品中不存在或不可用（例如不存在的 Dailymotion 视频 ID）。 |
 | `RATE_LIMITED` | `429` | 触发单客户端或全局令牌桶/并发上限。响应同时携带 `Retry-After` HTTP 头以及 `error.retryable: true` 和正整数 `error.retry_after_seconds`。<br>**前端自动等待重试策略**：前端在请求收到 `429` 且 `0 < retry_after_seconds <= 15` 时，自动按秒倒计时等待并重试（单次操作最多重试 **2 次**；若 `retry_after_seconds > 15` 或重试耗尽仍受限，则立即向用户展示限流提示）。 |
