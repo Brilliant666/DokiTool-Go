@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
@@ -33,6 +34,7 @@ func NewWithTBVideo(executor fetch.Executor, enabled bool) *Parser {
 
 var pidPattern = regexp.MustCompile(`^[1-9][0-9]{0,18}$`)
 var midPattern = regexp.MustCompile(`^[0-9]{1,19}$`)
+var postPathPID = regexp.MustCompile(`^/pp/post/([1-9][0-9]{0,18})/?$`)
 
 // The legacy guard compares doubles before casting the retained decimal
 // strings to int64. Preserve that rounding boundary rather than silently
@@ -44,6 +46,14 @@ func ExtractParams(raw string) (int64, int64, bool) {
 	}
 	pid, pp, ps := queryValue(u.RawQuery, "pid")
 	mid, mp, ms := queryValue(u.RawQuery, "mid")
+	if match := postPathPID.FindStringSubmatch(u.EscapedPath()); match != nil {
+		if !pp {
+			pid, pp, ps = match[1], true, true
+		}
+		if !mp {
+			mid, mp, ms = "0", true, true
+		}
+	}
 	if !pp || !ps || !mp || !ms || !pidPattern.MatchString(pid) || !midPattern.MatchString(mid) {
 		return 0, 0, false
 	}
@@ -138,6 +148,39 @@ func failure(code int, message string) unified.Object {
 	return unified.Object{"code": code, "msg": message, "data": unified.Array{}}
 }
 
+func upgradeVerifiedPipigxHTTPS(raw string) string {
+	if len(raw) < 8 || !strings.EqualFold(raw[:7], "http://") {
+		return raw
+	}
+	rest := raw[7:]
+	end := len(rest)
+	if idx := strings.IndexAny(rest, "/?#"); idx >= 0 {
+		end = idx
+	}
+	authority := rest[:end]
+	host := authority
+	if strings.HasSuffix(strings.ToLower(authority), ":80") {
+		host = authority[:len(authority)-3]
+	}
+	switch strings.ToLower(host) {
+	case "video01.szsttkj.com", "video03.szsttkj.com", "xlal-ppvideo.szsttkj.com":
+		return "https://" + host + rest[end:]
+	default:
+		return raw
+	}
+}
+
+func upgradePipigxVideoObject(obj unified.Object) {
+	if obj == nil {
+		return
+	}
+	for _, key := range []string{"url", "urlsrc", "urlext", "urlwm"} {
+		if s, ok := obj[key].(string); ok && s != "" {
+			obj[key] = upgradeVerifiedPipigxHTTPS(s)
+		}
+	}
+}
+
 func adaptLegacy(legacy unified.Object, source string, now int64, save *tbvideo.Post) unified.Object {
 	code, ok := unified.PHPInt(legacy["code"])
 	if !ok {
@@ -161,7 +204,11 @@ func adaptLegacy(legacy unified.Object, source string, now int64, save *tbvideo.
 		}
 		return unified.ContractError(kind, unified.Str(legacy["msg"]), kind == "RATE_LIMITED" || kind == "UPSTREAM_TIMEOUT" || kind == "UPSTREAM_UNAVAILABLE")
 	}
-	raw := unified.Map(legacy["data"])
+	raw := unified.Clone(unified.Map(legacy["data"]))
+	upgradePipigxVideoObject(raw)
+	for _, video := range unified.Slice(raw["private_videos"]) {
+		upgradePipigxVideoObject(unified.Map(video))
+	}
 	data := unified.SimpleData("pipigx", raw, source, now)
 	items := unified.Array{}
 	for index, video := range unified.Slice(raw["private_videos"]) {

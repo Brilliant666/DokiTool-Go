@@ -8,13 +8,23 @@ import (
 	"encoding/hex"
 	"errors"
 	"net"
+	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
+)
+
+const fbWatchUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+var (
+	dailyShortPath   = regexp.MustCompile(`^/([A-Za-z0-9]{1,64})/?$`)
+	fbWatchShortPath = regexp.MustCompile(`^/(?:v/)?[A-Za-z0-9_-]{1,128}/?$`)
 )
 
 // SiteSpec declaratively defines an allowlisted long-tail yt-dlp platform.
@@ -24,6 +34,7 @@ type SiteSpec struct {
 	SiteURL                      string   `json:"site_url"`
 	Icon                         string   `json:"icon"`
 	CatalogDomains               []string `json:"catalog_domains"`
+	CatalogExactDomains          []string `json:"catalog_exact_domains,omitempty"`
 	InputHosts                   []string `json:"input_hosts"`
 	OutboundHosts                []string `json:"outbound_hosts"`
 	MediaHostSuffix              []string `json:"media_host_suffix"`
@@ -42,7 +53,7 @@ func (s SiteSpec) CatalogEntry() unified.Object {
 		icon = s.PlatformID
 	}
 	rawDomains := s.CatalogDomains
-	if len(rawDomains) == 0 {
+	if len(rawDomains) == 0 && len(s.CatalogExactDomains) == 0 {
 		for _, h := range s.InputHosts {
 			clean := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(h)), ".")
 			if clean != "" {
@@ -59,7 +70,7 @@ func (s SiteSpec) CatalogEntry() unified.Object {
 			domains = append(domains, clean)
 		}
 	}
-	return unified.Object{
+	entry := unified.Object{
 		"id":           s.PlatformID,
 		"name":         s.Name,
 		"site_url":     s.SiteURL,
@@ -67,6 +78,21 @@ func (s SiteSpec) CatalogEntry() unified.Object {
 		"capabilities": unified.Array{"video"},
 		"domains":      domains,
 	}
+	if len(s.CatalogExactDomains) > 0 {
+		exact := make(unified.Array, 0, len(s.CatalogExactDomains))
+		seenExact := make(map[string]bool, len(s.CatalogExactDomains))
+		for _, d := range s.CatalogExactDomains {
+			clean := strings.ToLower(strings.TrimSpace(d))
+			if clean != "" && !seenExact[clean] {
+				seenExact[clean] = true
+				exact = append(exact, clean)
+			}
+		}
+		if len(exact) > 0 {
+			entry["exact_domains"] = exact
+		}
+	}
+	return entry
 }
 
 func hostMatchesRule(host, rule string) bool {
@@ -87,6 +113,21 @@ type Parser struct {
 	engine     ytengine.Extractor
 	sizeProber ytengine.SizeProber
 	resolver   ytengine.Resolver
+	fetcher    fetch.Executor
+}
+
+// WithFetcher attaches a bounded HTTP executor for short-link preflight (e.g. fb.watch).
+func (p *Parser) WithFetcher(fetcher fetch.Executor) *Parser {
+	if p != nil {
+		p.fetcher = fetcher
+	}
+	return p
+}
+
+// AllowedTargetURL checks whether rawURL matches canonical yt-dlp target hosts (spec.InputHosts ONLY).
+func (p *Parser) AllowedTargetURL(raw string) bool {
+	_, ok := p.sanitizeTargetURL(raw)
+	return ok
 }
 
 // New creates a universal yt-dlp parser for the given SiteSpec.
@@ -108,9 +149,10 @@ func NewWithResolver(spec SiteSpec, engine ytengine.Extractor, prober ytengine.S
 	}
 }
 
-// AllowedInputURL checks whether rawURL is a safe HTTP/HTTPS URL belonging to spec.InputHosts.
+// AllowedInputURL checks whether rawURL is a safe HTTP/HTTPS URL accepted by this platform
+// (including canonicalized bare/mobile aliases and approved short links).
 func (p *Parser) AllowedInputURL(raw string) bool {
-	_, ok := p.sanitizeInputURL(raw)
+	_, _, ok := p.normalizeInputURL(raw)
 	return ok
 }
 
@@ -194,33 +236,73 @@ func (p *Parser) AllowedMediaURL(raw string) bool {
 	return p.verifyPublicHost(context.Background(), host)
 }
 
-func (p *Parser) sanitizeInputURL(raw string) (string, bool) {
-	if p == nil || unified.MediaURL(raw) == "" || len(raw) > 2048 {
-		return "", false
+func parseSafeHTTPURL(raw string) (*url.URL, bool) {
+	if unified.MediaURL(raw) == "" || len(raw) > 2048 {
+		return nil, false
 	}
 	for _, r := range raw {
 		if r <= 0x20 || r >= 0x7f || r == '\\' {
-			return "", false
+			return nil, false
 		}
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.User != nil || u.Opaque != "" {
-		return "", false
+		return nil, false
 	}
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return "", false
+		return nil, false
 	}
 	if port := u.Port(); port != "" {
 		n, err := strconv.Atoi(port)
 		if err != nil || (scheme == "https" && n != 443) || (scheme == "http" && n != 80) {
-			return "", false
+			return nil, false
 		}
 	}
 	host := strings.ToLower(u.Hostname())
 	if host == "" || net.ParseIP(host) != nil || strings.Trim(u.EscapedPath(), "/") == "" {
+		return nil, false
+	}
+	u.Fragment = ""
+	return u, true
+}
+
+func allowExactFBWatchURL(raw string) bool {
+	u, ok := parseSafeHTTPURL(raw)
+	if !ok || strings.ToLower(u.Hostname()) != "fb.watch" {
+		return false
+	}
+	return fbWatchShortPath.MatchString(u.EscapedPath())
+}
+
+func isFacebookLoginPath(escapedPath string) bool {
+	lower := strings.ToLower(escapedPath)
+	return lower == "/login" || strings.HasPrefix(lower, "/login/") ||
+		lower == "/checkpoint" || strings.HasPrefix(lower, "/checkpoint/")
+}
+
+func isFacebookLoginRedirect(raw string) bool {
+	u, ok := parseSafeHTTPURL(raw)
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "www.facebook.com", "www.fb.watch", "fb.watch":
+		return isFacebookLoginPath(u.EscapedPath())
+	default:
+		return false
+	}
+}
+
+func (p *Parser) sanitizeTargetURL(raw string) (string, bool) {
+	if p == nil {
 		return "", false
 	}
+	u, ok := parseSafeHTTPURL(raw)
+	if !ok {
+		return "", false
+	}
+	host := strings.ToLower(u.Hostname())
 	matched := false
 	for _, allowed := range p.spec.InputHosts {
 		if hostMatchesRule(host, allowed) {
@@ -231,8 +313,124 @@ func (p *Parser) sanitizeInputURL(raw string) (string, bool) {
 	if !matched {
 		return "", false
 	}
-	u.Fragment = ""
 	return u.String(), true
+}
+
+func (p *Parser) normalizeInputURL(raw string) (string, bool, bool) {
+	if p == nil {
+		return "", false, false
+	}
+	u, ok := parseSafeHTTPURL(raw)
+	if !ok {
+		return "", false, false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, allowed := range p.spec.InputHosts {
+		if hostMatchesRule(host, allowed) {
+			return u.String(), false, true
+		}
+	}
+	switch p.spec.PlatformID {
+	case "dailymotion":
+		if host == "dailymotion.com" {
+			u.Scheme = "https"
+			u.Host = "www.dailymotion.com"
+			return u.String(), false, true
+		}
+		if host == "dai.ly" {
+			m := dailyShortPath.FindStringSubmatch(u.EscapedPath())
+			if m == nil {
+				return "", false, false
+			}
+			rewritten := "https://www.dailymotion.com/video/" + m[1]
+			if u.RawQuery != "" {
+				rewritten += "?" + u.RawQuery
+			}
+			return rewritten, false, true
+		}
+	case "tumblr":
+		if host == "tumblr.com" {
+			u.Scheme = "https"
+			u.Host = "www.tumblr.com"
+			return u.String(), false, true
+		}
+	case "facebook":
+		if host == "facebook.com" || host == "m.facebook.com" {
+			u.Scheme = "https"
+			u.Host = "www.facebook.com"
+			return u.String(), false, true
+		}
+		if host == "fb.watch" && fbWatchShortPath.MatchString(u.EscapedPath()) {
+			u.Scheme = "https"
+			u.Host = "fb.watch"
+			return u.String(), true, true
+		}
+	}
+	return "", false, false
+}
+
+func (p *Parser) resolveFBWatch(ctx context.Context, shortURL string) (string, unified.Object, error) {
+	if !p.verifyPublicHost(ctx, "fb.watch") {
+		return "", unified.ContractError("UPSTREAM_BLOCKED", "目标地址解析到受限网络，已拒绝访问", false), nil
+	}
+	if p.fetcher == nil {
+		return "", unified.ContractError("SERVICE_NOT_CONFIGURED", "当前平台解析服务暂不可用", false), nil
+	}
+	resp, err := p.fetcher.Do(ctx, fetch.Request{
+		Method: http.MethodGet,
+		URL:    shortURL,
+		Header: http.Header{
+			"User-Agent": {fbWatchUserAgent},
+			"Accept":     {"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+		},
+		Policy: fetch.Policy{
+			Purpose:          "facebook-fbwatch",
+			AllowedURL:       allowExactFBWatchURL,
+			Timeout:          10 * time.Second,
+			MaxBytes:         64 << 10,
+			FollowRedirects:  false,
+			ReadRedirectBody: false,
+		},
+	})
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(ctxErr, context.Canceled) {
+			return "", nil, ctxErr
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", unified.ContractError("UPSTREAM_TIMEOUT", "上游连接超时，请稍后重试", true), nil
+		}
+		if errors.Is(err, fetch.ErrPolicy) {
+			return "", unified.ContractError("UPSTREAM_BLOCKED", "目标地址解析到受限网络，已拒绝访问", false), nil
+		}
+		return "", unified.ContractError("UPSTREAM_UNAVAILABLE", "当前平台解析服务暂不可用，请稍后重试", true), nil
+	}
+	switch resp.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "", unified.ContractError("UPSTREAM_BLOCKED", "该内容受访问限制，无法无凭据解析", false), nil
+	case http.StatusNotFound, http.StatusGone:
+		return "", unified.ContractError("CONTENT_UNAVAILABLE", "未找到可用的媒体，或该内容已不可访问", false), nil
+	case http.StatusTooManyRequests:
+		return "", unified.ContractError("RATE_LIMITED", "上游访问频率受限，请稍后重试", true), nil
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+		locations := resp.Header.Values("Location")
+		if len(locations) != 1 {
+			return "", unified.ContractError("INVALID_INPUT", "分享短链未跳转到受支持的 Facebook 页面", false), nil
+		}
+		loc := strings.TrimSpace(locations[0])
+		if isFacebookLoginRedirect(loc) {
+			return "", unified.ContractError("UPSTREAM_BLOCKED", "该内容需要登录或受访问限制，无法无凭据解析", false), nil
+		}
+		canonical, ok := p.sanitizeTargetURL(loc)
+		if !ok {
+			return "", unified.ContractError("INVALID_INPUT", "分享短链未跳转到受支持的 Facebook 页面", false), nil
+		}
+		return canonical, nil, nil
+	default:
+		if resp.StatusCode >= 500 {
+			return "", unified.ContractError("UPSTREAM_UNAVAILABLE", "当前平台解析服务暂不可用，请稍后重试", true), nil
+		}
+		return "", unified.ContractError("INVALID_INPUT", "分享短链未跳转到受支持的 Facebook 页面", false), nil
+	}
 }
 
 // Parse extracts metadata via ytengine and formats a unified-v1 envelope.
@@ -240,15 +438,29 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	cleanURL, ok := p.sanitizeInputURL(source)
+	cleanURL, isFBWatch, ok := p.normalizeInputURL(source)
 	if !ok {
 		return unified.ContractError("INVALID_INPUT", "请输入对应平台的有效分享链接", false), nil
 	}
 	if p == nil || p.engine == nil || !p.engine.Enabled() {
 		return unified.ContractError("SERVICE_NOT_CONFIGURED", "当前平台解析服务暂不可用", false), nil
 	}
-	if parsedURL, err := url.Parse(cleanURL); err != nil || !p.verifyPublicHost(ctx, parsedURL.Hostname()) {
+	if isFBWatch {
+		resolvedTarget, errObj, err := p.resolveFBWatch(ctx, cleanURL)
+		if err != nil {
+			return nil, err
+		}
+		if errObj != nil {
+			return errObj, nil
+		}
+		cleanURL = resolvedTarget
+	}
+	parsedURL, err := url.Parse(cleanURL)
+	if err != nil || !p.verifyPublicHost(ctx, parsedURL.Hostname()) {
 		return unified.ContractError("UPSTREAM_BLOCKED", "目标地址解析到受限网络，已拒绝访问", false), nil
+	}
+	if p.spec.PlatformID == "facebook" && isFacebookLoginPath(parsedURL.EscapedPath()) {
+		return unified.ContractError("UPSTREAM_BLOCKED", "该内容需要登录或受访问限制，无法无凭据解析", false), nil
 	}
 
 	info, err := p.engine.Extract(ctx, cleanURL)

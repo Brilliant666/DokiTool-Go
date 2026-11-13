@@ -349,13 +349,13 @@ func configureYTDLPWithOptions(c *catalog.Catalog, adapters map[string]api.Adapt
 		}
 		policyParser := ytgeneric.NewWithResolver(spec, nil, nil, net.DefaultResolver)
 		siteEngine := baseEngine.
-			WithTargetPolicy(policyParser.AllowedInputURL, policyParser.AllowedOutboundHost).
+			WithTargetPolicy(policyParser.AllowedTargetURL, policyParser.AllowedOutboundHost).
 			WithExtractors(spec.Extractors...)
 		var prober ytengine.SizeProber
 		if !spec.SingleStreamHLSOnly {
 			prober = ytengine.NewSizeProber(executor, policyParser.AllowedMediaURL)
 		}
-		adapters[spec.PlatformID] = ytgeneric.NewWithResolver(spec, siteEngine, prober, net.DefaultResolver)
+		adapters[spec.PlatformID] = ytgeneric.NewWithResolver(spec, siteEngine, prober, net.DefaultResolver).WithFetcher(executor)
 	}
 	return nil
 }

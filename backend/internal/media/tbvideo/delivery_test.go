@@ -84,7 +84,11 @@ func TestParsedDownloadCandidatesFollowTheUnwatermarkedVideo(t *testing.T) {
 						variant := unified.Map(unified.Slice(item["variants"])[0])
 						source := unified.Map(unified.Slice(unified.Map(variant["delivery"])["sources"])[0])
 						object := []string{"/zyvd/one", "/zyvqwz/two"}[i]
-						wantPreview := "http://" + tc.host + object + []string{"?auth_key=private", "?auth_key=other"}[i]
+						wantScheme := "http://"
+						if tc.platform == "pipigx" {
+							wantScheme = "https://"
+						}
+						wantPreview := wantScheme + tc.host + object + []string{"?auth_key=private", "?auth_key=other"}[i]
 						if source["url"] != wantPreview || unified.Map(item["default"])["url"] != wantPreview {
 							t.Fatalf("preview changed for %v", item["id"])
 						}

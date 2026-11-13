@@ -13,9 +13,25 @@ import (
 const desktopUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 const detailURL = "https://share.xiaochuankeji.cn/planck/share/post/detail_h5"
 
-var shareHosts = fetch.AllowHosts(".izuiyou.com")
+var shareHosts = fetch.AllowHosts(".izuiyou.com", "share.xiaochuankeji.cn")
 
-func allowedShare(raw string) bool { return unified.MediaURL(raw) != "" && shareHosts(raw) }
+func allowedShare(raw string) bool {
+	if unified.MediaURL(raw) == "" || !shareHosts(raw) {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil {
+		return false
+	}
+	if strings.EqualFold(u.Hostname(), "share.xiaochuankeji.cn") {
+		escaped := strings.ToLower(u.EscapedPath())
+		if escaped == "" || escaped == "/" || escaped == "/planck" || strings.HasPrefix(escaped, "/planck/") ||
+			strings.Contains(escaped, "..") || strings.Contains(escaped, "%2e") {
+			return false
+		}
+	}
+	return true
+}
 
 func allowedDetail(raw string) bool {
 	u, err := url.Parse(raw)
@@ -27,6 +43,21 @@ func allowedDetail(raw string) bool {
 func shareRequest(raw string) fetch.Request {
 	return fetch.Request{URL: raw, Method: http.MethodHead, Header: http.Header{"User-Agent": {desktopUA}, "Accept": {"*/*"}},
 		Policy: fetch.Policy{Purpose: "zuiyou-share", AllowedURL: allowedShare, Timeout: 12 * time.Second, MaxBytes: 8 << 20}}
+}
+
+func xiaochuanPageRequest(raw string) fetch.Request {
+	return fetch.Request{
+		URL:    raw,
+		Method: http.MethodGet,
+		Header: http.Header{"User-Agent": {desktopUA}, "Accept": {"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}},
+		Policy: fetch.Policy{
+			Purpose:         "zuiyou-xiaochuan-page",
+			AllowedURL:      allowedShare,
+			Timeout:         12 * time.Second,
+			MaxBytes:        8 << 20,
+			FollowRedirects: false,
+		},
+	}
 }
 
 func detailRequest(body string) fetch.Request {

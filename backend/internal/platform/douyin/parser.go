@@ -69,6 +69,34 @@ func extractAwemeID(raw string) string {
 	return ""
 }
 
+func isCollectionMixURL(raw string) bool {
+	base, _, _ := strings.Cut(raw, "#")
+	pathPart, queryPart, _ := strings.Cut(base, "?")
+	entries := queryEntries(queryPart)
+	for _, key := range []string{"vid", "id", "modal_id", "v", "s", "pid"} {
+		if value := entries[key]; value.scalar && truthy(value.value) {
+			return false
+		}
+	}
+	if value := entries["mix_id"]; value.scalar && truthy(value.value) {
+		return true
+	}
+	if scheme := strings.Index(pathPart, "://"); scheme >= 0 {
+		pathPart = pathPart[scheme+3:]
+		if slash := strings.IndexByte(pathPart, '/'); slash >= 0 {
+			pathPart = pathPart[slash:]
+		} else {
+			pathPart = ""
+		}
+	}
+	lowerPath := strings.ToLower(strings.Trim(pathPart, "/"))
+	if strings.HasPrefix(lowerPath, "collection/") {
+		rest := strings.Trim(strings.TrimPrefix(lowerPath, "collection/"), "/")
+		return rest != "" && !strings.Contains(rest, "/")
+	}
+	return strings.HasPrefix(lowerPath, "mix/detail/") || strings.HasPrefix(lowerPath, "share/mix/detail/")
+}
+
 func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Object, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -87,6 +115,9 @@ func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Ob
 		return nil, fmt.Errorf("douyin request executor is not configured")
 	}
 	resolved := sourceURL
+	if isCollectionMixURL(resolved) {
+		return legacyError(400, "请输入作品 aweme_id，而不是合集 mix_id"), nil
+	}
 	host := urlHost(resolved)
 	if host == "v.douyin.com" || !strings.Contains(host, "douyin.com") || extractAwemeID(resolved) == "" {
 		var err error
@@ -95,12 +126,15 @@ func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Ob
 			return nil, err
 		}
 	}
+	if isCollectionMixURL(resolved) {
+		return legacyError(400, "请输入作品 aweme_id，而不是合集 mix_id"), nil
+	}
 	id := extractAwemeID(resolved)
 	if id == "" {
 		return legacyError(400, "链接格式错误，无法提取作品 ID"), nil
 	}
 	if !awemeID.MatchString(id) {
-		return legacyError(500, "请输入作品 aweme_id，而不是合集 mix_id"), nil
+		return legacyError(400, "请输入作品 aweme_id，而不是合集 mix_id"), nil
 	}
 	var shState shanghaiState
 	var shCh chan shanghaiOutcome

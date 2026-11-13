@@ -146,3 +146,24 @@ func TestEmptyImageURLRetainsDeclaredRenditions(t *testing.T) {
 		}
 	}
 }
+
+func TestMissingXsecTokenPromptsAppShareLink(t *testing.T) {
+	p := New(requestFunc(func(_ context.Context, r fetch.Request) (fetch.Response, error) {
+		return fetch.Response{
+			StatusCode: 200,
+			Body:       []byte(`<!doctype html><html><body><script>window.__INITIAL_STATE__={"note":{"noteDetailMap":{}}}</script></body></html>`),
+			URL:        r.URL,
+		}, nil
+	}))
+	res, err := p.Parse(context.Background(), "https://www.xiaohongshu.com/explore/66a1b2c3d4e5f6a7b8c9d0e1", 1793361600)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := unified.Str(res["code"]); got != "INVALID_INPUT" {
+		t.Fatalf("code = %q, want INVALID_INPUT (res=%+v)", got, res)
+	}
+	msg := unified.Str(unified.Map(res["error"])["message"])
+	if !strings.Contains(msg, "App") || !strings.Contains(msg, "分享链接") {
+		t.Fatalf("expected prompt to copy share link from App, got %q", msg)
+	}
+}

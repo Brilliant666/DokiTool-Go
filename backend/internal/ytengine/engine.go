@@ -1314,7 +1314,13 @@ func classifyStderr(stderrText string, runErr error) *Error {
 		strings.Contains(lower, "nsfw tweet") ||
 		strings.Contains(lower, "age-restricted") ||
 		strings.Contains(lower, "login required") ||
+		strings.Contains(lower, "must log in") ||
+		strings.Contains(lower, "log in to continue") ||
+		strings.Contains(lower, "registered users") ||
+		strings.Contains(lower, "provide account credentials") ||
 		strings.Contains(lower, "sign in") ||
+		(strings.Contains(lower, "[facebook") && strings.Contains(lower, "cannot parse data")) ||
+		strings.Contains(lower, "facebook said:") ||
 		strings.Contains(lower, "http error 401") ||
 		strings.Contains(lower, "http error 403"):
 		return &Error{

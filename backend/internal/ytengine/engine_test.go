@@ -212,6 +212,9 @@ sleep 10
 		{"ERROR: [generic] gen-ai-pose-image: Unable to download webpage: <urlopen error Tunnel connection failed: 403 Forbidden>", CodeUpstreamBlocked, false, ""},
 		{"ERROR: Unsupported URL: https://github.com/wzc520pyfm/gen-ai-pose-image", CodeContentUnavailable, false, "未找到可用的媒体，或该内容已不可访问"},
 		{"ERROR: No suitable extractor found for URL https://github.com/wzc520pyfm/gen-ai-pose-image/issues/429?timeout=1", CodeContentUnavailable, false, "未找到可用的媒体，或该内容已不可访问"},
+		{"ERROR: [facebook] 637842556329505: This video is only available for registered users. Use --cookies-from-browser or --cookies for the authentication.", CodeUpstreamBlocked, false, ""},
+		{"ERROR: [facebook] 123456: The video is not available, Facebook said: \"You must log in to continue.\"", CodeUpstreamBlocked, false, ""},
+		{"ERROR: [facebook] 123456: Cannot parse data; please report this issue on https://github.com/yt-dlp/yt-dlp/issues", CodeUpstreamBlocked, false, ""},
 	}
 	for _, tc := range cases {
 		classified := classifyStderr(tc.stderr, errors.New("exit status 1"))

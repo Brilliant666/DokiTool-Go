@@ -27,8 +27,8 @@ var mobilePageHost = fetch.AllowHosts(".m.chenzhongtech.com")
 var gifshowRedirectHost = fetch.AllowHosts("m.gifshow.com")
 var desktopShortVideoHost = fetch.AllowHosts("www.kuaishou.com")
 var mobilePhotoPath = regexp.MustCompile(`^/fw/photo/([A-Za-z0-9_-]+)/?$`)
-var desktopShortVideoPath = regexp.MustCompile(`^/short-video/([A-Za-z0-9_-]+)$`)
-var desktopSharePath = regexp.MustCompile(`^/f/([A-Za-z0-9_-]+)$`)
+var desktopShortVideoPath = regexp.MustCompile(`^/short-video/([A-Za-z0-9_-]+/?)$`)
+var desktopSharePath = regexp.MustCompile(`^/f/([A-Za-z0-9_-]+)/?$`)
 
 // A kuaishou.com short share can lead to this mobile work page. Only the
 // redirect/GET path may use it; it is not another public parser entry.

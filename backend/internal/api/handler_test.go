@@ -174,3 +174,106 @@ func TestWeiboBinaryRelayBypassesUnifiedAPIBoundary(t *testing.T) {
 		t.Fatalf("binary relay rewritten: calls=%d code=%d headers=%v body=%q", invoked, w.Code, w.Header(), w.Body.String())
 	}
 }
+
+func TestInputURLTruncatesAdjacentHanziAndFullwidthPunctuation(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "79 小红书发布了一篇笔记 http://xhslink.com/o/abc123XYZ，复制本条信息，打开【小红书】App查看精彩内容！",
+			want:  "http://xhslink.com/o/abc123XYZ",
+		},
+		{
+			input: "https://www.bilibili.com/video/BV1xx411c7mD【标题】",
+			want:  "https://www.bilibili.com/video/BV1xx411c7mD",
+		},
+		{
+			input: "https://www.bilibili.com/video/BV1xx411c7mD?p=2&vd_source=abc_123【标题】",
+			want:  "https://www.bilibili.com/video/BV1xx411c7mD?p=2&vd_source=abc_123",
+		},
+		{
+			input: "https://www.xiaohongshu.com/explore/66a1b2c3d4e5f6a7b8c9d0e1?xsec_token=ABc+123%2B_=-x&xsec_source=pc_feed，复制本条信息",
+			want:  "https://www.xiaohongshu.com/explore/66a1b2c3d4e5f6a7b8c9d0e1?xsec_token=ABc+123%2B_=-x&xsec_source=pc_feed",
+		},
+		{
+			input: "看这个视频https://v.douyin.com/iYabc123/复制此链接打开抖音",
+			want:  "https://v.douyin.com/iYabc123/",
+		},
+	}
+	for _, tc := range cases {
+		if got := InputURL(tc.input); got != tc.want {
+			t.Errorf("InputURL(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestPlatformErrorCodesDistinguishUnsupportedVsMismatch(t *testing.T) {
+	h := testHandler(t, nil)
+	cases := []struct {
+		name     string
+		query    url.Values
+		wantCode string
+	}{
+		{
+			name:     "unsupported-url-host",
+			query:    url.Values{"schema_version": {"1.0"}, "url": {"https://example.com/video/123"}},
+			wantCode: "UNSUPPORTED_PLATFORM",
+		},
+		{
+			name:     "unknown-requested-platform",
+			query:    url.Values{"schema_version": {"1.0"}, "url": {"https://www.douyin.com/video/123"}, "platform": {"vimeo"}},
+			wantCode: "UNSUPPORTED_PLATFORM",
+		},
+		{
+			name:     "platform-mismatch",
+			query:    url.Values{"schema_version": {"1.0"}, "url": {"https://www.douyin.com/video/123"}, "platform": {"bilibili"}},
+			wantCode: "INVALID_INPUT",
+		},
+		{
+			name:     "malformed-not-a-url",
+			query:    url.Values{"schema_version": {"1.0"}, "url": {"not a URL"}},
+			wantCode: "INVALID_INPUT",
+		},
+		{
+			name:     "userinfo-url-rejected-as-invalid-input",
+			query:    url.Values{"schema_version": {"1.0"}, "url": {"https://user:pass@www.douyin.com/video/123"}},
+			wantCode: "INVALID_INPUT",
+		},
+		{
+			name:     "nonstandard-port-rejected-as-invalid-input",
+			query:    url.Values{"schema_version": {"1.0"}, "url": {"https://www.douyin.com:8443/video/123"}},
+			wantCode: "INVALID_INPUT",
+		},
+	}
+	var unsupportedMsg, mismatchMsg string
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/parse?"+tc.query.Encode(), nil))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d, want 400: %s", w.Code, w.Body.String())
+			}
+			payload, err := unified.Decode(w.Body.Bytes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := unified.ValidateEnvelopeAt(payload, 1793448000); err != nil {
+				t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+			}
+			if got := unified.Str(payload["code"]); got != tc.wantCode {
+				t.Fatalf("code=%q, want %q (body=%s)", got, tc.wantCode, w.Body.String())
+			}
+			msg := unified.Str(unified.Map(payload["error"])["message"])
+			if tc.name == "unsupported-url-host" {
+				unsupportedMsg = msg
+			}
+			if tc.name == "platform-mismatch" {
+				mismatchMsg = msg
+			}
+		})
+	}
+	if unsupportedMsg == "" || mismatchMsg == "" || unsupportedMsg == mismatchMsg {
+		t.Fatalf("expected distinct error messages for unsupported platform (%q) vs mismatch (%q)", unsupportedMsg, mismatchMsg)
+	}
+}

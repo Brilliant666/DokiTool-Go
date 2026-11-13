@@ -322,3 +322,29 @@ func TestFormatterUsesPHPRounding(t *testing.T) {
 		t.Fatalf("PHP byte-label rounding mismatch: %s", label)
 	}
 }
+
+func TestCollectionMixIDReturns400InvalidInputWithoutDetailFetch(t *testing.T) {
+	parser := New(executorFunc(func(ctx context.Context, request fetch.Request) (fetch.Response, error) {
+		t.Fatalf("collection mix_id URL triggered unexpected request: %s %s", request.Method, request.URL)
+		return fetch.Response{}, nil
+	}), nil)
+	for _, raw := range []string{
+		"https://www.douyin.com/collection/7380000000000000001",
+		"https://www.douyin.com/collection/7380000000000000001/",
+		"https://www.douyin.com/mix/detail/7380000000000000001",
+		"https://m.douyin.com/share/mix/detail/7380000000000000001",
+		"https://www.douyin.com/discover?mix_id=7380000000000000001",
+		"https://www.douyin.com/video/mix_12345",
+	} {
+		payload, err := parser.Parse(context.Background(), raw, 1793361600)
+		if err != nil {
+			t.Fatalf("Parse(%q) Go err: %v", raw, err)
+		}
+		if got := unified.Str(payload["code"]); got != "INVALID_INPUT" {
+			t.Fatalf("Parse(%q) code = %q, want INVALID_INPUT (payload=%+v)", raw, got, payload)
+		}
+		if msg := unified.Str(unified.Map(payload["error"])["message"]); !strings.Contains(msg, "mix_id") {
+			t.Fatalf("Parse(%q) message = %q, want mix_id hint", raw, msg)
+		}
+	}
+}

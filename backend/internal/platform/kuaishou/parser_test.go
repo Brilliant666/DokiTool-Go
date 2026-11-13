@@ -202,6 +202,14 @@ func TestShareRedirectsToDesktopShortVideoOrGifshowMobilePhotoPage(t *testing.T)
 	if got := rewriteGifshowRedirect("https://m.gifshow.com/fw/photo/3xngkmw8vacriqu/?x=y"); got != rewrittenPhoto {
 		t.Fatalf("trailing slash and query were not normalized: got %q want %q", got, rewrittenPhoto)
 	}
+	for _, trailing := range []string{
+		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu/",
+		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu/?x=y",
+	} {
+		if got := rewriteDesktopShortVideo(trailing); got != rewrittenPhoto+"/" {
+			t.Fatalf("rewriteDesktopShortVideo(%q) = %q, want %q", trailing, got, rewrittenPhoto+"/")
+		}
+	}
 
 	// Non-matching desktop short-video variants must not be rewritten as input or redirect.
 	for _, unchanged := range []string{
@@ -210,7 +218,7 @@ func TestShareRedirectsToDesktopShortVideoOrGifshowMobilePhotoPage(t *testing.T)
 		"https://www.kuaishou.com/short-video/bad.id?x=y",
 		"https://www.kuaishou.com/short-video/bad$id?x=y",
 		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu/extra",
-		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu/",
+		"https://www.kuaishou.com/short-video/3xngkmw8vacriqu//",
 		"https://www.kuaishou.com/prefix/short-video/3xngkmw8vacriqu",
 		"http://www.kuaishou.com/short-video/3xngkmw8vacriqu?x=y",
 		"https://www.kuaishou.com:443/short-video/3xngkmw8vacriqu?x=y",
@@ -398,7 +406,16 @@ func TestDesktopShareCodeDirectAndRedirectRewrite(t *testing.T) {
 		t.Fatalf("unexpected redirect /f/ outbound sequence:\ngot:  %v\nwant: %v", redirectCalls, wantRedirectCalls)
 	}
 
-	// 3. Negative cases: invalid shortcode, extra path segment, trailing slash, non-HTTPS,
+	for _, trailing := range []string{
+		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s/",
+		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s/?x=y&cc=share_copylink",
+	} {
+		if got := rewriteDesktopShare(trailing); got != rewrittenShare {
+			t.Fatalf("rewriteDesktopShare(%q) = %q, want %q", trailing, got, rewrittenShare)
+		}
+	}
+
+	// 3. Negative cases: invalid shortcode, extra path segment, double trailing slash, non-HTTPS,
 	// explicit port, userinfo, subdomain, and #fragment must never be rewritten.
 	for _, unchanged := range []string{
 		"https://www.kuaishou.com/f/",
@@ -406,7 +423,7 @@ func TestDesktopShareCodeDirectAndRedirectRewrite(t *testing.T) {
 		"https://www.kuaishou.com/f/bad.id?x=y",
 		"https://www.kuaishou.com/f/bad$id?x=y",
 		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s/extra",
-		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s/",
+		"https://www.kuaishou.com/f/X-FJK5jXh9dH27s//",
 		"https://www.kuaishou.com/prefix/f/X-FJK5jXh9dH27s",
 		"http://www.kuaishou.com/f/X-FJK5jXh9dH27s?x=y",
 		"https://www.kuaishou.com:443/f/X-FJK5jXh9dH27s?x=y",

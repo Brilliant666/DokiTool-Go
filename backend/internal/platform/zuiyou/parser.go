@@ -28,6 +28,7 @@ func NewWithTBVideo(executor fetch.Executor, enabled bool) *Parser {
 
 var detailID = regexp.MustCompile(`/detail/([0-9]+)`)
 var validPID = regexp.MustCompile(`^[1-9][0-9]{0,18}$`)
+var xiaochuanPostID = regexp.MustCompile(`"post"\s*:\s*\{\s*"id"\s*:\s*([1-9][0-9]{0,18})\b`)
 
 func (p *Parser) Parse(ctx context.Context, input string, now int64) (unified.Object, error) {
 	var post *tbvideo.Post
@@ -89,20 +90,49 @@ func (p *Parser) parseLegacy(parent context.Context, input string, save *tbvideo
 	ctx, cancel := context.WithTimeout(parent, 35*time.Second)
 	defer cancel()
 	if emptyString(pid) {
-		response, err := p.executor.Do(ctx, shareRequest(input))
-		if err := parent.Err(); err != nil {
-			return nil, err
-		}
-		if err == nil && response.StatusCode >= 300 && response.StatusCode < 400 {
-			// The PHP path extracts pid from one Location only; it never sends
-			// a request to that Location. The subsequent API address is fixed.
-			if values := response.Header.Values("Location"); len(values) > 0 {
-				location := strings.Trim(values[0], " \n\r\t\v\x00")
-				if !strings.HasPrefix(location, "http") {
-					location = u.Scheme + "://" + u.Hostname() + location
+		if strings.EqualFold(u.Hostname(), "share.xiaochuankeji.cn") {
+			response, err := p.executor.Do(ctx, xiaochuanPageRequest(input))
+			if err := parent.Err(); err != nil {
+				return nil, err
+			}
+			if err == nil {
+				if response.StatusCode >= 300 && response.StatusCode < 400 {
+					if values := response.Header.Values("Location"); len(values) > 0 {
+						location := strings.Trim(values[0], " \n\r\t\v\x00")
+						if !strings.HasPrefix(location, "http") {
+							location = u.Scheme + "://" + u.Hostname() + location
+						}
+						if target, err := url.Parse(location); err == nil && location != input {
+							pid = queryPID(target.RawQuery)
+							if emptyString(pid) {
+								if match := detailID.FindStringSubmatch(target.EscapedPath()); match != nil {
+									pid = match[1]
+								}
+							}
+						}
+					}
+				} else if response.StatusCode == 200 {
+					if match := xiaochuanPostID.FindSubmatch(response.Body); match != nil {
+						pid = string(match[1])
+					}
 				}
-				if target, err := url.Parse(location); err == nil && location != input {
-					pid = queryPID(target.RawQuery)
+			}
+		} else {
+			response, err := p.executor.Do(ctx, shareRequest(input))
+			if err := parent.Err(); err != nil {
+				return nil, err
+			}
+			if err == nil && response.StatusCode >= 300 && response.StatusCode < 400 {
+				// The PHP path extracts pid from one Location only; it never sends
+				// a request to that Location. The subsequent API address is fixed.
+				if values := response.Header.Values("Location"); len(values) > 0 {
+					location := strings.Trim(values[0], " \n\r\t\v\x00")
+					if !strings.HasPrefix(location, "http") {
+						location = u.Scheme + "://" + u.Hostname() + location
+					}
+					if target, err := url.Parse(location); err == nil && location != input {
+						pid = queryPID(target.RawQuery)
+					}
 				}
 			}
 		}
