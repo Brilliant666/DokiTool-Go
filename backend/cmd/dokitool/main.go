@@ -355,7 +355,7 @@ func configureYTDLPWithOptions(c *catalog.Catalog, adapters map[string]api.Adapt
 		if !spec.SingleStreamHLSOnly {
 			prober = ytengine.NewSizeProber(executor, policyParser.AllowedMediaURL)
 		}
-		adapters[spec.PlatformID] = ytgeneric.NewWithResolver(spec, siteEngine, prober, net.DefaultResolver).WithFetcher(executor)
+		adapters[spec.PlatformID] = ytgeneric.NewWithResolver(spec, siteEngine, prober, net.DefaultResolver)
 	}
 	return nil
 }

@@ -215,6 +215,7 @@ sleep 10
 		{"ERROR: [facebook] 637842556329505: This video is only available for registered users. Use --cookies-from-browser or --cookies for the authentication.", CodeUpstreamBlocked, false, ""},
 		{"ERROR: [facebook] 123456: The video is not available, Facebook said: \"You must log in to continue.\"", CodeUpstreamBlocked, false, ""},
 		{"ERROR: [facebook] 123456: Cannot parse data; please report this issue on https://github.com/yt-dlp/yt-dlp/issues", CodeUpstreamBlocked, false, ""},
+		{"ERROR: [dailymotion] x9zzzzzz999: Not found.", CodeContentUnavailable, false, "未找到可用的媒体，或该内容已不可访问"},
 	}
 	for _, tc := range cases {
 		classified := classifyStderr(tc.stderr, errors.New("exit status 1"))
@@ -237,6 +238,31 @@ sleep 10
 		var eErr *Error
 		if !errors.As(extractErr, &eErr) || eErr.Code != tc.wantCode || eErr.Retryable != tc.wantRetryable {
 			t.Fatalf("stderr %q => %#v (%v), want code=%s retryable=%v", tc.stderr, eErr, extractErr, tc.wantCode, tc.wantRetryable)
+		}
+	}
+
+	// Narrow line-scoped Dailymotion "Not found." classification: positive + negative checks.
+	for _, dmTC := range []struct {
+		stderr        string
+		wantCode      ErrorCode
+		wantRetryable bool
+	}{
+		{"ERROR: [dailymotion] x8m8jmu: not found.", CodeContentUnavailable, false},
+		{"[dailymotion] x9zzzzzz999: Not found.", CodeContentUnavailable, false},
+		{"ERROR: [dailymotion:playlist] x12345: Not found.", CodeContentUnavailable, false},
+		{"WARNING: [dailymotion] Retrying API\r\nERROR: [dailymotion] x9zzzzzz999: Not found.\r\n", CodeContentUnavailable, false},
+		{"yt-dlp: not found", CodeUpstreamUnavailable, true},
+		{"sh: 1: yt-dlp: not found", CodeUpstreamUnavailable, true},
+		{"ERROR: [youtube] x9zzzzzz999: Not found.", CodeUpstreamUnavailable, true},
+		{"ERROR: [dailymotionfoo] x9zzzzzz999: Not found.", CodeUpstreamUnavailable, true},
+		{"ERROR: [dailymotion] x9zzzzzz999: Executable not found", CodeUpstreamUnavailable, true},
+		{"ERROR: [dailymotion] x9zzzzzz999: ffmpeg not found.", CodeUpstreamUnavailable, true},
+		{"[dailymotion] x9zzzzzz999: Downloading JSON\nERROR: [generic] x9zzzzzz999: Not found.\n", CodeUpstreamUnavailable, true},
+	} {
+		got := classifyStderr(dmTC.stderr, errors.New("exit status 1"))
+		if got.Code != dmTC.wantCode || got.Retryable != dmTC.wantRetryable {
+			t.Fatalf("classifyStderr(%q) = (code=%s, retryable=%v), want (code=%s, retryable=%v)",
+				dmTC.stderr, got.Code, got.Retryable, dmTC.wantCode, dmTC.wantRetryable)
 		}
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -25,10 +24,14 @@ func (f executorFunc) Do(ctx context.Context, r fetch.Request) (fetch.Response, 
 }
 
 type stubResolver struct {
-	ips map[string][]netip.Addr
+	ips   map[string][]netip.Addr
+	calls *int
 }
 
 func (s stubResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
+	if s.calls != nil {
+		*s.calls++
+	}
 	if addrs, ok := s.ips[host]; ok {
 		return addrs, nil
 	}
@@ -226,9 +229,9 @@ func TestBuiltinSitesSpecsAndAllowlists(t *testing.T) {
 				"https://www.facebook.com/reel/1195289147628387",
 				"https://facebook.com/watch/?v=647537299265662",
 				"https://m.facebook.com/watch/?v=647537299265662",
-				"https://fb.watch/abc123/",
 			},
 			invalid: []string{
+				"https://fb.watch/abc123/",
 				"https://web.facebook.com/watch/?v=647537299265662",
 				"https://sub.fb.watch/abc123/",
 				"https://www.fb.watch/abc123/",
@@ -311,6 +314,9 @@ func TestBuiltinSitesSpecsAndAllowlists(t *testing.T) {
 				t.Fatalf("%s: expected invalid input URL %q to be rejected", tc.platform, u)
 			}
 		}
+	}
+	if got := c.PlatformForURL("https://fb.watch/abc123/"); got != "facebook" {
+		t.Fatalf("catalog.PlatformForURL(fb.watch) = %q, want facebook", got)
 	}
 
 	// 2. Outbound host & media URL allowlist checks (strictly matching P0 proxy logs)
@@ -766,16 +772,20 @@ func TestBareMobileDomainNormalizationAndShortLinks(t *testing.T) {
 	t.Run("dailymotion-bare-and-daily-zero-network", func(t *testing.T) {
 		dmSpec, _ := LookupSite("dailymotion")
 		var extractedURL string
+		httpCalls := 0
+		policyP := New(dmSpec, nil, nil)
+		prober := ytengine.NewSizeProber(executorFunc(func(_ context.Context, r fetch.Request) (fetch.Response, error) {
+			httpCalls++
+			t.Fatalf("dai.ly / dailymotion must make ZERO HTTP preflight requests, got %s %s", r.Method, r.URL)
+			return fetch.Response{}, nil
+		}), policyP.AllowedMediaURL)
 		p := NewWithResolver(dmSpec, &stubExtractor{
 			enabled: true,
 			extract: func(_ context.Context, rawURL string) (*ytengine.Info, error) {
 				extractedURL = rawURL
 				return loadFixtureInfo(t, "dailymotion.json"), nil
 			},
-		}, nil, pubResolver).WithFetcher(executorFunc(func(_ context.Context, r fetch.Request) (fetch.Response, error) {
-			t.Fatalf("dai.ly / dailymotion must make ZERO HTTP preflight requests, got %s %s", r.Method, r.URL)
-			return fetch.Response{}, nil
-		}))
+		}, prober, pubResolver)
 
 		if p.AllowedOutboundHost("dai.ly") || p.AllowedOutboundHost("dailymotion.com") || p.AllowedTargetURL("https://dai.ly/xbvrdzy") || p.AllowedTargetURL("https://dailymotion.com/video/xbvrdzy") {
 			t.Fatal("dai.ly and bare dailymotion.com must never enter yt-dlp target or outbound allowlist")
@@ -797,6 +807,9 @@ func TestBareMobileDomainNormalizationAndShortLinks(t *testing.T) {
 			}
 			if extractedURL != wantCanonical {
 				t.Fatalf("Parse(%q) passed %q to yt-dlp, want %q", input, extractedURL, wantCanonical)
+			}
+			if httpCalls != 0 {
+				t.Fatalf("expected 0 HTTP calls, got %d", httpCalls)
 			}
 		}
 	})
@@ -823,7 +836,7 @@ func TestBareMobileDomainNormalizationAndShortLinks(t *testing.T) {
 		}
 	})
 
-	t.Run("facebook-bare-mobile-and-fbwatch-single-hop", func(t *testing.T) {
+	t.Run("facebook-bare-mobile-and-fbwatch-local-hint-zero-outbound", func(t *testing.T) {
 		fbSpec, _ := LookupSite("facebook")
 		if testP := New(fbSpec, nil, nil); testP.AllowedOutboundHost("fb.watch") || testP.AllowedOutboundHost("facebook.com") || testP.AllowedOutboundHost("m.facebook.com") || testP.AllowedTargetURL("https://fb.watch/abc123/") || testP.AllowedTargetURL("https://m.facebook.com/watch/?v=1") {
 			t.Fatal("fb.watch, facebook.com, m.facebook.com must NEVER enter yt-dlp target or outbound allowlists")
@@ -850,96 +863,75 @@ func TestBareMobileDomainNormalizationAndShortLinks(t *testing.T) {
 			}
 		}
 
-		// Positive fb.watch: exactly 1 non-following request via fetch.Executor, Location on www.facebook.com enters existing flow.
+		// fb.watch short links must still be recognized as Facebook in catalog,
+		// return 400 INVALID_INPUT locally with actionable copy, and make ZERO outbound calls.
 		httpCalls := 0
-		var extractedURL string
+		ytdlpCalls := 0
+		dnsCalls := 0
+		countingResolver := stubResolver{
+			ips:   pubResolver.ips,
+			calls: &dnsCalls,
+		}
+		policyP := New(fbSpec, nil, nil)
+		prober := ytengine.NewSizeProber(executorFunc(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+			httpCalls++
+			t.Fatalf("fb.watch must make ZERO outbound HTTP requests, got %s %s", req.Method, req.URL)
+			return fetch.Response{}, nil
+		}), policyP.AllowedMediaURL)
 		fbWatchParser := NewWithResolver(fbSpec, &stubExtractor{
 			enabled: true,
 			extract: func(_ context.Context, rawURL string) (*ytengine.Info, error) {
-				extractedURL = rawURL
-				return loadFixtureInfo(t, "facebook.json"), nil
+				ytdlpCalls++
+				t.Fatalf("fb.watch must make ZERO yt-dlp invocations, got %q", rawURL)
+				return nil, nil
 			},
-		}, nil, pubResolver).WithFetcher(executorFunc(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
-			httpCalls++
-			if req.Policy.FollowRedirects {
-				t.Fatal("fb.watch request must NOT follow redirects")
-			}
-			if req.Header.Get("Cookie") != "" {
-				t.Fatal("fb.watch request must NOT carry Cookie")
-			}
-			if req.Policy.AllowedURL == nil || !req.Policy.AllowedURL("https://fb.watch/abc123/") || req.Policy.AllowedURL("https://sub.fb.watch/abc123/") || req.Policy.AllowedURL("https://evil.example/abc123/") {
-				t.Fatal("fb.watch AllowedURL policy violated")
-			}
-			return fetch.Response{
-				StatusCode: http.StatusFound,
-				Header:     http.Header{"Location": {"https://www.facebook.com/watch/?v=647537299265662"}},
-				URL:        req.URL,
-			}, nil
-		}))
+		}, prober, countingResolver)
 
-		res, err := fbWatchParser.Parse(context.Background(), "https://fb.watch/abc123/", now)
-		if err != nil || unified.Str(res["code"]) != "OK" {
-			t.Fatalf("fb.watch positive Parse failed: res=%v err=%v", res, err)
-		}
-		if httpCalls != 1 || extractedURL != "https://www.facebook.com/watch/?v=647537299265662" {
-			t.Fatalf("expected 1 HTTP call and canonical www.facebook.com target, got calls=%d target=%q", httpCalls, extractedURL)
-		}
-
-		// Negative fb.watch Location targets outside Facebook's existing input whitelist (www.facebook.com) must NEVER reach yt-dlp!
-		for _, badLocation := range []string{
-			"https://evil.example/watch/?v=647537299265662",
-			"https://www.facebook.com.evil.com/watch/?v=647537299265662",
-			"https://fb.watch/another/",
-			"https://m.facebook.com/watch/?v=647537299265662",
-			"https://web.facebook.com/watch/?v=647537299265662",
-			"https://www.facebook.com:8443/watch/?v=647537299265662",
-			"https://user:pass@www.facebook.com/watch/?v=647537299265662",
-			"https://127.0.0.1/watch/?v=1",
+		for _, shortURL := range []string{
+			"https://fb.watch/vtkorrRM0p/",
+			"http://fb.watch/vv4KcJ16Ft/",
+			"https://FB.WATCH:443/v/abc123/?mibextid=1",
 		} {
-			calls := 0
-			rejectP := NewWithResolver(fbSpec, &stubExtractor{
-				enabled: true,
-				extract: func(_ context.Context, rawURL string) (*ytengine.Info, error) {
-					t.Fatalf("unapproved fb.watch Location %q reached yt-dlp with %q", badLocation, rawURL)
-					return nil, nil
-				},
-			}, nil, pubResolver).WithFetcher(executorFunc(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
-				calls++
-				return fetch.Response{
-					StatusCode: http.StatusFound,
-					Header:     http.Header{"Location": {badLocation}},
-					URL:        req.URL,
-				}, nil
-			}))
-			badRes, err := rejectP.Parse(context.Background(), "https://fb.watch/abc123/", now)
-			if err != nil || calls != 1 || unified.Str(badRes["code"]) != "INVALID_INPUT" {
-				t.Fatalf("bad Location %q: calls=%d code=%v err=%v, want calls=1 INVALID_INPUT", badLocation, calls, badRes["code"], err)
+			if got := c.PlatformForURL(shortURL); got != "facebook" {
+				t.Fatalf("catalog.PlatformForURL(%q) = %q, want facebook", shortURL, got)
+			}
+			res, err := fbWatchParser.Parse(context.Background(), shortURL, now)
+			if err != nil {
+				t.Fatalf("Parse(%q) unexpected error: %v", shortURL, err)
+			}
+			if err := unified.ValidateEnvelopeAt(res, now); err != nil {
+				t.Fatalf("Parse(%q) ValidateEnvelopeAt failed: %v", shortURL, err)
+			}
+			errObj := unified.Map(res["error"])
+			msg := unified.Str(errObj["message"])
+			if unified.Str(res["code"]) != "INVALID_INPUT" || errObj["retryable"] == true {
+				t.Fatalf("Parse(%q) = %v, want INVALID_INPUT non-retryable", shortURL, res)
+			}
+			if msg != fbWatchLocalHint || !strings.Contains(msg, "facebook.com 的完整视频链接") {
+				t.Fatalf("Parse(%q) message = %q, want %q", shortURL, msg, fbWatchLocalHint)
+			}
+			if httpCalls != 0 || ytdlpCalls != 0 || dnsCalls != 0 {
+				t.Fatalf("Parse(%q) outbound calls: http=%d ytdlp=%d dns=%d, want 0/0/0", shortURL, httpCalls, ytdlpCalls, dnsCalls)
 			}
 		}
 
-		// fb.watch redirecting to Facebook login wall returns UPSTREAM_BLOCKED without invoking yt-dlp.
-		for _, loginLocation := range []string{
-			"https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2Fwatch%2F%3Fv%3D647537299265662",
-			"https://www.fb.watch/login/?next=https%3A%2F%2Fwww.facebook.com%2Fwatch%2F%3Fv%3D647537299265662",
+		// Lookalikes, subdomains, userinfo, non-default ports, and bare root are still rejected with 0 outbound calls.
+		for _, rejectedURL := range []string{
+			"https://evilfb.watch/abc123/",
+			"https://fb.watch.evil.com/abc123/",
+			"https://www.fb.watch/abc123/",
+			"https://sub.fb.watch/abc123/",
+			"https://user:pass@fb.watch/abc123/",
+			"https://fb.watch:8080/abc123/",
+			"https://fb.watch:8443/abc123/",
+			"https://fb.watch/",
 		} {
-			calls := 0
-			loginP := NewWithResolver(fbSpec, &stubExtractor{
-				enabled: true,
-				extract: func(_ context.Context, rawURL string) (*ytengine.Info, error) {
-					t.Fatalf("fb.watch login wall %q must not invoke yt-dlp (%q)", loginLocation, rawURL)
-					return nil, nil
-				},
-			}, nil, pubResolver).WithFetcher(executorFunc(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
-				calls++
-				return fetch.Response{
-					StatusCode: http.StatusFound,
-					Header:     http.Header{"Location": {loginLocation}},
-					URL:        req.URL,
-				}, nil
-			}))
-			loginRes, err := loginP.Parse(context.Background(), "https://fb.watch/abc123/", now)
-			if err != nil || calls != 1 || unified.Str(loginRes["code"]) != "UPSTREAM_BLOCKED" {
-				t.Fatalf("login Location %q: calls=%d code=%v err=%v, want calls=1 UPSTREAM_BLOCKED", loginLocation, calls, loginRes["code"], err)
+			res, err := fbWatchParser.Parse(context.Background(), rejectedURL, now)
+			if err != nil || unified.Str(res["code"]) != "INVALID_INPUT" {
+				t.Fatalf("Parse(%q) = %v (err=%v), want INVALID_INPUT", rejectedURL, res, err)
+			}
+			if httpCalls != 0 || ytdlpCalls != 0 || dnsCalls != 0 {
+				t.Fatalf("Parse(%q) outbound calls: http=%d ytdlp=%d dns=%d, want 0/0/0", rejectedURL, httpCalls, ytdlpCalls, dnsCalls)
 			}
 		}
 	})

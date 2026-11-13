@@ -1335,7 +1335,8 @@ func classifyStderr(stderrText string, runErr error) *Error {
 		strings.Contains(lower, "tweet not found") ||
 		strings.Contains(lower, "does not exist") ||
 		strings.Contains(lower, "http error 404") ||
-		strings.Contains(lower, "unavailable"):
+		strings.Contains(lower, "unavailable") ||
+		hasDailymotionNotFoundLine(stderrText):
 		return &Error{
 			Code:      CodeContentUnavailable,
 			Message:   "未找到可用的媒体，或该内容已不可访问",
@@ -1350,6 +1351,18 @@ func classifyStderr(stderrText string, runErr error) *Error {
 			Cause:     runErr,
 		}
 	}
+}
+
+func hasDailymotionNotFoundLine(stderrText string) bool {
+	for _, rawLine := range strings.Split(stderrText, "\n") {
+		line := strings.ToLower(strings.TrimSpace(rawLine))
+		line = strings.TrimSpace(strings.TrimPrefix(line, "error:"))
+		if (strings.HasPrefix(line, "[dailymotion]") || strings.HasPrefix(line, "[dailymotion:")) &&
+			strings.HasSuffix(line, ": not found.") {
+			return true
+		}
+	}
+	return false
 }
 
 type limitedBuffer struct {
