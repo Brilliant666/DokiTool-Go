@@ -102,6 +102,7 @@ func run(args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	listen := flags.String("listen", "127.0.0.1:9082", "loopback API listener; use an authenticated edge for public traffic")
 	xhsTransport := flags.String("xhs-page-transport", "standard", "XHS HTTPS pages only: standard or chrome131")
+	xTombstoneFallback := flags.String("x-tombstone-fallback", x.TombstoneFallbackOff, "X TweetTombstone metadata fallback: off or fxtwitter")
 	clientIdentity := flags.String("client-identity", "direct", "client identity for admission: direct or authenticated caddy")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -117,6 +118,9 @@ func run(args []string) error {
 	}
 	xhsExecutor, err := newXHSExecutor(*xhsTransport)
 	if err != nil {
+		return err
+	}
+	if err := x.ValidateTombstoneFallback(*xTombstoneFallback); err != nil {
 		return err
 	}
 	executor := fetch.New()
@@ -148,7 +152,7 @@ func run(args []string) error {
 		"zuiyou":      zuiyou.NewWithTBVideo(executor, zuiyouSave),
 		"xiaohongshu": xiaohongshu.New(xhsExecutor),
 	}
-	if err := configureYTDLPX(c, adapters, executor, os.Getenv); err != nil {
+	if err := configureYTDLPWithOptions(c, adapters, executor, *xTombstoneFallback, os.Getenv); err != nil {
 		return err
 	}
 	handler, err := api.New(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
@@ -266,6 +270,13 @@ func enableTBVideo(key string) (bool, error) {
 // and the shared yt-dlp binary preflight succeeds.
 // Production defaults all switches to off.
 func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, executor fetch.Executor, getenv func(string) string) error {
+	return configureYTDLPWithOptions(c, adapters, executor, x.TombstoneFallbackOff, getenv)
+}
+
+func configureYTDLPWithOptions(c *catalog.Catalog, adapters map[string]api.Adapter, executor fetch.Executor, xTombstoneFallback string, getenv func(string) string) error {
+	if err := x.ValidateTombstoneFallback(xTombstoneFallback); err != nil {
+		return err
+	}
 	parseSwitch := func(key string) (bool, error) {
 		raw := getenv(key)
 		if raw == "" {
@@ -310,7 +321,13 @@ func configureYTDLPX(c *catalog.Catalog, adapters map[string]api.Adapter, execut
 			return err
 		}
 		xEngine := newXEngine(baseEngine)
-		adapters["x"] = x.NewWithSizeProber(xEngine, x.NewSizeProber(executor)).WithFetcher(executor)
+		xParser, err := x.NewWithSizeProber(xEngine, x.NewSizeProber(executor)).
+			WithFetcher(executor).
+			WithTombstoneFallback(xTombstoneFallback)
+		if err != nil {
+			return err
+		}
+		adapters["x"] = xParser
 	}
 	if ytEnabled {
 		if err := c.Register(catalog.YouTubePlatform()); err != nil {
