@@ -96,7 +96,7 @@ export async function downloadBlob(request: DownloadRequest, signal: AbortSignal
         const objectUrl = URL.createObjectURL(new Blob(chunks, { type: type || "application/octet-stream" }));
         chunks.length = 0;
         try { openSource(objectUrl, filename, false); }
-        finally { setTimeout(() => URL.revokeObjectURL(objectUrl), 4000); }
+        finally { (setTimeout(() => URL.revokeObjectURL(objectUrl), 45_000) as { unref?: () => void })?.unref?.(); }
         publish({ status: "completed", loaded, total: total || loaded, speed: 0 });
         return snapshot;
       } catch (error) {

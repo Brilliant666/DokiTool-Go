@@ -20,15 +20,75 @@ import type {
   YouTubeHelperState,
 } from "../types/media";
 
-class HttpStatusError extends Error {
+export class HttpStatusError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  retry_after_seconds?: number;
+  rateLimitRetried?: boolean;
+  constructor(message: string, status: number, retryAfterSeconds?: number) {
     super(message);
     this.status = status;
+    if (retryAfterSeconds! > 0 && Number.isFinite(retryAfterSeconds)) {
+      this.retry_after_seconds = Math.ceil(retryAfterSeconds!);
+    }
   }
 }
 
-async function fetchJSON(
+function parseRetryAfterSeconds(
+  response: Response,
+  payload?: unknown,
+): number | undefined {
+  if (response.status !== 429) return undefined;
+  for (const v of [
+    (payload as any)?.error?.retry_after_seconds,
+    response.headers.get("Retry-After"),
+  ]) {
+    const n = Number(v);
+    if (n > 0 && Number.isFinite(n)) return Math.ceil(n);
+  }
+  return undefined;
+}
+
+export async function withRateLimitRetry<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+  onRateLimitWait?: (seconds: number) => void,
+): Promise<T> {
+  const abortErr = () =>
+    signal?.reason ?? new DOMException("Aborted", "AbortError");
+  for (let attempt = 0; ; attempt++) {
+    if (signal?.aborted) throw abortErr();
+    try {
+      return await operation();
+    } catch (error: any) {
+      if (error?.rateLimitRetried) throw error;
+      const wait = error?.retry_after_seconds;
+      if (error?.status !== 429 || !(wait > 0 && wait <= 15) || attempt >= 2) {
+        if (error?.status === 429 && !Object.isFrozen(error)) {
+          error.rateLimitRetried = true;
+        }
+        throw error;
+      }
+      for (let sec = Math.ceil(wait); sec > 0; sec--) {
+        if (signal?.aborted) throw abortErr();
+        onRateLimitWait?.(sec);
+        await new Promise<void>((res, rej) => {
+          const stop = () => {
+            clearTimeout(timer);
+            rej(abortErr());
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", stop);
+            res();
+          }, 1000);
+          signal?.addEventListener("abort", stop, { once: true });
+          if (signal?.aborted) stop();
+        });
+      }
+    }
+  }
+}
+
+export async function fetchJSON(
   url: string,
   signal?: AbortSignal,
   init?: RequestInit,
@@ -47,12 +107,14 @@ async function fetchJSON(
       throw new HttpStatusError(
         `接口返回无效数据（HTTP ${response.status}）`,
         response.status,
+        parseRetryAfterSeconds(response),
       );
     });
     if (!response.ok)
       throw new HttpStatusError(
         (payload as any)?.error?.message || `解析失败（HTTP ${response.status}）`,
         response.status,
+        parseRetryAfterSeconds(response, payload),
       );
     return payload;
   } finally {
@@ -540,15 +602,21 @@ export function useVideoParser(options: {
   async function resolveItem(
     item: MediaItem,
     signal?: AbortSignal,
+    options?: { onRateLimitWait?: (seconds: number) => void },
   ): Promise<MediaItem> {
     if (item.state === "unavailable") throw new Error(item.error.message);
     if (!item.resolve_url) {
       if (readyItem(item)) return item;
       throw new Error("条目缺少解析入口");
     }
+    const url = resolveApiUrl(item.resolve_url);
     const data = withTbvideoItems(
       validateMediaEnvelope(
-        await fetchJSON(resolveApiUrl(item.resolve_url), signal),
+        await withRateLimitRetry(
+          () => fetchJSON(url, signal),
+          signal,
+          options?.onRateLimitWait,
+        ),
       ),
     );
     const resolved = data.items.find((candidate) => candidate.id === item.id);

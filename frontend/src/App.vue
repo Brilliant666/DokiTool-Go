@@ -27,6 +27,7 @@ import { refreshPlatformCatalog } from "./utils/platforms";
 import { cleanupLeftoverYouTubeOpfsTempFiles } from "./utils/youtubeHelperCore";
 import {
   homeInitialStateKey,
+  isInAppBrowser,
   readBrowserPreferences,
   persistPreference,
 } from "./ssr/initialState";
@@ -38,6 +39,7 @@ const initialState = inject(homeInitialStateKey, {
   inputUrl: "",
 });
 const isReady = ref(!initialState.prerendered);
+const showInAppBanner = ref(false);
 
 // Share the preload with the async component, but allow a later parse to retry
 // after a transient chunk-loading failure.
@@ -252,6 +254,7 @@ onMounted(() => {
   document.documentElement.classList.toggle("dark", isDark.value);
   document.documentElement.style.colorScheme = isDark.value ? "dark" : "light";
   document.documentElement.lang = locale.value;
+  showInAppBanner.value = isInAppBrowser();
   isReady.value = true;
   document.addEventListener("visibilitychange", onVisibilityOrFocus);
   window.addEventListener("focus", onVisibilityOrFocus);
@@ -280,6 +283,19 @@ onUnmounted(() => {
       @handoff="handleBrowserDownload"
       @clear-completed="handleClearCompleted"
     />
+
+    <p
+      v-if="showInAppBanner"
+      data-in-app-browser-banner
+      role="status"
+      class="relative z-40 border-b border-amber-200 bg-amber-50/95 px-4 py-2 text-center text-xs sm:text-sm text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/90 dark:text-amber-100"
+    >
+      {{
+        locale === "en"
+          ? "In-app browser detected. Saving files may be restricted — please open in your system browser."
+          : "检测到应用内置浏览器，保存文件可能受限，请在系统浏览器中打开。"
+      }}
+    </p>
 
     <HeaderNav
       :is-dark="isDark"

@@ -334,7 +334,8 @@ test('compact quality cards preserve the server source, explicit versions and ac
     assert.equal(view.choices().length, 5);
     assert.equal(view.selection.currentTarget.value.url, url('hevc-b'), 'expansion never selects a different source');
     view.choices()[2].props.onClick(); await nextTick();
-    assert.deepEqual(view.selection.currentSelection.value, { variant_id: '1080-h264', source_id: 'h264-a' });
+    assert.deepEqual(view.selection.currentSelection.value, { variant_id: '1080-h264' });
+    assert.equal(view.selection.currentTarget.value.url, url('h264-a'));
     view.selection.choose({ variant_id: '1080-h264', source_id: 'h264-b' }); await nextTick();
     await view.click('精简展示');
     assert.equal(view.choices().length, 4);

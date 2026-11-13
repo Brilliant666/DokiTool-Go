@@ -133,4 +133,80 @@ test('API base accepts origins and rejects paths before URL normalization',()=>{
   for(const base of ['https://user:secret@api.example.test','https://api.example.test/path','https://api.example.test/prefix/..','https://api.example.test/%2e%2e','https://api.example.test:99999','https://api.example.test?x=1','https://api.example.test/#hash']) assert.throws(()=>config.resolveApiConfig({VITE_API_BASE_URL:base}));
 });
 
+test('#91 PR1 item 3: fetchJSON surfaces retry_after_seconds and resolveItem retries 429 (<=15s, max 2 retries, abortable)',async(t)=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  globalThis.fetch=async()=>new Response(JSON.stringify({schema_version:'1.0',code:'RATE_LIMITED',error:{code:'RATE_LIMITED',message:'解析请求过于频繁，请稍后重试',retryable:true,retry_after_seconds:7}}),{status:429,headers:{'content-type':'application/json','Retry-After':'7'}});
+  await assert.rejects(parser.fetchJSON('/api/resolve?item_id=1'),(err)=>{
+    assert.equal(err.status,429);
+    assert.equal(err.retry_after_seconds,7);
+    return true;
+  });
+
+  // Header fallback when 429 body omits retry_after_seconds
+  globalThis.fetch=async()=>new Response(JSON.stringify({error:{message:'Too Many Requests'}}),{status:429,headers:{'content-type':'application/json','Retry-After':'4'}});
+  await assert.rejects(parser.fetchJSON('/api/resolve?item_id=1'),(err)=>{
+    assert.equal(err.status,429);
+    assert.equal(err.retry_after_seconds,4);
+    return true;
+  });
+
+  // 2 consecutive 429s (<=15s) retry and succeed on attempt 3
+  const {instance}=harness();
+  const observedWaits=[];
+  let calls=0;
+  const resolved=file(deferred.id,'https://media.example.test/p3-after-429.mp4');
+  globalThis.fetch=async()=>{
+    calls++;
+    if(calls<=2){
+      return new Response(JSON.stringify({schema_version:'1.0',code:'RATE_LIMITED',error:{code:'RATE_LIMITED',message:'限流',retryable:true,retry_after_seconds:2}}),{status:429,headers:{'content-type':'application/json'}});
+    }
+    return Response.json(good({items:[resolved]}));
+  };
+  const flush=async()=>{await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));};
+  const promise=instance.resolveItem(deferred,undefined,{onRateLimitWait:(sec)=>observedWaits.push(sec)});
+  for(let step=0;step<4;step++){
+    await flush();
+    t.mock.timers.tick(1000);
+    await flush();
+  }
+  const item=await promise;
+  assert.equal(calls,3);
+  assert.equal(item.default.url,'https://media.example.test/p3-after-429.mp4');
+  assert.deepEqual(observedWaits,[2,1,2,1]);
+
+  // retry_after_seconds > 15 fails immediately without waiting
+  let longCalls=0;
+  const longWaits=[];
+  globalThis.fetch=async()=>{
+    longCalls++;
+    return new Response(JSON.stringify({schema_version:'1.0',code:'RATE_LIMITED',error:{code:'RATE_LIMITED',message:'限流过久',retryable:true,retry_after_seconds:16}}),{status:429,headers:{'content-type':'application/json'}});
+  };
+  await assert.rejects(instance.resolveItem(deferred,undefined,{onRateLimitWait:(s)=>longWaits.push(s)}),/限流过久/);
+  assert.equal(longCalls,1);
+  assert.deepEqual(longWaits,[]);
+
+  // Exhausting > 2 retries fails on 3rd 429
+  let exhaustCalls=0;
+  globalThis.fetch=async()=>{
+    exhaustCalls++;
+    return new Response(JSON.stringify({schema_version:'1.0',code:'RATE_LIMITED',error:{code:'RATE_LIMITED',message:'持续限流',retryable:true,retry_after_seconds:1}}),{status:429,headers:{'content-type':'application/json'}});
+  };
+  const exhaustHandled=assert.rejects(instance.resolveItem(deferred),/持续限流/);
+  for(let step=0;step<3;step++){
+    await flush();
+    t.mock.timers.tick(1000);
+    await flush();
+  }
+  await exhaustHandled;
+  assert.equal(exhaustCalls,3);
+
+  // User abort cancels during 429 wait immediately
+  const abortController=new AbortController();
+  globalThis.fetch=async()=>new Response(JSON.stringify({schema_version:'1.0',code:'RATE_LIMITED',error:{code:'RATE_LIMITED',message:'限流',retryable:true,retry_after_seconds:10}}),{status:429,headers:{'content-type':'application/json'}});
+  const abortHandled=assert.rejects(instance.resolveItem(deferred,abortController.signal),{name:'AbortError'});
+  await flush();
+  abortController.abort();
+  await abortHandled;
+});
+
 });

@@ -362,7 +362,8 @@ test('a failed lazy episode never produces an empty ZIP; retry re-resolves it', 
 
 test('ZIP cancellation aborts fetch; retry keeps the original resource snapshot', async () => {
   const oldUrl = 'https://media.test/old.jpg';
-  const { instance, store } = harness({ ...base, url: null, images: [oldUrl] });
+  const oldUrl2 = 'https://media.test/old-2.jpg';
+  const { instance, store } = harness({ ...base, url: null, images: [oldUrl, oldUrl2] });
   let capturedSignal;
   globalThis.fetch = async (_, { signal }) => new Promise((resolve, reject) => {
     capturedSignal = signal;
@@ -373,13 +374,13 @@ test('ZIP cancellation aborts fetch; retry keeps the original resource snapshot'
   instance.handleCancelDownload(store.downloads[0].id);
   await pending;
   assert.ok(capturedSignal.aborted); assert.equal(store.downloads[0].status, 'cancelled'); assert.equal(clicked.length, 0);
-  store.resultData = { ...base, images: ['https://media.test/new.jpg'] };
+  store.resultData = { ...base, images: ['https://media.test/new.jpg', 'https://media.test/new-2.jpg'] };
   globalThis.fetch = async (url) => { fetched.push(url); return new Response(new Uint8Array([1, 2]), { headers: { 'content-type': 'image/webp' } }); };
   instance.handleRetryDownload(store.downloads[0].id);
   await settled(store.downloads[0]);
-  assert.equal(store.downloads[0].status, 'completed'); assert.deepEqual(fetched, [oldUrl]);
+  assert.equal(store.downloads[0].status, 'completed'); assert.deepEqual(fetched, [oldUrl, oldUrl2]);
   const zip = await JSZip.loadAsync(await blobs.at(-1).arrayBuffer());
-  assert.equal(Object.keys(zip.files).length,1);assert.match(Object.keys(zip.files)[0],/\.jpg$/);
+  assert.equal(Object.keys(zip.files).length,2);assert.match(Object.keys(zip.files)[0],/\.jpg$/);
 });
 
 test('all-media ZIP keeps distinct images and deduplicates live covers', async () => {
@@ -1200,7 +1201,7 @@ test('ZIP cancellation aborts lazy resolution without waiting for its ignored si
 });
 
 test('cancelling during ZIP library preparation never starts media requests or saves a file', async () => {
-  const { instance, store } = harness({ ...base, url: null, images: ['https://media.test/zip-preparation.jpg'] });
+  const { instance, store } = harness({ ...base, url: null, images: ['https://media.test/zip-preparation.jpg', 'https://media.test/zip-preparation-2.jpg'] });
   const pending = instance.downloadAllMedia('images');
   assert.equal(store.downloads[0].status, 'queued');
   await Promise.resolve(); // The uncontended buffered slot is acquired before library loading.
@@ -1534,8 +1535,10 @@ test('PR8 review: ZIP compares decoded bytes to source size without treating gzi
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const source = `http://127.0.0.1:${server.address().port}/compressed-attachment`;
-    const data = fixture({ ...base, url: null, images: [source] });
+    const source2 = `http://127.0.0.1:${server.address().port}/compressed-attachment-2`;
+    const data = fixture({ ...base, url: null, images: [source, source2] });
     data.items[0].variants[0].delivery.sources[0].size_bytes = decoded.byteLength;
+    data.items[1].variants[0].delivery.sources[0].size_bytes = decoded.byteLength;
     const { instance, store } = harness(data);
     const observed = {};
     globalThis.fetch = async (url, options) => {
@@ -1551,7 +1554,7 @@ test('PR8 review: ZIP compares decoded bytes to source size without treating gzi
     const zip = await JSZip.loadAsync(await blobs.at(-1).arrayBuffer());
     const contents = await Object.values(zip.files)[0].async('uint8array');
     assert.deepEqual(contents, decoded);
-    const invalid = fixture({ ...base, url: null, images: [source] });
+    const invalid = fixture({ ...base, url: null, images: [source, source2] });
     invalid.items[0].variants[0].delivery.sources[0].size_bytes = decoded.byteLength + 1;
     const other = harness(invalid);
     await other.instance.downloadAllMedia('images');
@@ -1565,8 +1568,9 @@ test('PR8 review: ZIP compares decoded bytes to source size without treating gzi
 
 test('PR8 review: unexposed Content-Encoding on a CORS response is not proof of identity bytes', async () => {
   const decoded = new Uint8Array(4096).fill(65), wire = gzipSync(decoded);
-  const data = fixture({ ...base, url: null, images: ['https://media.test/cors-compressed-image'] });
+  const data = fixture({ ...base, url: null, images: ['https://media.test/cors-compressed-image', 'https://media.test/cors-compressed-image-2'] });
   data.items[0].variants[0].delivery.sources[0].size_bytes = decoded.byteLength;
+  data.items[1].variants[0].delivery.sources[0].size_bytes = decoded.byteLength;
   globalThis.fetch = async () => {
     // Content-Length is CORS-safelisted, Content-Encoding is not. This models
     // the browser-filtered response after the actual gzip decoding test above.
@@ -2211,12 +2215,12 @@ test('Go public XHS live pairs reach individual and ZIP downloads', {
 });
 
 test('two page ZIP jobs serialize; cancelling the queued job fetches nothing and releases no extra slot', async () => {
-  const first = harness({ ...base, url: null, images: ['https://media.test/queued-first.jpg'] });
-  const second = harness({ ...base, url: null, images: ['https://media.test/queued-second.jpg'] });
+  const first = harness({ ...base, url: null, images: ['https://media.test/queued-first.jpg', 'https://media.test/queued-first-b.jpg'] });
+  const second = harness({ ...base, url: null, images: ['https://media.test/queued-second.jpg', 'https://media.test/queued-second-b.jpg'] });
   let finish;
   globalThis.fetch = async url => {
     fetched.push(url);
-    if (url.includes('queued-first')) return new Promise(resolve => { finish = () => resolve(new Response(new Uint8Array([1, 2]), { headers: { 'Content-Type': 'image/jpeg', 'Content-Length': '2' } })); });
+    if (url === 'https://media.test/queued-first.jpg') return new Promise(resolve => { finish = () => resolve(new Response(new Uint8Array([1, 2]), { headers: { 'Content-Type': 'image/jpeg', 'Content-Length': '2' } })); });
     return new Response(new Uint8Array([3, 4]), { headers: { 'Content-Type': 'image/jpeg', 'Content-Length': '2' } });
   };
   const running = first.instance.downloadAllMedia('images');
@@ -2229,10 +2233,10 @@ test('two page ZIP jobs serialize; cancelling the queued job fetches nothing and
   assert.deepEqual(fetched, ['https://media.test/queued-first.jpg']);
   finish(); await running;
   assert.equal(first.store.downloads[0].status, 'completed');
-  const third = harness({ ...base, url: null, images: ['https://media.test/queued-third.jpg'] });
+  const third = harness({ ...base, url: null, images: ['https://media.test/queued-third.jpg', 'https://media.test/queued-third-b.jpg'] });
   await third.instance.downloadAllMedia('images');
   assert.equal(third.store.downloads[0].status, 'completed');
-  assert.deepEqual(fetched, ['https://media.test/queued-first.jpg', 'https://media.test/queued-third.jpg']);
+  assert.deepEqual(fetched, ['https://media.test/queued-first.jpg', 'https://media.test/queued-first-b.jpg', 'https://media.test/queued-third.jpg', 'https://media.test/queued-third-b.jpg']);
   assert.equal(clicked.length, 2);
 });
 
@@ -2943,4 +2947,491 @@ test('file download speed-probes browser_fetch=allowed sources before starting t
   } finally {
     globalThis.__uiDownloadManager = prevManager;
   }
+});
+
+test('#91 PR1 item 1: clicking quality card emits variant_id only so download runs routeProbe; player error fallback still pins source_id', async () => {
+  const slowUrl = 'https://v13-cold.douyinvod.com/qswitch-slow.mp4';
+  const fastUrl = 'https://v26-cold.douyinvod.com/qswitch-fast.mp4';
+  const midUrl = 'https://v3-dy-o.zjcdn.com/qswitch-mid.mp4';
+  const data = {
+    platform: 'douyin',
+    title: '画质切换测速',
+    source_url: 'https://www.douyin.com/video/91001',
+    items: [{
+      id: 'video-q1',
+      type: 'video',
+      state: 'ready',
+      default: { variant_id: 'v-720p', source_id: 's-720', url: 'https://v3-dy-o.zjcdn.com/720.mp4' },
+      variants: [
+        {
+          id: 'v-720p',
+          label: '720p',
+          metadata: { width: 720, height: 1280, extension: 'mp4', mime_type: 'video/mp4' },
+          delivery: { kind: 'file', sources: [{ id: 's-720', url: 'https://v3-dy-o.zjcdn.com/720.mp4', browser_fetch: 'allowed' }] },
+        },
+        {
+          id: 'v-4k',
+          label: '2160p',
+          metadata: { width: 2160, height: 3840, extension: 'mp4', mime_type: 'video/mp4' },
+          delivery: {
+            kind: 'file',
+            sources: [
+              { id: 's-slow', url: slowUrl, size_bytes: 10 * 1024 * 1024, browser_fetch: 'allowed' },
+              { id: 's-fast', url: fastUrl, size_bytes: 10 * 1024 * 1024, browser_fetch: 'allowed' },
+              { id: 's-mid', url: midUrl, size_bytes: 10 * 1024 * 1024, browser_fetch: 'allowed' },
+            ],
+          },
+        },
+      ],
+    }],
+    default_item_id: 'video-q1',
+  };
+
+  const rangeProbes = [];
+  const launchedRequests = [];
+  const switchedChoices = [];
+  const prevManager = globalThis.__uiDownloadManager;
+  globalThis.fetch = async (url, init) => {
+    rangeProbes.push({ url, range: init?.headers?.Range });
+    const delayMs = url === fastUrl ? 1 : url === midUrl ? 10 : 25;
+    await new Promise(r => setTimeout(r, delayMs));
+    const buf = new Uint8Array(512 * 1024);
+    buf[3] = 0x18;
+    return new Response(buf, {
+      status: 206,
+      headers: { 'content-type': 'video/mp4', 'content-range': `bytes 0-${buf.length - 1}/10485760` },
+    });
+  };
+  globalThis.__uiDownloadManager = {
+    async run(request, _signal, observe) {
+      launchedRequests.push(request);
+      const snap = { id: request.id, transport: 'browser_streaming', status: 'completed', filename: request.filename, url: request.url, loaded: 1024, total: 1024, speed: 0, elapsed: 1, averageSpeed: 1024 };
+      observe(snap);
+      return snap;
+    },
+  };
+
+  const view = await mountResultPlayer(data);
+  try {
+    const h = harness(data);
+    view.state.value.selection = h.selection;
+    view.state.value.onSwitchVideo = choice => {
+      switchedChoices.push(choice);
+      h.selection.choose(choice);
+    };
+    await nextTick();
+
+    const findAll = (node, match, acc = []) => {
+      if (match(node)) acc.push(node);
+      for (const child of node.children || []) findAll(child, match, acc);
+      return acc;
+    };
+    const rootNode = view.player().parent.parent.parent.parent.parent;
+    const backupTab = findAll(rootNode, n => n.type === 'button' && view.text(n).includes('画质选项'))[0];
+    backupTab.props.onClick();
+    await nextTick();
+
+    const qualityCards = findAll(rootNode, n => n.type === 'button' && String(n.props.class || '').includes('rs-backup-item'));
+    const card4k = qualityCards.find(n => view.text(n).includes('2160p'));
+    assert.ok(card4k, '2160p quality card must render');
+    card4k.props.onClick();
+    await nextTick();
+
+    assert.deepEqual(switchedChoices, [{ variant_id: 'v-4k' }], 'quality card click must emit variant_id only (no source_id)');
+
+    await h.instance.downloadMainVideo();
+    await settled(h.store.downloads[0]);
+    assert.equal(rangeProbes.length, 3, 'routeProbe must run across 3 allowed routes after quality switch');
+    assert.equal(launchedRequests[0].url, fastUrl, 'fastest probed route must win');
+
+    // Player playback error fallback MUST still pin source_id
+    switchedChoices.length = 0;
+    rangeProbes.length = 0;
+    launchedRequests.length = 0;
+    const playerEl = view.player();
+    playerEl.currentSrc = playerEl.src;
+    playerEl.props.onError({ currentTarget: playerEl });
+    await nextTick();
+    assert.deepEqual(switchedChoices, [{ variant_id: 'v-4k', source_id: 's-fast' }], 'player error fallback must still pass source_id');
+    await h.instance.downloadMainVideo();
+    await settled(h.store.downloads[1]);
+    assert.equal(rangeProbes.length, 0, 'pinned fallback source_id skips routeProbe');
+    assert.equal(launchedRequests[0].url, fastUrl);
+  } finally {
+    view.app.unmount();
+    globalThis.__uiDownloadManager = prevManager;
+  }
+});
+
+test('#91 PR1 item 2: single-image downloadAllMedia saves directly without .zip; multi-item archives use meaningful names across platforms', async () => {
+  const prevManager = globalThis.__uiDownloadManager;
+  const savedFiles = [];
+  globalThis.__uiDownloadManager = {
+    async run(request, _signal, observe) {
+      savedFiles.push({ url: request.url, filename: request.filename });
+      const snap = { id: request.id, transport: 'browser_streaming', status: 'completed', filename: request.filename, url: request.url, loaded: 4, total: 4, speed: 0, elapsed: 1, averageSpeed: 4 };
+      observe(snap);
+      return snap;
+    },
+  };
+  try {
+    const singleData = fixture({ ...base, url: null, title: '单张风景照', images: ['https://media.test/only-one.jpg'] });
+    singleData.platform = 'xiaohongshu';
+    const single = harness(singleData);
+    single.instance.downloadImage(single.store.resultData.items[0]);
+    await settled(single.store.downloads[0]);
+    await single.instance.downloadAllMedia('images');
+    await settled(single.store.downloads[1]);
+
+    assert.equal(blobs.length, 0, 'single-image downloadAllMedia must NOT build a .zip Blob');
+    assert.equal(savedFiles.length, 2);
+    assert.equal(savedFiles[1].filename, savedFiles[0].filename, 'single-image downloadAllMedia filename must match single downloadImage');
+    assert.equal(savedFiles[1].filename, '单张风景照.jpg');
+  } finally {
+    globalThis.__uiDownloadManager = prevManager;
+  }
+
+  globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/jpeg', 'content-length': '3' } });
+  for (const platform of ['douyin', 'xiaohongshu', 'weibo', 'x', 'instagram']) {
+    clicked = [];
+    const withTitle = fixture({ ...base, url: null, title: '春日出游图集', author: { name: '阿星' }, images: ['https://media.test/1.jpg', 'https://media.test/2.jpg', 'https://media.test/3.jpg'] });
+    withTitle.platform = platform;
+    const hTitle = harness(withTitle);
+    await hTitle.instance.downloadAllMedia('images');
+    assert.equal(clicked.at(-1).filename, '春日出游图集_3P.zip', `${platform}: title + count .zip`);
+    assert.doesNotMatch(clicked.at(-1).filename, /^media_\d+\.zip$/);
+
+    clicked = [];
+    const withAuthor = fixture({ ...base, url: null, title: '   ', author: { name: '摄影师小王' }, images: ['https://media.test/1.jpg', 'https://media.test/2.jpg'] });
+    withAuthor.platform = platform;
+    const hAuthor = harness(withAuthor);
+    await hAuthor.instance.downloadAllMedia('images');
+    assert.equal(clicked.at(-1).filename, '摄影师小王_2P.zip', `${platform}: author + count .zip when title empty`);
+
+    clicked = [];
+    const emptyBoth = fixture({ ...base, url: null, title: '', images: ['https://media.test/1.jpg', 'https://media.test/2.jpg', 'https://media.test/3.jpg', 'https://media.test/4.jpg'] });
+    emptyBoth.platform = platform;
+    emptyBoth.content_id = `${platform}-98765`;
+    const hFallback = harness(emptyBoth);
+    await hFallback.instance.downloadAllMedia('images');
+    assert.match(clicked.at(-1).filename, /^[0-9a-f]{16}_4P\.zip$/, `${platform}: deterministic hash + count fallback when title and author empty`);
+  }
+});
+
+test('#91 PR1 item 3: 5-item batch archive hitting 429 on items 4 & 5 shows wait seconds on panel, retries (<=15s, max 2), and handles >15s / >2 retries', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const make5PartData = () => ({
+    platform: 'bilibili',
+    title: '五分P合集',
+    content_id: 'BV1test91',
+    items: [1, 2, 3, 4, 5].map(i => ({
+      id: `part-${i}`,
+      type: 'video',
+      index: i,
+      title: `第${i}话`,
+      state: 'deferred',
+      default: null,
+      default_unavailable_reason: 'needs_resolve',
+      resolve_url: `/api/resolve?schema_version=1.0&item_id=part-${i}`,
+    })),
+    default_item_id: 'part-1',
+  });
+
+  const resultRef = ref(make5PartData());
+  const store = {
+    get resultData() { return resultRef.value; },
+    set resultData(v) { resultRef.value = v; },
+    resultVersion: 1,
+    downloads: [],
+    clearResult() { resultRef.value = null; },
+    setResult(v) { resultRef.value = v; },
+    replaceItem() {},
+    addDownload(input) { const id = this.downloads.length + 1; this.downloads.push({ id, ...input }); return id; },
+    updateDownload(id, changes) {
+      const target = this.downloads.find(d => d.id === id);
+      if (target) {
+        Object.assign(target, changes);
+        if (changes.statusText) observedStatuses.push(changes.statusText);
+      }
+    },
+    removeDownload(id) { this.downloads = this.downloads.filter(d => d.id !== id); },
+  };
+  const observedStatuses = [];
+  const vp = parser.useVideoParser({ videoStore: store, locale: ref('zh-CN'), showToast() {} });
+  const sel = markRaw(selectionModule.useVideoSelection({ videoStore: store }));
+  sel.syncResult();
+  const dl = downloads.useMediaDownload({ videoStore: store, selection: sel, resolveItem: vp.resolveItem, showToast() {} });
+
+  const resolveCounts = new Map();
+  globalThis.fetch = async (url) => {
+    const str = String(url);
+    if (str.includes('/api/resolve')) {
+      const itemId = new URL(str, 'https://snap.dokitool.com').searchParams.get('item_id');
+      const attempt = (resolveCounts.get(itemId) || 0) + 1;
+      resolveCounts.set(itemId, attempt);
+      if (itemId === 'part-4' && attempt === 1) {
+        return new Response(JSON.stringify({ schema_version: '1.0', code: 'RATE_LIMITED', error: { code: 'RATE_LIMITED', message: '请求过于频繁', retryable: true, retry_after_seconds: 2 } }), { status: 429, headers: { 'content-type': 'application/json' } });
+      }
+      if (itemId === 'part-5' && attempt <= 2) {
+        return new Response(JSON.stringify({ schema_version: '1.0', code: 'RATE_LIMITED', error: { code: 'RATE_LIMITED', message: '请求过于频繁', retryable: true, retry_after_seconds: 3 } }), { status: 429, headers: { 'content-type': 'application/json' } });
+      }
+      return Response.json({
+        schema_version: '1.0',
+        code: 'OK',
+        data: {
+          platform: 'bilibili',
+          items: [{
+            id: itemId,
+            type: 'video',
+            index: Number(itemId.split('-')[1]),
+            variants: [{ id: 'v0', metadata: { extension: 'mp4' }, delivery: { kind: 'file', sources: [{ id: 's0', url: `https://media.test/${itemId}.mp4`, size_bytes: 4 }] } }],
+            default: { variant_id: 'v0', source_id: 's0', url: `https://media.test/${itemId}.mp4` },
+          }],
+        },
+      });
+    }
+    return new Response(new Uint8Array([1, 2, 3, 4]), { headers: { 'content-type': 'video/mp4', 'content-length': '4' } });
+  };
+
+  const archivePromise = dl.downloadVideosAsZip(store.resultData.items);
+  for (let tick = 0; tick < 20; tick++) {
+    for (let m = 0; m < 4; m++) await new Promise(r => setImmediate(r));
+    if (store.downloads[0]?.status === 'completed' || store.downloads[0]?.status === 'failed') break;
+    // Render DownloadCard while waiting to confirm wait seconds render on the panel
+    if (store.downloads[0]?.statusText?.includes('秒')) {
+      const panelHtml = await renderToString(createSSRApp({ render: () => h(DownloadCard, { downloads: store.downloads }) }));
+      assert.match(panelHtml, /\d+\s*秒/);
+    }
+    t.mock.timers.tick(1000);
+  }
+  await archivePromise;
+  assert.equal(store.downloads[0].status, 'completed', store.downloads[0].error || '');
+  assert.equal(resolveCounts.get('part-4'), 2);
+  assert.equal(resolveCounts.get('part-5'), 3);
+  assert.ok(observedStatuses.some(s => s.includes('2 秒')), `expected 2s countdown in ${JSON.stringify(observedStatuses)}`);
+  assert.ok(observedStatuses.some(s => s.includes('3 秒')), `expected 3s countdown in ${JSON.stringify(observedStatuses)}`);
+  const zip = await JSZip.loadAsync(await blobs.at(-1).arrayBuffer());
+  assert.equal(Object.keys(zip.files).length, 5);
+});
+
+test('#91 PR1 item 4: useMediaDownload archive object URL revokes at 45s instead of 4s', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const revokedUrls = [];
+  const prevRevoke = URL.revokeObjectURL;
+  URL.revokeObjectURL = (u) => revokedUrls.push(u);
+  try {
+    globalThis.fetch = async () => new Response(new Uint8Array([9, 8, 7]), { headers: { 'content-type': 'image/jpeg', 'content-length': '3' } });
+    const h = harness({ ...base, url: null, title: '两张图', images: ['https://media.test/a.jpg', 'https://media.test/b.jpg'] });
+    await h.instance.downloadAllMedia('images');
+    assert.equal(h.store.downloads[0].status, 'completed');
+    assert.equal(revokedUrls.length, 0);
+    t.mock.timers.tick(4000);
+    assert.equal(revokedUrls.length, 0, 'must NOT revoke archive blob URL at 4s');
+    t.mock.timers.tick(40999);
+    assert.equal(revokedUrls.length, 0, 'must NOT revoke archive blob URL at 44,999ms');
+    t.mock.timers.tick(1);
+    assert.equal(revokedUrls.length, 1, 'revokes archive blob URL at 45,000ms');
+  } finally {
+    URL.revokeObjectURL = prevRevoke;
+  }
+});
+
+test('#91 PR1 item 5: App.vue renders top open-in-system-browser banner only for WeChat/QQ/Douyin/Weibo UAs', async () => {
+  const vueMod = await import('vue');
+  const { createPinia, setActivePinia } = await import('pinia');
+  const storeMod = await vite.ssrLoadModule('/src/stores/video.ts');
+  const ytMod = await vite.ssrLoadModule('/src/utils/youtubeHelperCore.js');
+  const stateMod = await vite.ssrLoadModule('/src/ssr/initialState.ts');
+  const appSource = await readFile(new URL('../src/App.vue', import.meta.url), 'utf8');
+  const { descriptor } = parse(appSource);
+  const script = compileScript(descriptor, {
+    id: 'app-inapp-banner-test',
+    inlineTemplate: true,
+    templateOptions: { compilerOptions: { hoistStatic: false } },
+  });
+  const compiled = await transformWithEsbuild(script.content, 'App.js', { loader: 'js', format: 'cjs' });
+  const mod = { exports: {} };
+  const req = createRequire(import.meta.url);
+  const stubComponent = { __esModule: true, default: { render: () => vueMod.h('div') } };
+  new Function('require', 'module', 'exports', compiled.code)((id) => {
+    if (id === 'vue') return vueMod;
+    if (id.startsWith('./components/')) return stubComponent;
+    if (id === './stores/video') return storeMod;
+    if (id === './composables/useVideoParser') return parser;
+    if (id === './composables/useMediaDownload') return downloads;
+    if (id === './composables/useVideoSelection') return selectionModule;
+    if (id === './utils/platforms') return platforms;
+    if (id === './utils/youtubeHelperCore') return ytMod;
+    if (id === './ssr/initialState') return stateMod;
+    return req(id);
+  }, mod, mod.exports);
+  const App = mod.exports.default;
+  const prevNav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+
+  async function mountAppWithUA(ua) {
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { userAgent: ua, language: 'zh-CN' },
+    });
+    const prevDocEl = globalThis.document.documentElement;
+    globalThis.document.documentElement = {
+      lang: 'zh-CN',
+      style: {},
+      classList: { toggle() {} },
+    };
+    const element = (type, text = '') => vueMod.markRaw({
+      type, text, props: {}, children: [], parent: null, style: {}, width: 0, height: 0,
+      getContext: () => ({ clearRect() {}, beginPath() {}, arc() {}, fill() {} }),
+      removeAttribute() {},
+    });
+    const portal = element('portal');
+    const detach = (n) => { if (n.parent) n.parent.children = n.parent.children.filter(c => c !== n); n.parent = null; };
+    const renderer = vueMod.createRenderer({
+      querySelector: () => portal,
+      createElement: element,
+      createText: (txt) => element('#text', txt),
+      createComment: (txt) => element('#comment', txt),
+      setText(n, txt) { n.text = txt; },
+      setElementText(n, txt) { n.text = txt; n.children = []; },
+      parentNode: (n) => n.parent,
+      nextSibling: () => null,
+      insert(n, parent) { detach(n); n.parent = parent; parent.children.push(n); },
+      remove: detach,
+      patchProp(n, k, _, v) { n.props[k] = v; },
+    });
+    const prevWin = globalThis.window;
+    globalThis.window = {
+      ...prevWin,
+      innerWidth: 390,
+      innerHeight: 844,
+      matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame() {},
+      addEventListener() {},
+      removeEventListener() {},
+      localStorage: { getItem: () => null, setItem() {} },
+    };
+    const root = element('root');
+    const app = renderer.createApp(App);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    app.use(pinia);
+    try {
+      app.mount(root);
+      await vueMod.nextTick();
+      await vueMod.nextTick();
+      const collectText = (n) => [n.text || '', ...(n.children || []).map(collectText)].join('');
+      const find = (n, pred) => pred(n) ? n : (n.children || []).map(c => find(c, pred)).find(Boolean);
+      const banner = find(root, n => Object.hasOwn(n.props || {}, 'data-in-app-browser-banner'));
+      return { bannerFound: Boolean(banner), bannerText: banner ? collectText(banner) : '' };
+    } finally {
+      app.unmount();
+      globalThis.window = prevWin;
+      globalThis.document.documentElement = prevDocEl;
+    }
+  }
+
+  try {
+    globalThis.fetch = async () => Response.json({ schema_version: '1.0', code: 'OK', data: { platforms: [] } });
+    for (const ua of [
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Mobile/15E148 MicroMessenger/8.0.50',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Mobile/15E148 QQ/9.0.70.631',
+      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 AppName/aweme BytedanceWebview/d8a21c6',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Mobile/15E148 Weibo (iPhone15,2__weibo__14.6.2)',
+    ]) {
+      const res = await mountAppWithUA(ua);
+      assert.equal(res.bannerFound, true, `expected banner for UA: ${ua}`);
+      assert.match(res.bannerText, /请在系统浏览器中打开/);
+    }
+
+    for (const ua of [
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Version/17.5 Mobile/15E148 Safari/604.1',
+      'Mozilla/5.0 (Linux; U; Android 13; zh-cn) AppleWebKit/537.36 MQQBrowser/15.3 Mobile Safari/537.36',
+    ]) {
+      const res = await mountAppWithUA(ua);
+      assert.equal(res.bannerFound, false, `must NOT show banner for UA: ${ua}`);
+    }
+  } finally {
+    if (prevNav) Object.defineProperty(globalThis, 'navigator', prevNav);
+    else delete globalThis.navigator;
+  }
+});
+
+test('#91 PR1 item 6: archive enforces total byte cap (declared & streaming) and filename truncation preserves Unicode code points', async () => {
+  const filenameMod = await vite.ssrLoadModule('/src/utils/videoFilename.ts');
+  // 63 ASCII chars + '😀' (2 UTF-16 code units at index 63..64) + '🎉'
+  const boundaryTitle = `${'a'.repeat(63)}😀🎉`;
+  const sanitized = filenameMod.sanitizeFilename(`${boundaryTitle}.mp4`);
+  assert.equal(sanitized.isWellFormed(), true, 'sanitizeFilename must never produce lone surrogates');
+  assert.equal(sanitized, `${'a'.repeat(63)}😀.mp4`);
+
+  const built = filenameMod.buildMediaFilename({
+    title: boundaryTitle,
+    index: 2,
+    total: 3,
+    fallback: 'item-2',
+    extension: 'mp4',
+  });
+  assert.equal(built.isWellFormed(), true, 'buildMediaFilename must never produce lone surrogates');
+  assert.equal(built, `${'a'.repeat(63)}😀_P2.mp4`);
+
+  // Upfront declared size > MAX_ARCHIVE_BYTES (500 MiB) aborts before fetching overflowing item
+  const cap = downloads.MAX_ARCHIVE_BYTES;
+  assert.equal(cap, 500 * 1024 * 1024);
+  const twoHundredMiB = 200 * 1024 * 1024;
+  const upfrontData = {
+    platform: 'bilibili',
+    title: '超大容量合集',
+    items: [1, 2, 3].map(i => ({
+      id: `big-${i}`,
+      type: 'video',
+      index: i,
+      variants: [{ id: 'v0', metadata: { extension: 'mp4' }, delivery: { kind: 'file', sources: [{ id: 's0', url: `https://media.test/big-${i}.mp4`, size_bytes: twoHundredMiB }] } }],
+      default: { variant_id: 'v0', source_id: 's0', url: `https://media.test/big-${i}.mp4` },
+    })),
+    default_item_id: 'big-1',
+  };
+  const fetchedBig = [];
+  globalThis.fetch = async (url) => {
+    fetchedBig.push(url);
+    return new Response(new Uint8Array(4), { headers: { 'content-type': 'video/mp4', 'content-length': '4' } });
+  };
+  const hUpfront = harness(upfrontData);
+  await hUpfront.instance.downloadVideosAsZip(hUpfront.store.resultData.items);
+  assert.equal(hUpfront.store.downloads[0].status, 'failed');
+  assert.match(hUpfront.store.downloads[0].error, /500\s*MB/);
+  assert.equal(fetchedBig.length, 0, 'upfront declared total > 500 MiB must fail before fetching');
+
+  // Streaming chunked response without size_bytes or Content-Length exceeding remaining cap aborts mid-stream
+  let streamCancelled = false;
+  let chunksEmitted = 0;
+  const chunkSize = 64 * 1024 * 1024; // 64 MiB chunks -> 8th chunk = 512 MiB > 500 MiB
+  const streamData = {
+    platform: 'douyin',
+    title: '未知长度流式超限',
+    items: [1, 2].map(i => ({
+      id: `stream-${i}`,
+      type: 'image',
+      index: i,
+      variants: [{ id: 'v0', metadata: { extension: 'jpg' }, delivery: { kind: 'file', sources: [{ id: 's0', url: `https://media.test/stream-${i}.jpg` }] } }],
+      default: { variant_id: 'v0', source_id: 's0', url: `https://media.test/stream-${i}.jpg` },
+    })),
+    default_item_id: 'stream-1',
+  };
+  globalThis.fetch = async () => new Response(new ReadableStream({
+    pull(controller) {
+      chunksEmitted++;
+      controller.enqueue(new Uint8Array(chunkSize));
+    },
+    cancel() {
+      streamCancelled = true;
+    },
+  }, { highWaterMark: 0 }), { headers: { 'content-type': 'image/jpeg' } });
+  const hStream = harness(streamData);
+  await hStream.instance.downloadAllMedia('images');
+  assert.equal(hStream.store.downloads[0].status, 'failed');
+  assert.match(hStream.store.downloads[0].error, /500\s*MB/);
+  assert.equal(streamCancelled, true, 'streaming reader must be cancelled as soon as cumulative bytes exceed 500 MiB');
+  assert.equal(chunksEmitted, 8, 'stops immediately on the chunk that crosses 500 MiB');
 });

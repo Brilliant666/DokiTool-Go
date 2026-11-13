@@ -14,7 +14,12 @@
  */
 
 import { fetchMediaBlob, probeMediaLength, linkAbortSignals } from "../downloads/buffered";
-import { sourceUrl } from "./mediaContract";
+import { resourceSource, sourceUrl, type DownloadTarget, type TargetContext } from "./mediaContract";
+import { declaredSegments, fileResource, mediaExtension } from "./mediaDelivery";
+import type { Resource } from "../types/media";
+
+export { declaredSegments };
+export const ARCHIVE_LIMIT_ERROR = "打包总大小超过 500 MB 上限，请分批或单文件下载";
 
 /** 带可选字节区间的分片描述（HLS BYTERANGE / 普通整文件分片通用） */
 export interface HlsSegment {
@@ -49,7 +54,7 @@ function triggerDownload(blob: Blob, filename: string): void {
   anchor.click();
   anchor.remove();
   // 延迟回收，确保下载已开始
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  (setTimeout(() => URL.revokeObjectURL(url), 45_000) as { unref?: () => void })?.unref?.();
 }
 
 /** Retain the existing bounded retry count; cancellation never retries. */
@@ -59,13 +64,16 @@ async function fetchSegmentBlob(
   onChunk?: (loaded: number, total: number) => void,
   range?: { start: number; length: number },
   retries = 2,
+  maxBytes?: number,
+  maxBytesError?: string,
 ): Promise<Blob> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (signal?.aborted) throw signal.reason;
-    try { return await fetchMediaBlob(url, { signal, onChunk, range }); }
+    try { return await fetchMediaBlob(url, { signal, onChunk, range, maxBytes, maxBytesError }); }
     catch (error) {
       if (signal?.aborted) throw signal.reason;
+      if (maxBytesError && error instanceof Error && error.message === maxBytesError) throw error;
       lastError = error;
       if (attempt < retries) await new Promise<void>((resolve, reject) => {
         const abort = () => { clearTimeout(timer); reject(signal?.reason); };
@@ -193,23 +201,31 @@ async function measureSegments(segments: HlsSegment[], signal?: AbortSignal): Pr
  */
 export async function mergeSegments(
   segments: (HlsSegment | string)[],
-  options?: { signal?: AbortSignal; onProgress?: (progress: SegmentProgress) => void },
+  options?: {
+    signal?: AbortSignal;
+    onProgress?: (progress: SegmentProgress) => void;
+    maxBytes?: number;
+    maxBytesError?: string;
+  },
 ): Promise<Blob> {
   const usable = normalizeSegments(segments);
   if (!usable.length || usable.length > 2000) throw new Error("分片数量无效");
-  const { signal, onProgress } = options || {};
+  const { signal, onProgress, maxBytes = Number.MAX_SAFE_INTEGER, maxBytesError } = options || {};
   const lengths = await measureSegments(usable, signal);
   let totalBytes = lengths.every(size => size > 0) ? lengths.reduce((a, b) => a + b, 0) : 0;
   if (!Number.isSafeInteger(totalBytes)) totalBytes = 0;
+  if (totalBytes > maxBytes) throw new Error(maxBytesError || "资源超过允许的读取范围");
   const parts: Blob[] = [];
   let totalLoaded = 0;
   for (let i = 0; i < usable.length; i++) {
     const segment = usable[i];
+    const remaining = maxBytes - totalLoaded;
+    if (remaining <= 0) throw new Error(maxBytesError || "资源超过允许的读取范围");
     const part = await fetchSegmentBlob(segment.url, signal, loaded => onProgress?.({
       loaded: totalLoaded + loaded, total: totalBytes,
       percent: totalBytes ? Math.min(99, Math.floor((totalLoaded + loaded) / totalBytes * 100)) : Math.floor(i / usable.length * 100),
       segment: i + 1, segmentCount: usable.length,
-    }), segment.start !== undefined && segment.length !== undefined ? { start: segment.start, length: segment.length } : undefined);
+    }), segment.start !== undefined && segment.length !== undefined ? { start: segment.start, length: segment.length } : undefined, 2, remaining, maxBytesError);
     parts.push(part);
     totalLoaded += part.size;
     // HEAD is advisory, not proof of a later GET's byte length.
@@ -263,4 +279,123 @@ export async function appendSegmentsToZip(
     const ext = /\.([a-z0-9]+)(\?|$)/i.exec(segment.url)?.[1] || "mp4";
     zip.file(`${baseName}_part${String(i + 1).padStart(2, "0")}.${ext}`, await buf.arrayBuffer());
   }
+}
+
+export interface ArchiveEntryItem {
+  filename: string;
+  data: Blob | Uint8Array<ArrayBuffer>;
+}
+
+async function archiveResourceEntry(
+  resource: Resource,
+  name: string,
+  apiContext: TargetContext,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<ArchiveEntryItem> {
+  const delivery = resource.delivery;
+  if (delivery.kind === "file") {
+    const target = fileResource(resource, apiContext);
+    if ((target.source.size_bytes || 0) > maxBytes) throw new Error(ARCHIVE_LIMIT_ERROR);
+    const data = await fetchMediaBlob(target.url, {
+      signal,
+      expectedSize: target.source.size_bytes,
+      maxBytes,
+      maxBytesError: ARCHIVE_LIMIT_ERROR,
+    });
+    return {
+      filename: `${name}.${mediaExtension(resource.metadata, delivery, data.type)}`,
+      data,
+    };
+  }
+  if (delivery.kind === "hls" || delivery.kind === "segments") {
+    const resolvedSegments = await declaredSegments(delivery, apiContext, signal);
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    return {
+      filename: `${name}.${mediaExtension(resource.metadata, delivery)}`,
+      data: await mergeSegments(resolvedSegments, {
+        signal,
+        maxBytes,
+        maxBytesError: ARCHIVE_LIMIT_ERROR,
+      }),
+    };
+  }
+  throw new Error("该资源需要 DASH 处理，当前暂不支持");
+}
+
+export function assertArchiveKnownSizeLimit(
+  targets: DownloadTarget[],
+  apiContext: TargetContext,
+  maxArchiveBytes: number,
+): void {
+  let upfrontKnown = 0;
+  for (const snapTarget of targets) {
+    if (snapTarget.kind === "file") {
+      upfrontKnown += snapTarget.source.size_bytes || 0;
+    } else if (snapTarget.kind === "pair" && snapTarget.variant.delivery.kind === "pair") {
+      for (const res of snapTarget.variant.delivery.resources) {
+        if (res.delivery.kind === "file") {
+          upfrontKnown += resourceSource(res, apiContext)?.size_bytes || 0;
+        }
+      }
+    }
+    if (upfrontKnown > maxArchiveBytes) throw new Error(ARCHIVE_LIMIT_ERROR);
+  }
+}
+
+export async function collectArchiveTargetEntries(params: {
+  itemId: string;
+  target: Extract<DownloadTarget, { variant: unknown }>;
+  base: string;
+  apiContext: TargetContext;
+  signal: AbortSignal;
+  maxArchiveBytes: number;
+  currentBytes: number;
+}): Promise<{ entries: ArchiveEntryItem[]; totalBytes: number }> {
+  const { itemId, target, base, apiContext, signal, maxArchiveBytes } = params;
+  let archiveBytes = params.currentBytes;
+  const entries: ArchiveEntryItem[] = [];
+  const push = (entry: ArchiveEntryItem) => {
+    archiveBytes += entry.data instanceof Blob ? entry.data.size : entry.data.byteLength;
+    if (archiveBytes > maxArchiveBytes) throw new Error(ARCHIVE_LIMIT_ERROR);
+    entries.push(entry);
+  };
+  const delivery = target.variant.delivery;
+  if (target.kind === "file") {
+    const remaining = maxArchiveBytes - archiveBytes;
+    if (remaining <= 0 || (target.source.size_bytes || 0) > remaining) {
+      throw new Error(ARCHIVE_LIMIT_ERROR);
+    }
+    const data = await fetchMediaBlob(target.url, {
+      signal,
+      expectedSize: target.source.size_bytes,
+      maxBytes: remaining,
+      maxBytesError: ARCHIVE_LIMIT_ERROR,
+    });
+    push({
+      filename: `${base}.${mediaExtension(target.variant.metadata, delivery.kind === "file" ? delivery : undefined, data.type)}`,
+      data,
+    });
+  } else if (delivery.kind === "pair") {
+    for (const resource of delivery.resources) {
+      const remaining = maxArchiveBytes - archiveBytes;
+      if (remaining <= 0) throw new Error(ARCHIVE_LIMIT_ERROR);
+      push(await archiveResourceEntry(resource, `${base}_${resource.role}`, apiContext, signal, remaining));
+    }
+  } else if (delivery.kind !== "mux") {
+    const remaining = maxArchiveBytes - archiveBytes;
+    if (remaining <= 0) throw new Error(ARCHIVE_LIMIT_ERROR);
+    push(
+      await archiveResourceEntry(
+        { id: itemId, role: "media", metadata: target.variant.metadata, delivery },
+        base,
+        apiContext,
+        signal,
+        remaining,
+      ),
+    );
+  } else {
+    throw new Error("音视频合并尚未支持");
+  }
+  return { entries, totalBytes: archiveBytes };
 }

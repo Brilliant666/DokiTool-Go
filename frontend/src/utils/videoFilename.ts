@@ -9,6 +9,12 @@ const MAX_BASE_LENGTH = 64;
 /** 扩展名长度上限 */
 const MAX_EXT_LENGTH = 12;
 
+const sliceCodePoints = (value: string, max: number) =>
+  [...value]
+    .filter((c) => c.length > 1 || c.charCodeAt(0) < 0xd800 || c.charCodeAt(0) > 0xdfff)
+    .slice(0, max)
+    .join("");
+
 function splitExt(name: string): { base: string; ext: string } {
   const dot = name.lastIndexOf(".");
   if (dot > 0 && dot < name.length - 1) {
@@ -17,7 +23,7 @@ function splitExt(name: string): { base: string; ext: string } {
   return { base: name, ext: "" };
 }
 
-/** 剔除 Windows/\0 非法字符，截断 base 至 64 字符、保扩展名；空则回退 "video" */
+/** 剔除 Windows/\0 非法字符，按 Unicode 码点截断 base 至 64 个码点、保扩展名；空则回退 "video" */
 export function sanitizeFilename(name: string): string {
   const trimmed = (name || "").trim();
   if (!trimmed) return "video.mp4";
@@ -26,11 +32,11 @@ export function sanitizeFilename(name: string): string {
     .replace(ILLEGAL_CHARS, "")
     .replace(/\s+/g, " ")
     .trim();
-  const safeBase = (cleanedBase || "video").slice(0, MAX_BASE_LENGTH);
-  const safeExt = ext
-    .replace(ILLEGAL_CHARS, "")
-    .slice(0, MAX_EXT_LENGTH)
-    .replace(/^\.+/, "");
+  const safeBase = sliceCodePoints(cleanedBase || "video", MAX_BASE_LENGTH);
+  const safeExt = sliceCodePoints(ext.replace(ILLEGAL_CHARS, ""), MAX_EXT_LENGTH).replace(
+    /^\.+/,
+    "",
+  );
   return safeExt ? `${safeBase}.${safeExt}` : safeBase;
 }
 
@@ -53,7 +59,7 @@ function cleanBase(title: string): string {
     .replace(ILLEGAL_CHARS, "")
     .replace(/\s+/g, " ")
     .trim();
-  return cleaned.slice(0, MAX_BASE_LENGTH);
+  return sliceCodePoints(cleaned, MAX_BASE_LENGTH);
 }
 
 /** 由标题+index+可选后缀构造可读文件名：多条目加 `_P{index}`，单条目不加 `_P1`，无标题回退哈希名 */
@@ -84,4 +90,20 @@ export function buildMediaFilename(input: {
     }
   }
   return `${hashMediaName(input.fallback)}${pageTag}${suffixTag}.${extension}`;
+}
+
+/** 构造多条目压缩包文件名：优先使用标题或作者名 + 条目数，均为空时回退稳定哈希 + 条目数 */
+export function buildArchiveFilename(input: {
+  title?: string;
+  author?: string;
+  count: number;
+  fallback: string;
+}): string {
+  const label = cleanBase(input.title ?? "") || cleanBase(input.author ?? "");
+  return buildMediaFilename({
+    title: label,
+    suffix: `${Math.max(1, Math.trunc(input.count))}P`,
+    fallback: input.fallback || "archive",
+    extension: "zip",
+  });
 }
