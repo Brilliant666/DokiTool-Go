@@ -150,14 +150,18 @@ func TestXiaohongshuHTTPFrozenPHP(t *testing.T) {
 					}
 					want := unified.Clone(base)
 					if gatewayRejects {
-						want = unified.Object{"schema_version": "1.0", "code": "INVALID_INPUT", "error": unified.Object{"code": "INVALID_INPUT", "message": "请输入对应平台的有效分享链接"}}
+						if fixture["id"] == "xiaohongshu/entry/reject-foreign" || fixture["id"] == "xiaohongshu/entry/xhs-com-alias" {
+							want = unified.Object{"schema_version": "1.0", "code": "UNSUPPORTED_PLATFORM", "error": unified.Object{"code": "UNSUPPORTED_PLATFORM", "message": "暂不支持该平台链接解析"}}
+						} else {
+							want = unified.Object{"schema_version": "1.0", "code": "INVALID_INPUT", "error": unified.Object{"code": "INVALID_INPUT", "message": "请输入对应平台的有效分享链接"}}
+						}
 					} else if itemID == "missing-item" {
 						want = unified.Object{"schema_version": "1.0", "code": "CONTENT_UNAVAILABLE", "error": unified.Object{"code": "CONTENT_UNAVAILABLE", "message": "请求的媒体条目暂时不可用"}}
 					} else if itemID != "" {
 						unified.Map(want["data"])["default_item_id"] = itemID
 					}
 					xhsHTTPJSON(t, actual, want)
-					status := map[string]int{"OK": 200, "INVALID_INPUT": 400, "UPSTREAM_BLOCKED": 403, "RATE_LIMITED": 429, "CONTENT_UNAVAILABLE": 404, "NO_MEDIA": 404, "UPSTREAM_INVALID_RESPONSE": 502, "UPSTREAM_UNAVAILABLE": 502}[unified.Str(want["code"])]
+					status := map[string]int{"OK": 200, "INVALID_INPUT": 400, "UNSUPPORTED_PLATFORM": 400, "UPSTREAM_BLOCKED": 403, "RATE_LIMITED": 429, "CONTENT_UNAVAILABLE": 404, "NO_MEDIA": 404, "UPSTREAM_INVALID_RESPONSE": 502, "UPSTREAM_UNAVAILABLE": 502}[unified.Str(want["code"])]
 					if status == 0 || recorder.Code != status || tape.next != len(tape.responses) {
 						t.Fatalf("status/tape mismatch: status %d want %d, consumed %d/%d", recorder.Code, status, tape.next, len(tape.responses))
 					}

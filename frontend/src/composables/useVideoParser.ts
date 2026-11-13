@@ -497,7 +497,11 @@ export function useVideoParser(options: {
   async function parseVideo() {
     if (active) return;
     const url = (
-      inputUrl.value.match(/https?:\/\/[^\s<>]+/)?.[0] || inputUrl.value
+      inputUrl.value
+        .match(
+          /https?:\/\/[^\s<>"'\p{Script=Han}\u2014\u2018-\u201D\u2026\u203B\u3000-\u303F\uFE10-\uFE1F\uFE30-\uFE6F\uFF00-\uFFEF]+/iu,
+        )?.[0]
+        .replace(/[.,;!?]+$/, "") || inputUrl.value
     ).trim();
     try {
       if (!["http:", "https:"].includes(new URL(url).protocol))

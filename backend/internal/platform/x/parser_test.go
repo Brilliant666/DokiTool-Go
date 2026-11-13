@@ -2854,7 +2854,35 @@ func TestParseXTombstoneFallbackErrorSemanticsAndTriggerBoundaries(t *testing.T)
 						URL:        req.URL,
 					}, nil
 				},
-				wantErr: "CONTENT_UNAVAILABLE",
+				wantErr: "NO_MEDIA",
+			},
+			{
+				name: "pure-text-tweet-with-external-link",
+				ytFn: func(context.Context, string) (*ytengine.Info, error) {
+					return nil, &ytengine.Error{Code: ytengine.CodeContentUnavailable, Message: "ERROR: [twitter] 123: No video could be found in this tweet", Retryable: false}
+				},
+				synFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					return fetch.Response{
+						StatusCode: http.StatusOK,
+						Body:       []byte(`{"__typename":"Tweet","text":"Read this article https://t.co/abcDEF123"}`),
+						URL:        req.URL,
+					}, nil
+				},
+				wantErr: "NO_MEDIA",
+			},
+			{
+				name: "pure-text-tweet-empty-info",
+				ytFn: func(context.Context, string) (*ytengine.Info, error) {
+					return &ytengine.Info{ID: tweetID, Title: "Just text"}, nil
+				},
+				synFn: func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+					return fetch.Response{
+						StatusCode: http.StatusOK,
+						Body:       []byte(`{"__typename":"Tweet","text":"Just text"}`),
+						URL:        req.URL,
+					}, nil
+				},
+				wantErr: "NO_MEDIA",
 			},
 			{
 				name: "syndication-network-error",

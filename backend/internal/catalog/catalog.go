@@ -3,6 +3,7 @@ package catalog
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -20,7 +21,16 @@ type Catalog struct {
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 var hostName = regexp.MustCompile(`(?i)^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
 
-func Load() (*Catalog, error) { return Decode(config.Platforms()) }
+func Load() (*Catalog, error) {
+	c, err := Decode(config.Platforms())
+	if err != nil {
+		return nil, err
+	}
+	if err := c.AddExactDomains("zuiyou", "share.xiaochuankeji.cn"); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
 
 // XPlatform returns the optional registry entry for X / Twitter.
 func XPlatform() unified.Object {
@@ -94,7 +104,7 @@ func (c *Catalog) Register(row unified.Object) error {
 			return fmt.Errorf("platform %s lacks %s", id, key)
 		}
 	}
-	if len(unified.Slice(cloned["domains"])) == 0 || len(unified.Slice(cloned["capabilities"])) == 0 {
+	if (len(unified.Slice(cloned["domains"])) == 0 && len(unified.Slice(cloned["exact_domains"])) == 0) || len(unified.Slice(cloned["capabilities"])) == 0 {
 		return fmt.Errorf("platform %s lacks domains or capabilities", id)
 	}
 	for _, domain := range unified.Slice(cloned["domains"]) {
@@ -103,8 +113,33 @@ func (c *Catalog) Register(row unified.Object) error {
 			return fmt.Errorf("invalid platform domain")
 		}
 	}
+	for _, domain := range unified.Slice(cloned["exact_domains"]) {
+		name := unified.Str(domain)
+		if !hostName.MatchString(name) || name != strings.ToLower(name) {
+			return fmt.Errorf("invalid platform exact domain")
+		}
+	}
 	c.rows = append(c.rows, cloned)
 	c.byID[id] = cloned
+	return nil
+}
+
+// AddExactDomains appends exact-match hostnames to an already registered platform
+// without publishing private domain metadata in Envelope() or allowing subdomains.
+func (c *Catalog) AddExactDomains(id string, domains ...string) error {
+	if c == nil || c.byID[id] == nil {
+		return fmt.Errorf("unknown platform id %q", id)
+	}
+	row := c.byID[id]
+	existing := unified.Slice(row["exact_domains"])
+	for _, d := range domains {
+		name := strings.ToLower(strings.TrimSpace(d))
+		if !hostName.MatchString(name) {
+			return fmt.Errorf("invalid platform exact domain %q", d)
+		}
+		existing = append(existing, name)
+	}
+	row["exact_domains"] = existing
 	return nil
 }
 
@@ -123,21 +158,20 @@ func (c *Catalog) Envelope() unified.Object {
 	return unified.Object{"schema_version": unified.SchemaVersion, "code": "OK", "data": unified.Object{"platforms": rows}}
 }
 
-// PlatformForURL matches the host, never a path/query substring or a userinfo field.
-func (c *Catalog) PlatformForURL(raw string) string {
+func parseInputHost(raw string) (string, bool) {
 	if unified.MediaURL(raw) == "" {
-		return ""
+		return "", false
 	}
 	for _, r := range raw {
 		if r <= 0x20 || r >= 0x7f || r == '\\' {
-			return ""
+			return "", false
 		}
 	}
 	// PHP accepts opaque percent bytes in paths. Parse only the already
 	// validated authority for dispatch; retain the complete input for adapters.
 	separator := strings.Index(raw, "://")
 	if separator < 0 {
-		return ""
+		return "", false
 	}
 	end := len(raw)
 	if suffix := strings.IndexAny(raw[separator+3:], "/?#"); suffix >= 0 {
@@ -145,23 +179,44 @@ func (c *Catalog) PlatformForURL(raw string) string {
 	}
 	u, err := url.Parse(raw[:end])
 	if err != nil || u.User != nil || u.Opaque != "" {
-		return ""
+		return "", false
 	}
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return ""
+		return "", false
 	}
 	host := strings.ToLower(u.Hostname())
-	if !hostName.MatchString(host) {
-		return ""
+	if !hostName.MatchString(host) || net.ParseIP(host) != nil {
+		return "", false
 	}
 	if port := u.Port(); port != "" {
 		n, err := strconv.Atoi(port)
 		if err != nil || (scheme == "https" && n != 443) || (scheme == "http" && n != 80) {
-			return ""
+			return "", false
 		}
 	}
+	return host, true
+}
+
+// ValidInputURL reports whether raw is a syntactically valid HTTP/HTTPS domain URL
+// without userinfo or non-default port, independent of platform registration.
+func (c *Catalog) ValidInputURL(raw string) bool {
+	_, ok := parseInputHost(raw)
+	return ok
+}
+
+// PlatformForURL matches the host, never a path/query substring or a userinfo field.
+func (c *Catalog) PlatformForURL(raw string) string {
+	host, ok := parseInputHost(raw)
+	if !ok {
+		return ""
+	}
 	for _, row := range c.rows {
+		for _, value := range unified.Slice(row["exact_domains"]) {
+			if host == unified.Str(value) {
+				return unified.Str(row["id"])
+			}
+		}
 		for _, value := range unified.Slice(row["domains"]) {
 			domain := unified.Str(value)
 			if host == domain || strings.HasSuffix(host, "."+domain) {

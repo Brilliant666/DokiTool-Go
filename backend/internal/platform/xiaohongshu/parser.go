@@ -172,6 +172,9 @@ func (p *Parser) parseLegacy(ctx context.Context, input string) (unified.Object,
 			return legacyResult(200, "解析成功", data), nil
 		}
 	}
+	if !hasXsecToken(address) && lastStatus != 0 && lastStatus < 500 && lastStatus != 429 {
+		return legacyResult(400, "链接缺少 xsec_token，请从小红书 App 复制分享链接后重试", nil), nil
+	}
 	code := 404
 	if lastStatus == 0 || lastStatus >= 500 {
 		code = 502
@@ -179,6 +182,14 @@ func (p *Parser) parseLegacy(ctx context.Context, input string) (unified.Object,
 		code = lastStatus
 	}
 	return legacyResult(code, "未取得可用笔记内容，请检查分享 token 是否有效；来源可能要求验证或暂时限制访问", nil), nil
+}
+
+func hasXsecToken(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(u.Query().Get("xsec_token")) != ""
 }
 
 func legacyResult(code int, message string, data unified.Object) unified.Object {

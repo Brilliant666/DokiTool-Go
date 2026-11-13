@@ -48,6 +48,16 @@ func TestInputDomainBoundary(t *testing.T) {
 		"https://www.douyin.com/video/中文": "", "https://www.douyin.com/video/%E4%B8%AD": "douyin",
 		"https://v.douyin.com/share/": "douyin", "https://WWW.DOUYIN.COM:443/video/123": "douyin", "http://b23.tv/x?p=2": "bilibili", "https://www.rednote.com/explore/a": "xiaohongshu",
 		"https://douyin.com.evil.example/video/1": "", "https://notdouyin.com/": "", "https://evil.example/?next=https://douyin.com": "", "https://user@douyin.com/": "", "https://douyin.com:8443/": "", "https://douyin.com\\@evil.example/": "", "file://douyin.com/": "", "https://douyin.com./": "",
+		"https://share.xiaochuankeji.cn/hybrid/share/post?pid=163566379": "zuiyou",
+		"http://SHARE.XIAOCHUANKEJI.CN:80/detail/163566379":              "zuiyou",
+		"https://sub.share.xiaochuankeji.cn/hybrid/share/post?pid=1":     "",
+		"https://www.share.xiaochuankeji.cn/hybrid/share/post?pid=1":     "",
+		"https://xiaochuankeji.cn/hybrid/share/post?pid=1":               "",
+		"https://evilshare.xiaochuankeji.cn/hybrid/share/post?pid=1":     "",
+		"https://share.xiaochuankeji.cn.evil.com/hybrid/share/post":      "",
+		"https://user:pass@share.xiaochuankeji.cn/hybrid/share/post":     "",
+		"https://share.xiaochuankeji.cn:8080/hybrid/share/post":          "",
+		"https://share.xiaochuankeji.cn:8443/hybrid/share/post":          "",
 	} {
 		if actual := c.PlatformForURL(raw); actual != expected {
 			t.Errorf("%s => %q want %q", raw, actual, expected)

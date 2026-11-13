@@ -401,6 +401,9 @@ func AdaptInfo(info *Info, opts AdaptOptions, now int64) unified.Object {
 	}
 
 	if !hasDeliverableItem {
+		if opts.SingleStreamHLSOnly && hasUnsupportedSingleStreamHLSFormat(entries, info, opts.AllowedMediaURL) {
+			return unified.ContractError("NO_MEDIA", "暂不支持该视频的非 fMP4（TS-HLS）流媒体格式", false)
+		}
 		return unified.ContractError("NO_MEDIA", "该内容未包含可解析的视频媒体", false)
 	}
 
@@ -1374,6 +1377,28 @@ func isSingleStreamCombinedMP4HLS(f Format) bool {
 		return false
 	}
 	return cleanCodec(f.VCodec) != "" && cleanCodec(f.ACodec) != ""
+}
+
+func hasUnsupportedSingleStreamHLSFormat(entries []Info, parent *Info, allowedMediaURL func(string) bool) bool {
+	if parent != nil && parent.IsLive != nil && *parent.IsLive {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.IsLive != nil && *entry.IsLive {
+			continue
+		}
+		for _, f := range entry.Formats {
+			cleanURL := SanitizeMediaURL(f.URL, allowedMediaURL)
+			if cleanURL == "" {
+				continue
+			}
+			f.URL = cleanURL
+			if isHLSVideo(f) && !isSingleStreamCombinedMP4HLS(f) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func deduplicateSingleStreamHLSFormats(formats []Format) []Format {

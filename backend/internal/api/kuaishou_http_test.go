@@ -112,8 +112,11 @@ func (f *kuaishouHTTPFixtureTape) Do(ctx context.Context, request fetch.Request)
 }
 
 func rewriteFrozenKuaishouShortVideo(raw string) string {
-	if raw == "https://www.kuaishou.com/short-video/3xsynthetic7" {
+	switch raw {
+	case "https://www.kuaishou.com/short-video/3xsynthetic7":
 		return "https://c.kuaishou.com/fw/photo/3xsynthetic7"
+	case "https://www.kuaishou.com/short-video/3xsynthetic7/":
+		return "https://c.kuaishou.com/fw/photo/3xsynthetic7/"
 	}
 	return raw
 }

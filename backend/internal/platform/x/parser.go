@@ -464,6 +464,9 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 		if synErr == nil && st != nil && st.Tombstone {
 			return p.resolveTombstone(ctx, tweetID, source, "", selectedIndex, now)
 		}
+		if hasEngineErr && engineErr.Code == ytengine.CodeContentUnavailable && synErr == nil && isPureTextSyndicationTweet(st) {
+			return unified.ContractError("NO_MEDIA", "作品未提供可用媒体", false), nil
+		}
 		if hasEngineErr && engineErr.Code == ytengine.CodeContentUnavailable && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
 			return syndicationContractError(synErr), nil
 		}
@@ -511,8 +514,15 @@ func (p *Parser) Parse(ctx context.Context, source string, now int64) (unified.O
 	if synErr == nil && st != nil && st.Tombstone {
 		return p.resolveTombstone(ctx, tweetID, source, "", selectedIndex, now)
 	}
+	if unified.Str(adapted["code"]) == "NO_MEDIA" && synErr == nil && isPureTextSyndicationTweet(st) {
+		return unified.ContractError("NO_MEDIA", "作品未提供可用媒体", false), nil
+	}
 	if unified.Str(adapted["code"]) == "NO_MEDIA" && synErr != nil && !errors.Is(synErr, errSyndicationNotFound) {
 		return syndicationContractError(synErr), nil
 	}
 	return adapted, nil
+}
+
+func isPureTextSyndicationTweet(st *syndicationTweet) bool {
+	return st != nil && !st.Tombstone && len(st.Photos) == 0 && !st.HasVideo
 }

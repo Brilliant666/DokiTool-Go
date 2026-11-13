@@ -132,5 +132,21 @@ test('API base accepts origins and rejects paths before URL normalization',()=>{
   for(const base of ['https://api.example.test','https://api.example.test/','http://localhost:8081','https://[::1]:8443']) assert.ok(config.resolveApiConfig({VITE_API_BASE_URL:base}).parseUrl.endsWith('/api/parse'));
   for(const base of ['https://user:secret@api.example.test','https://api.example.test/path','https://api.example.test/prefix/..','https://api.example.test/%2e%2e','https://api.example.test:99999','https://api.example.test?x=1','https://api.example.test/#hash']) assert.throws(()=>config.resolveApiConfig({VITE_API_BASE_URL:base}));
 });
+test('share link extraction truncates at adjacent Hanzi or fullwidth punctuation while keeping ASCII query intact',async()=>{
+  for(const [shareText, wantUrl, platform] of [
+    ['79 小红书发布了一篇笔记 http://xhslink.com/o/abc123XYZ，复制本条信息，打开【小红书】App查看精彩内容！', 'http://xhslink.com/o/abc123XYZ', 'xiaohongshu'],
+    ['https://www.bilibili.com/video/BV1xx411c7mD【官方MV】高清完整版', 'https://www.bilibili.com/video/BV1xx411c7mD', 'bilibili'],
+    ['https://www.bilibili.com/video/BV1xx411c7mD?p=2&vd_source=abc_123【第2集】精彩片段', 'https://www.bilibili.com/video/BV1xx411c7mD?p=2&vd_source=abc_123', 'bilibili'],
+    ['https://www.xiaohongshu.com/explore/66a1b2c3d4e5f6a7b8c9d0e1?xsec_token=ABc+123%2B_=-x&xsec_source=pc_feed，复制本条信息打开App', 'https://www.xiaohongshu.com/explore/66a1b2c3d4e5f6a7b8c9d0e1?xsec_token=ABc+123%2B_=-x&xsec_source=pc_feed', 'xiaohongshu'],
+    ['看这个视频https://v.douyin.com/iYabc123/复制此链接打开抖音', 'https://v.douyin.com/iYabc123/', 'douyin'],
+  ]) {
+    const {instance,store}=harness(shareText);let requested;
+    globalThis.fetch=async url=>{requested=new URL(url,'https://snap.example.test');return Response.json(good({platform}));};
+    await instance.parseVideo();
+    assert.equal(instance.inputUrl.value,wantUrl);
+    assert.equal(requested.searchParams.get('url'),wantUrl);
+    assert.equal(store.resultData.platform,platform);
+  }
+});
 
 });

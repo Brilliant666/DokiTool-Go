@@ -86,7 +86,7 @@ func (h *Handler) HasCachedYouTubeContext() bool {
 	return false
 }
 
-var shareURL = regexp.MustCompile(`(?i)https?://[^\s"'<>]+`)
+var shareURL = regexp.MustCompile(`(?i)https?://[^\s"'<>\p{Han}\x{2014}\x{2018}-\x{201D}\x{2026}\x{203B}\x{3000}-\x{303F}\x{FE10}-\x{FE1F}\x{FE30}-\x{FE6F}\x{FF00}-\x{FFEF}]+`)
 
 func InputURL(input string) string {
 	if len(input) > 8192 {
@@ -244,8 +244,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !queryPresent(r.URL.RawQuery, "platform") {
 		requested, requestedScalar = "all", true
 	}
-	if !scalar || source == "" || platform == "" || !requestedScalar || (requested != "all" && requested != platform) {
+	if !scalar || source == "" || !requestedScalar || !h.catalog.ValidInputURL(source) {
 		sendError(w, 400, "请输入对应平台的有效分享链接")
+		return
+	}
+	if platform == "" || (requested != "all" && !h.catalog.Has(requested)) {
+		send(w, 400, unified.ContractError("UNSUPPORTED_PLATFORM", "暂不支持该平台链接解析", false))
+		return
+	}
+	if requested != "all" && requested != platform {
+		sendError(w, 400, "链接与所选平台不匹配，请切换对应平台或选择自动识别")
 		return
 	}
 	itemID, scalarID := queryValue(r.URL.RawQuery, "item_id")

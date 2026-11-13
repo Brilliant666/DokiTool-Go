@@ -213,11 +213,10 @@ func pipixiaFixtureHTTP(t *testing.T, fixture unified.Object, path string) unifi
 
 func pipixiaHTTPExpected(fixture unified.Object, view string) unified.Object {
 	switch unified.Str(fixture["id"]) {
-	case "pipixia/entry/reject-foreign-host", "pipixia/entry/reject-userinfo", "pipixia/entry/reject-nonstandard-port":
-		// These three URLs never reach a parser in the original PHP gateway.
-		// Its snapHandle preflight error differs from the frozen direct-parser
-		// error. Keep the original gateway literal and assert zero requests and
-		// zero clock reads; do not rewrite the independent parser expectation.
+	case "pipixia/entry/reject-foreign-host":
+		return unified.Object{"schema_version": "1.0", "code": "UNSUPPORTED_PLATFORM", "error": unified.Object{"code": "UNSUPPORTED_PLATFORM", "message": "暂不支持该平台链接解析"}}
+	case "pipixia/entry/reject-userinfo", "pipixia/entry/reject-nonstandard-port":
+		// These URLs never reach a parser in the gateway; assert zero requests and zero clock reads.
 		return unified.Object{"schema_version": "1.0", "code": "INVALID_INPUT", "error": unified.Object{"code": "INVALID_INPUT", "message": "请输入对应平台的有效分享链接"}}
 	default:
 		return unified.Clone(unified.Map(unified.Map(fixture["expected"])[view]))

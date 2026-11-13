@@ -11,7 +11,7 @@ var builtinSites = []SiteSpec{
 		Name:                         "Facebook",
 		SiteURL:                      "https://www.facebook.com/",
 		Icon:                         "facebook",
-		CatalogDomains:               []string{"www.facebook.com"},
+		CatalogExactDomains:          []string{"www.facebook.com", "facebook.com", "m.facebook.com", "fb.watch"},
 		InputHosts:                   []string{"www.facebook.com"},
 		MediaHostSuffix:              []string{".fbcdn.net"},
 		Extractors:                   []string{"facebook", "facebook:reel"},
@@ -35,7 +35,7 @@ var builtinSites = []SiteSpec{
 		Name:                "Dailymotion",
 		SiteURL:             "https://www.dailymotion.com/",
 		Icon:                "dailymotion",
-		CatalogDomains:      []string{"www.dailymotion.com"},
+		CatalogExactDomains: []string{"www.dailymotion.com", "dailymotion.com", "dai.ly"},
 		InputHosts:          []string{"www.dailymotion.com"},
 		OutboundHosts:       []string{"graphql.api.dailymotion.com", "cdndirector.dailymotion.com"},
 		MediaHostSuffix:     []string{".dmcdn.net"},
@@ -47,6 +47,7 @@ var builtinSites = []SiteSpec{
 
 func cloneSiteSpec(s SiteSpec) SiteSpec {
 	s.CatalogDomains = append([]string(nil), s.CatalogDomains...)
+	s.CatalogExactDomains = append([]string(nil), s.CatalogExactDomains...)
 	s.InputHosts = append([]string(nil), s.InputHosts...)
 	s.OutboundHosts = append([]string(nil), s.OutboundHosts...)
 	s.MediaHostSuffix = append([]string(nil), s.MediaHostSuffix...)
