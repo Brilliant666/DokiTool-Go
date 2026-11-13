@@ -1,35 +1,57 @@
-# Go 私库未来发布的 PHP 基线与回滚门槛
+# 生产回滚流程与历史切流归档
 
-## 当前状态
+本文档说明当前线上 Go 服务与静态前端的标准快速回滚流程及核验门禁。正向发布流程见 [DEPLOYMENT.md](../DEPLOYMENT.md)，启动参数与环境变量见 [CONFIGURATION.md](../CONFIGURATION.md)。
 
-本文件定义未来 Go 发布涉及既有 PHP 实例切流时的必需条件，不授权本轮部署。阶段 2 的 Go 骨架和 fixture 对拍不构成部署演练。公开 PHP `main` 继续保留；Go 的未来目标环境和发布时间另行确认。维护边界见 [MAINTENANCE.md](MAINTENANCE.md)。本轮仅私库接续与离线同步，不变更运行服务器、配置或生产版本。
+> **公开仓库安全声明**：本文档仅包含通用回滚步骤与校验门禁，不包含任何服务器地址、主机名、远程连接细节、入站限制规则或密钥取值。
 
-原 PHP 参考固定为 `665bd55134982b9fe107aa1cd00373ba8da8ff3c`，树为 `93744d4d718c3299f82640d2888e93252106db70`。原输入、期望、生产器和 manifest 哈希保持不变。已发布 PHP `25beaee107f8c1a208ced9deb3c637068445e316`（树 `e4b9d40f5e6c12a86fff629c105553886b434dcd`）作为新增对拍基线独立记录，不能覆盖旧证据。回滚包则必须对应未来切流前实际运行版本，不能将历史 fixture 或本次源码接续当成部署回滚包。
+---
 
-## 旧发布包的必需内容
+## 一、回滚前提与安全不变式
 
-| 内容 | 要求 | 验证方式 |
-| --- | --- | --- |
-| 应用与二进制产物 | 已运行的完整不可变发布目录（Go 方式 B 下为 `/srv/dokitool-go/releases/<sha>/bin/dokitool-go` 及同目录 `release-manifest.json`，历史 PHP 下为独立版本目录），含可执行程序或入口、平台注册 JSON、库和许可证 | 完整 40 位 Git SHA、`release-manifest.json` 逐文件 SHA-256 与 `gh attestation verify ... --signer-workflow Brilliant666/DokiTool-Go/.github/workflows/release-build.yml --source-ref refs/heads/main` 来源证明；严禁在线上可变 Git 工作区直接 `git pull` / 原地构建或把可变工作区当发布包 |
-| 前端产物 | 与该发布配套的 `/srv/dokitool-go/releases/<sha>/frontend/dist/` 解压目录（Caddy 静态软链 `/srv/dokitool-go/releases/22522d154a43300872c78603af0532ab44ff1d64/frontend/dist` 指向该目录），包含 Worker、bridge、task-store、并入的上一版版本化哈希资源（`/assets/*`）、SSG/SEO 文件 | CI 固定构建清单（`release-manifest.json` 中 `frontend_dist_files` 逐文件 SHA-256）与来源证明；不能仅保留前端源码或原地覆盖旧哈希资源 |
-| Caddy 配置 | 该站点实际使用的路由片段及关联配置引用，包含公开 JSON、微博媒体、内部 PHP、静态资源和下载路由 | 用目标版本 Caddy 验证配置；保留合并位置和恢复命令，不覆盖其他站点的总配置 |
-| FPM 配置 | 公共、内部、媒体池及服务启动引用，包含用户、socket、限制和环境变量引用 | PHP/FPM 版本与扩展清单、配置语法检查、服务/socket 恢复验证 |
-| 运行条件 | 目标 OS/架构、PHP/FPM/Caddy 版本、CA/DNS、服务账户、目录权限、出网隔离及服务管理方式 | 在对应验证环境重建并实际启动；仅一份 README 不算已可恢复 |
-| 密钥引用 | `SNAP_MEDIA_SIGNING_KEY`、访问控制及可能存在的凭据的受保护文件/服务引用和版本标识 | 校验运行账户可读取相同来源；包、Git、命令输出和证据均不包含值 |
-| 发布清单 | `release-manifest.json`，包含上述文件列表、摘要、源码/构建身份及已执行步骤 | 独立校验包内容与清单一致，保存在可恢复位置 |
+1. **上一版不可变目录完整保留**：每次发布均写入独立的 `<releases_root>/<sha>/` 目录（含编译好的二进制与 `frontend/dist/`），绝不原地覆盖或删除上一活动版本目录。
+2. **systemd 配置分层隔离**：版本切换仅通过高序号 drop-in 片段覆盖 `ExecStart`（或独立的守护策略片段），不直接改写基础单元文件或包含密钥/环境变量的独立 drop-in。
+3. **浏览器活动下载不中断**：回滚只切换服务端进程与静态目录软链，不清空用户浏览器站点存储，也不强制注销正在传输的下载 Service Worker，让在途任务自然收敛。
 
-仓库 `ops/examples/` 是示例，不能充当生产实际配置已经备份的证据。含敏感配置的旧发布包保存在受保护的发布存储；公开仓库仅记录清单摘要、非敏感引用和演练结论。若真实配置内含密钥字面量，先改为受保护引用，并验证旧应用仍可运行，再封存发布包。
+---
 
-## 必须完成的一次演练
+## 二、标准回滚操作步骤
 
-1. 在与切换目标一致的验证环境，用旧包启动 PHP/FPM 和对应 Caddy 站点路由；检查 catalogue、JSON 错误、代表性解析/resolve、静态前端及下载资源。
-2. 在同一环境启动待发布 Go 包，仅替换该站点的 API 转发。保留原 API origin、前端产物和微博签名密钥来源。等待活动请求排空，不清空浏览器下载任务。
-3. 按正式回滚步骤恢复旧发布目录和 Caddy/FPM 配置，验证配置后局部 reload，确认流量确实回到 PHP。不得只执行 `git revert` 或切换一个源码 symlink 就宣告回滚完成。
-4. 重新执行 API/resolve、代表性完整媒体下载和文件哈希验证；微博迁移完成后，验证切换前已签发票据及 Go 签发票据在恢复的 PHP 路径仍按 TTL 工作。
-5. 保存旧包/Go 包摘要、配置版本、步骤时间、实际结果和未通过项。任何关键失败都阻断最终切换。
+当新发布版本在切换后冒烟失败或线上发现回归问题需立即回退至上一稳定版本 `<prev_sha>` 时，按以下顺序执行：
 
-演练记录必须区分验证环境和生产环境，说明是否使用实际配置以及哪些外部条件尚未验证。若当前无法取得目标配置或运行条件，记录未完成项，不能以本地 unit test、HTTP fixture 或文档审查代替这次演练。
+### 1. 回退主后端 systemd drop-in 并平滑重启
 
-## 未来发布的准入条件
+1. 核对 `dokitool-go.service.d/` 下当前生效的编号配置片段，确认移除本次新增的高序号 `ExecStart` drop-in 后，上一稳定版本 `<prev_sha>` 的 drop-in 将自动恢复为最高优先级。
+2. 移除（或移出至受保护备份位置）本次发布新增的 drop-in 片段。
+3. 执行 `systemctl daemon-reload`，排空在途请求后停止 `dokitool-go.service`，确认本地回环监听端口释放，随后重新启动服务并核对处于 `active (running)`，且运行二进制 `version` 输出已恢复为 `<prev_sha>`。
 
-涉及接替既有九平台实例时，九平台能力、独立合同和 HTTP 检查、原前端消费与代表性保存、微博媒体协议及票据兼容、冻结 fixture、完整旧发布包和上述回滚演练均完成后，才可申请该实例切流。独立 Go 测试或发布目标按实际覆盖能力另行明确，不能宣称已替代九平台生产。无论部署方式如何，公开 PHP 仓库及其历史持续保留。上线时机和范围另行由用户确认。
+### 2. 原子切回静态前端软链
+
+1. 如切换期间已有浏览器加载过新版本首页，可先执行 `cp -n <failed_release>/frontend/dist/assets/* <prev_release>/frontend/dist/assets/` 保留新增哈希静态块（不覆盖 `<prev_sha>` 原有文件）。
+2. 在软链同级目录创建指向 `<prev_release>/frontend/dist` 的临时符号链接并原子替换：
+   ```sh
+   ln -sfn "<prev_release>/frontend/dist" "<frontend_symlink>.tmp"
+   mv -T "<frontend_symlink>.tmp" "<frontend_symlink>"
+   ```
+
+### 3. 辅助服务同步回退（若涉及）
+
+若本次发布同时更新了上海端 `dokitool-sh-pull.service` 的二进制或 systemd drop-in（参见 [douyin-shanghai.md](douyin-shanghai.md)），同步移除本次新增的上海端 drop-in，执行 `systemctl daemon-reload` 并重启 `dokitool-sh-pull.service`，确认连接与认领循环恢复正常。
+
+---
+
+## 三、回滚后核验门禁
+
+回滚操作完成后必须逐一确认以下指标，全部通过才视为恢复完成，并在原发布 Issue 中追加回滚回执：
+
+1. **进程与版本**：`dokitool-go.service` 状态为 `active (running)`，实际生效 `ExecStart` 二进制路径与 `<binary> version` 输出均为 `<prev_sha>`。
+2. **公开接口契约**：本地与公网 `GET /api/platforms?schema_version=1.0` 返回 HTTP `200`、`code: "OK"`，启用平台列表与 `<prev_sha>` 基线一致。
+3. **静态资源与安全头**：公网首页与首页引用的全部 `/assets/*` 返回 HTTP `200`；精确 `/downloads/bridge.html` 仍返回唯一 `X-Frame-Options: SAMEORIGIN` 与 `Cache-Control: no-store`；缺失的 `/assets/*` 返回 `404`。
+4. **代表性解析验证**：抽查代表性平台公开作品 `/api/parse` 返回 `200 OK`。
+
+---
+
+## 历史
+
+### Go 接替早期 PHP 实例切流前的回滚门槛归档
+
+在早期从 PHP 后端（参考基线 `665bd55134982b9fe107aa1cd00373ba8da8ff3c` 与 `25beaee107f8c1a208ced9deb3c637068445e316`）首次切流至 Go 后端的迁移阶段，曾要求封存完整的 PHP 发布目录、三池 PHP-FPM 配置、Caddy 路由片段与 `release-manifest.json`，并在隔离验证环境完成一次「PHP → Go → 回退至 PHP（含切换前后签发的微博 30 分钟票据双向兼容验证）」的完整演练后才允许实例切流（维护边界见 [MAINTENANCE.md](MAINTENANCE.md)，PHP 时期说明归档见 [../HISTORY.md](../HISTORY.md)）。现网已完成 Go 单栈长期稳定运行，日常版本回退不再涉及 PHP-FPM 池切换。
