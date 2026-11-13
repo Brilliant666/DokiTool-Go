@@ -84,3 +84,36 @@ test('early theme code honors stored preference and works when storage is blocke
     assert.equal(element.style.colorScheme, expected ? 'dark' : 'light');
   }
 });
+
+test('#91 PR1 item 5: in-app browser UA detector matches WeChat/QQ/Douyin/Weibo only and keeps SSR/system browsers clean', async () => {
+  assert.doesNotMatch(html, /data-in-app-browser-banner|请在系统浏览器中打开/);
+  const { renderHome } = await import(new URL('../.ssg/entry-server.mjs', import.meta.url));
+  const rendered = await renderHome();
+  assert.doesNotMatch(rendered, /data-in-app-browser-banner|请在系统浏览器中打开/);
+
+  for (const [label, ua] of [
+    ['WeChat iOS', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.50(0x18003237) NetType/WIFI'],
+    ['WeChat Android', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/116.0.0.0 Mobile Safari/537.36 MicroMessenger/8.0.50.2701 WeChat/arm64'],
+    ['QQ iOS', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 QQ/9.0.70.631 V1_IPH_SQ_9.0.70_1_APP_A'],
+    ['QQ Android', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 MQQBrowser/6.2 TBS/046900 Mobile Safari/537.36 V1_AND_SQ_9.0.70 PA QQ/9.0.70.16805'],
+    ['Douyin iOS', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 aweme_30.2.0 JsSdk/2.0'],
+    ['Douyin Android', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Mobile Safari/537.36 AppName/aweme app_version/30.2.0 BytedanceWebview/d8a21c6'],
+    ['Weibo iOS', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Weibo (iPhone15,2__weibo__14.6.2__iphone__os17.5)'],
+    ['Weibo Android', 'Mozilla/5.0 (Linux; Android 14; 23127PN0CC) AppleWebKit/537.36 Mobile Safari/537.36 Weibo (Xiaomi__weibo__14.6.2__android__android14)'],
+  ]) {
+    assert.equal(state.isInAppBrowser(ua), true, `${label} must be detected as in-app browser`);
+  }
+
+  for (const [label, ua] of [
+    ['Desktop Chrome', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'],
+    ['Android Chrome', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'],
+    ['iOS Mobile Safari', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'],
+    ['Firefox', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0'],
+    ['Edge', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0'],
+    ['Standalone Android MQQBrowser', 'Mozilla/5.0 (Linux; U; Android 13; zh-cn; Pixel 7) AppleWebKit/537.36 Version/4.0 Chrome/109.0.5414.86 MQQBrowser/15.3 Mobile Safari/537.36'],
+    ['Desktop QQBrowser', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/116.0.5845.97 Safari/537.36 QQBrowser/13.5.5653.400'],
+    ['Empty/SSR UA', ''],
+  ]) {
+    assert.equal(state.isInAppBrowser(ua), false, `${label} must NOT be detected as in-app browser`);
+  }
+});

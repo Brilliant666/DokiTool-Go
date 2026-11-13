@@ -29,6 +29,15 @@ export function persistPreference(key: 'lang' | 'theme', value: string): void {
   try { localStorage.setItem(key, value) } catch { /* The preference still applies in this tab. */ }
 }
 
+const IN_APP_BROWSER_RE =
+  /\bMicroMessenger\b|\bQQ\/|(?:^|[\s/])aweme(?:[/_.\s]|$)|\bBytedanceWebview\b|\bWeibo\b|__weibo__/i
+
+export function isInAppBrowser(
+  ua = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+): boolean {
+  return Boolean(ua) && IN_APP_BROWSER_RE.test(ua)
+}
+
 export function getClientInitialState(root: HTMLElement): HomeInitialState {
   const prerendered = root.dataset.prerendered === 'true'
   // Read the live property, not the value attribute: users may already have typed

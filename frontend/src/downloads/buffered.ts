@@ -35,12 +35,13 @@ export interface BufferedReadOptions {
   onChunk?: (loaded: number, total: number) => void;
   timeoutMs?: number;
   maxBytes?: number;
+  maxBytesError?: string;
   referrerPolicy?: ReferrerPolicy;
 }
 
 /** Page-side ZIP/segment reads. Each header/read wait is bounded, not total download time. */
 export async function fetchMediaBlob(url: string, options: BufferedReadOptions = {}): Promise<Blob> {
-  const { signal, range, expectedSize = 0, onChunk, maxBytes = Number.MAX_SAFE_INTEGER } = options;
+  const { signal, range, expectedSize = 0, onChunk, maxBytes = Number.MAX_SAFE_INTEGER, maxBytesError } = options;
   if (range && (!Number.isSafeInteger(range.start) || range.start < 0 || !Number.isSafeInteger(range.length) ||
     range.length <= 0 || !Number.isSafeInteger(range.start + range.length))) throw new Error("无效的分片字节范围");
   const scope = requestScope(signal, options.timeoutMs ?? 30_000);
@@ -65,7 +66,7 @@ export async function fetchMediaBlob(url: string, options: BufferedReadOptions =
     if (!response.body) throw new Error("该资源不支持读取");
     const declared = decodedLength(response) || 0;
     const total = range?.length || expectedSize || declared;
-    if (total > maxBytes) throw new Error("资源超过允许的读取范围");
+    if (total > maxBytes) throw new Error(maxBytesError || "资源超过允许的读取范围");
     reader = response.body.getReader();
     const parts: BlobPart[] = [];
     let loaded = 0;
@@ -73,7 +74,8 @@ export async function fetchMediaBlob(url: string, options: BufferedReadOptions =
       const chunk = await scope.wait(() => reader!.read());
       if (chunk.done) break;
       loaded += chunk.value.byteLength;
-      if (loaded > maxBytes || (declared && loaded > declared) || (expectedSize && loaded > expectedSize) ||
+      if (loaded > maxBytes) throw new Error(maxBytesError || "资源下载长度不符");
+      if ((declared && loaded > declared) || (expectedSize && loaded > expectedSize) ||
         (range && loaded > range.length)) throw new Error("资源下载长度不符");
       parts.push(chunk.value as Uint8Array<ArrayBuffer>);
       onChunk?.(loaded, total);

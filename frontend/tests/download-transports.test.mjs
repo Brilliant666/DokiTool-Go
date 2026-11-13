@@ -268,3 +268,25 @@ test('header and reader stalls time out independently, with at most three distin
     assert.equal(clicks.length, 0);
   } finally { globalThis.setTimeout = realSetTimeout; }
 });
+
+test('#91 PR1 item 4 & 6b: Blob and segment object URLs revoke at 45s (not 4s), and attachmentFormat preserves emoji code points', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const emojiName = `${'a'.repeat(119)}😀🎉.mp4`;
+  const result = await blob.downloadBlob(request({ id: 'revoke-45s', filename: emojiName }), signal(), () => {});
+  assert.equal(result.filename.isWellFormed(), true, 'filename must not contain lone surrogates');
+  assert.ok(result.filename.includes('😀'), '120th code point emoji must survive intact');
+  assert.equal(revoked.length, 0);
+  t.mock.timers.tick(4000);
+  assert.equal(revoked.length, 0, 'must NOT revoke object URL at 4s');
+  t.mock.timers.tick(40999);
+  assert.equal(revoked.length, 0, 'must NOT revoke object URL before 45s');
+  t.mock.timers.tick(1);
+  assert.equal(revoked.length, 1, 'revokes object URL at 45s');
+
+  revoked.length = 0;
+  await segments.mergeAndDownload(['https://cdn.test/seg-1.ts'], { filename: 'merged.mp4' });
+  t.mock.timers.tick(44999);
+  assert.equal(revoked.length, 0, 'segment merge must NOT revoke before 45s');
+  t.mock.timers.tick(1);
+  assert.equal(revoked.length, 1, 'segment merge revokes at 45s');
+});

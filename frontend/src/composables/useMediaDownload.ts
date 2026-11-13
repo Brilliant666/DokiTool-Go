@@ -17,8 +17,9 @@ import {
   muxDownloadViaYouTubeHelper,
   selectYouTubeMuxPair,
 } from "../utils/youtubeHelperCore";
-import { buildMediaFilename } from "../utils/videoFilename";
-import { fetchMediaBlob, linkAbortSignals, acquireBufferedSlot } from "../downloads/buffered";
+import { buildArchiveFilename, buildMediaFilename } from "../utils/videoFilename";
+import { linkAbortSignals, acquireBufferedSlot } from "../downloads/buffered";
+import { withRateLimitRetry } from "./useVideoParser";
 import {
   getDownloadTarget,
   readyItem,
@@ -27,22 +28,23 @@ import {
   sourceUrl,
   type DownloadTarget,
 } from "../utils/mediaContract";
-import {
-  declaredSegments,
-  fileResource,
-  mediaExtension,
-} from "../utils/mediaDelivery";
+import { mediaExtension } from "../utils/mediaDelivery";
 import type { HlsSegment } from "../utils/segmentDownload";
 import type { TbvideoItem } from "../services/tbvideo";
 import { reportTbvideo } from "../../public/downloads/tbvideo.js";
 import { apiConfig } from "../services/apiConfig";
 import type { useVideoStore } from "../stores/video";
 import type { VideoSelection } from "./useVideoSelection";
+export const MAX_ARCHIVE_BYTES = 500 * 1024 * 1024;
 interface UseMediaDownloadOptions {
   videoStore: ReturnType<typeof useVideoStore>;
   showToast: (message: string, type?: ToastType, duration?: number) => unknown;
   selection: VideoSelection;
-  resolveItem: (item: MediaItem, signal?: AbortSignal) => Promise<MediaItem>;
+  resolveItem: (
+    item: MediaItem,
+    signal?: AbortSignal,
+    options?: { onRateLimitWait?: (seconds: number) => void },
+  ) => Promise<MediaItem>;
 }
 function triggerBrowserDownload(
   url: string,
@@ -357,11 +359,6 @@ export function useMediaDownload({
         }
       },
     };
-  }
-
-  /** 单文件抓取（用于 ZIP 打包） */
-  async function fetchBlob(url: string, signal?: AbortSignal, expectedSize?: number): Promise<Blob> {
-    return fetchMediaBlob(url, { signal, expectedSize });
   }
 
   let pageTaskSequence = 0;
@@ -950,9 +947,12 @@ export function useMediaDownload({
     filename: string;
     data: Blob | Uint8Array<ArrayBuffer>;
   };
+  type SegmentArchiveModule = typeof import("../utils/segmentDownload");
   type ArchiveBuilder = (
     signal: AbortSignal,
     progress: (done: number, total: number) => void,
+    setStatus: (statusText: string) => void,
+    segmentMod: SegmentArchiveModule,
   ) => Promise<ArchiveEntry[]>;
 
   async function runArchive(
@@ -990,8 +990,8 @@ export function useMediaDownload({
       videoStore.updateDownload(id, { status: "preparing", statusText: "准备打包..." });
       // Only ZIP actions need this library. The import itself cannot be aborted,
       // so cancellation must settle the task and guard all work after it resolves.
-      const { default: JSZip } = await abortable(
-        import("jszip"),
+      const [{ default: JSZip }, segmentMod] = await abortable(
+        Promise.all([import("jszip"), import("../utils/segmentDownload")]),
         controller.signal,
       );
       checkAbort(controller.signal);
@@ -1000,14 +1000,23 @@ export function useMediaDownload({
         status: "downloading",
         statusText: "正在打包...",
       });
-      const entries = await build(controller.signal, (done, total) => {
-        checkAbort(controller.signal);
-        if (!ownsTask(id, controller)) return;
-        videoStore.updateDownload(id, {
-          percent: Math.round((done / total) * 85),
-          statusText: `打包 ${done}/${total}...`,
-        });
-      });
+      const entries = await build(
+        controller.signal,
+        (done, total) => {
+          checkAbort(controller.signal);
+          if (!ownsTask(id, controller)) return;
+          videoStore.updateDownload(id, {
+            percent: Math.round((done / total) * 85),
+            statusText: `打包 ${done}/${total}...`,
+          });
+        },
+        (statusText) => {
+          if (ownsTask(id, controller)) {
+            videoStore.updateDownload(id, { statusText });
+          }
+        },
+        segmentMod,
+      );
       checkAbort(controller.signal);
       if (!ownsTask(id, controller)) return;
       if (!entries.length) throw new Error("没有可打包的资源");
@@ -1040,7 +1049,7 @@ export function useMediaDownload({
       if (!ownsTask(id, controller)) return;
       const blobUrl = URL.createObjectURL(blob);
       triggerBrowserDownload(blobUrl, filename);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+      (setTimeout(() => URL.revokeObjectURL(blobUrl), 45_000) as { unref?: () => void })?.unref?.();
       monitor.finish();
       videoStore.updateDownload(id, {
         status: "completed",
@@ -1295,7 +1304,12 @@ export function useMediaDownload({
         : {}),
     });
   }
-  async function resolvedTarget(snapshot: ItemSnapshot, signal: AbortSignal, refresh = false) {
+  async function resolvedTarget(
+    snapshot: ItemSnapshot,
+    signal: AbortSignal,
+    refresh = false,
+    onRateLimitWait?: (seconds: number) => void,
+  ) {
     checkAbort(signal);
     let item = snapshot.item;
     let target = snapshotTarget(snapshot, item);
@@ -1304,14 +1318,30 @@ export function useMediaDownload({
       // Each invocation performs at most one resolve, never a retry loop.
       if (refresh && !refreshable(snapshot)) throw new Error("原任务缺少可核对的刷新入口，请重新解析并选择");
       const deadline = new AbortController();
-      const timeout = setTimeout(
-        () => deadline.abort(new Error("解析准备超过 30 秒，请重试")),
-        30000,
-      );
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const resetDeadline = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(
+          () => deadline.abort(new Error("解析准备超过 30 秒，请重试")),
+          30000,
+        );
+      };
+      resetDeadline();
       const linked = linkAbortSignals([signal, deadline.signal]);
       const combined = linked.signal;
+      const notifyWait = (seconds: number) => {
+        resetDeadline();
+        onRateLimitWait?.(seconds);
+      };
       try {
-        item = await abortable(resolveItem(item, combined), combined);
+        item = await abortable(
+          withRateLimitRetry(
+            () => resolveItem(item, combined, { onRateLimitWait: notifyWait }),
+            combined,
+            notifyWait,
+          ),
+          combined,
+        );
       } catch (error) {
         if (deadline.signal.aborted && !signal.aborted)
           throw deadline.signal.reason;
@@ -1786,6 +1816,11 @@ export function useMediaDownload({
         snapshot,
         controller.signal,
         refresh,
+        (sec) =>
+          ownsTask(id, controller) &&
+          videoStore.updateDownload(id, {
+            statusText: `请求受限，等待 ${sec} 秒后重试...`,
+          }),
       );
       if (!ownsTask(id, controller)) return false;
       const delivery = target.variant.delivery;
@@ -1865,6 +1900,7 @@ export function useMediaDownload({
       } else {
         if (delivery.kind !== "hls" && delivery.kind !== "segments")
           throw new Error("该版本暂不支持");
+        const { declaredSegments } = await import("../utils/segmentDownload");
         const segments = await declaredSegments(
           delivery,
           apiContext,
@@ -1894,38 +1930,14 @@ export function useMediaDownload({
       return false;
     }
   }
-  async function resourceEntry(
-    resource: Resource,
-    name: string,
-    signal: AbortSignal,
-  ): Promise<ArchiveEntry> {
-    const delivery = resource.delivery;
-    if (delivery.kind === "file") {
-      const target = fileResource(resource, apiContext);
-      const data = await fetchBlob(
-        target.url,
-        signal,
-        target.source.size_bytes,
-      );
-      return {
-        filename: `${name}.${mediaExtension(resource.metadata, delivery, data.type)}`,
-        data,
-      };
-    }
-    if (delivery.kind === "hls" || delivery.kind === "segments") {
-      const resolvedSegments = await declaredSegments(
-        delivery,
-        apiContext,
-        signal,
-      );
-      const { mergeSegments } = await import("../utils/segmentDownload");
-      checkAbort(signal);
-      return {
-        filename: `${name}.${mediaExtension(resource.metadata, delivery)}`,
-        data: await mergeSegments(resolvedSegments, { signal }),
-      };
-    }
-    throw new Error("该资源需要 DASH 处理，当前暂不支持");
+  function archiveFilenameFor(snapshots: ItemSnapshot[]): string {
+    const r = videoStore.resultData;
+    return buildArchiveFilename({
+      title: r?.title?.trim() || snapshots.find((s) => s.item.title?.trim())?.item.title?.trim(),
+      author: r?.author?.name?.trim() || r?.author?.id?.trim(),
+      count: snapshots.length,
+      fallback: r?.content_id || r?.source_url || snapshots[0]?.item.id || "archive",
+    });
   }
   async function archiveItems(
     snapshots: ItemSnapshot[],
@@ -1938,50 +1950,40 @@ export function useMediaDownload({
     const taskSnapshots = [...snapshots];
     await runArchive(
       filename,
-      async (signal, progress) => {
+      async (signal, progress, setStatus, segmentMod) => {
+        segmentMod.assertArchiveKnownSizeLimit(
+          taskSnapshots.map((s) => snapshotTarget(s, s.item)),
+          apiContext,
+          MAX_ARCHIVE_BYTES,
+        );
         const entries: ArchiveEntry[] = [];
+        let archiveBytes = 0;
         for (let index = 0; index < taskSnapshots.length; index++) {
           const snapshot = taskSnapshots[index];
-          const { item, target } = await resolvedTarget(snapshot, signal);
+          const { item, target } = await resolvedTarget(
+            snapshot,
+            signal,
+            false,
+            (sec) =>
+              setStatus(
+                `请求受限，等待 ${sec} 秒后重试（${index + 1}/${taskSnapshots.length}）...`,
+              ),
+          );
           // Resolve once into this archive's private state. Retries retain the
           // exact variant/source even if a later server default would differ.
           taskSnapshots[index] = preparedSnapshot(snapshot, item, target);
-          const delivery = target.variant.delivery;
           const base = `${String(index + 1).padStart(3, "0")}_${filenameFor(snapshot, "bin").replace(/\.bin$/, "")}`;
-          if (target.kind === "file") {
-            const data = await fetchBlob(
-              target.url,
-              signal,
-              target.source.size_bytes,
-            );
-            entries.push({
-              filename: `${base}.${mediaExtension(target.variant.metadata, delivery.kind === "file" ? delivery : undefined, data.type)}`,
-              data,
-            });
-          } else if (delivery.kind === "pair") {
-            // Both files share a stable base; incomplete pairs fail the whole archive.
-            for (const resource of delivery.resources)
-              entries.push(
-                await resourceEntry(
-                  resource,
-                  `${base}_${resource.role}`,
-                  signal,
-                ),
-              );
-          } else if (delivery.kind !== "mux") {
-            entries.push(
-              await resourceEntry(
-                {
-                  id: snapshot.item.id,
-                  role: "media",
-                  metadata: target.variant.metadata,
-                  delivery,
-                },
-                base,
-                signal,
-              ),
-            );
-          } else throw new Error("音视频合并尚未支持");
+          const collected = await segmentMod.collectArchiveTargetEntries({
+            itemId: snapshot.item.id,
+            target,
+            base,
+            apiContext,
+            signal,
+            maxArchiveBytes: MAX_ARCHIVE_BYTES,
+            currentBytes: archiveBytes,
+          });
+          archiveBytes = collected.totalBytes;
+          entries.push(...collected.entries);
           checkAbort(signal);
           progress(index + 1, taskSnapshots.length);
         }
@@ -1992,15 +1994,16 @@ export function useMediaDownload({
   }
   async function downloadVideosAsZip(
     items: MediaItem[],
-    zipName = `media_${Date.now()}.zip`,
+    zipName?: string,
   ) {
     if (!items.length) {
       showToast("没有可下载的条目", "warning");
       return;
     }
+    const snapshots = items.map((item) => snapshotItem(item));
     await archiveItems(
-      items.map((item) => snapshotItem(item)),
-      zipName,
+      snapshots,
+      zipName || archiveFilenameFor(snapshots),
     );
   }
   async function downloadSelected() {
@@ -2125,7 +2128,11 @@ export function useMediaDownload({
       showToast("没有可下载的条目", "warning");
       return;
     }
-    await archiveItems(snapshots, `media_${Date.now()}.zip`);
+    if (snapshots.length === 1 && snapshots[0].item.type !== "live_photo") {
+      await enqueueItem(snapshots[0]);
+      return;
+    }
+    await archiveItems(snapshots, archiveFilenameFor(snapshots));
   }
   const downloadAllImages = () => downloadAllMedia("images");
   async function handleCancelDownload(id: number): Promise<void> {

@@ -20,13 +20,20 @@ export const extensionsFor = type => {
   return Object.hasOwn(mediaExtensions, key) ? mediaExtensions[key] : [];
 };
 
+const sliceCodePoints = (value, max) =>
+  [...String(value)]
+    .map(c => (c.length === 1 && c.charCodeAt(0) >= 0xd800 && c.charCodeAt(0) <= 0xdfff ? "_" : c))
+    .slice(0, max)
+    .join("");
+
 export function isSafeFilename(name) {
-  return name.length > 0 && name.length <= 180 && name === name.trim()
+  const count = Array.from(name).length;
+  return count > 0 && count <= 180 && (typeof name.isWellFormed !== "function" || name.isWellFormed()) && name === name.trim()
     && !unsafeCharacter.test(name) && !/^[. ]|[. ]$/.test(name) && !reservedName.test(name);
 }
 
 export function cleanFilename(value) {
-  return String(value || "download.bin").replace(new RegExp(unsafeCharacter, "gu"), "_").slice(0, 180).trim() || "download.bin";
+  return sliceCodePoints(String(value || "download.bin").replace(new RegExp(unsafeCharacter, "gu"), "_"), 180).trim() || "download.bin";
 }
 
 /** Preserve an evidenced file format when the response can carry that type of media. */
@@ -44,6 +51,6 @@ export function attachmentFormat(filename, sourceType, formatMime, { allowUnknow
   if (!allowUnknownMedia && !allowed.length && !(generic && safeExtensions.has(requested)))
     throw new Error("资源返回的类型不是可下载的音视频或图片");
   const suffix = allowed.includes(requested) ? requested : (allowed[0] || (safeExtensions.has(requested) ? requested : "bin"));
-  const base = cleanFilename(filename).replace(/\.[^.]*$/, "").replace(/^[. ]+|[. ]+$/g, "").slice(0, 120);
+  const base = sliceCodePoints(cleanFilename(filename).replace(/\.[^.]*$/, "").replace(/^[. ]+|[. ]+$/g, ""), 120);
   return { mime, filename: `${base && !reservedName.test(base) ? base : "media"}.${suffix}` };
 }

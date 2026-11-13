@@ -177,8 +177,9 @@ const allQualityOptions = computed(() =>
                   active &&
                   sourceAvailable(source) &&
                   source.id ===
-                    (selected?.source_id ||
-                      currentItem.value.default?.source_id),
+                    (selected
+                      ? selected.source_id
+                      : currentItem.value.default?.source_id),
               ) ||
               variant.delivery.sources.find((source) => sourceAvailable(source)) ||
               variant.delivery.sources[0]
@@ -459,7 +460,6 @@ const selectQuality = (option) => {
   playbackFailed.value = false;
   emit("switch-video", {
     variant_id: option.variant.id,
-    ...(option.source?.id ? { source_id: option.source.id } : {}),
   });
 };
 const originalPageUrl = computed(() => {
@@ -1592,9 +1592,6 @@ onUnmounted(() => {
                       selectQuality(option);
                       emit('download-backup', {
                         variant_id: option.variant.id,
-                        ...(option.source?.id
-                          ? { source_id: option.source.id }
-                          : {}),
                       });
                     "
                   >
