@@ -217,6 +217,21 @@ func (staticPublicResolver) LookupNetIP(_ context.Context, _, _ string) ([]netip
 	return []netip.Addr{netip.MustParseAddr("104.244.42.1")}, nil
 }
 
+func countInvocationMarkers(t *testing.T, dir string) int {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read invocation dir %s: %v", dir, err)
+	}
+	count := 0
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "inv.") {
+			count++
+		}
+	}
+	return count
+}
+
 func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) {
 	const now int64 = 1793448000
 	douyinBytes, err := os.ReadFile("../../../docs/schema/unified-v1/examples/01-douyin-quality-and-cdn.json")
@@ -229,11 +244,14 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 	}
 
 	coordDir := t.TempDir()
-	countFile := filepath.Join(coordDir, "invocations.log")
+	invDir := filepath.Join(coordDir, "invocations")
+	if err := os.MkdirAll(invDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	releaseFile := filepath.Join(coordDir, "release.flag")
 	scriptPath := filepath.Join(coordDir, "yt-dlp")
-	scriptBody := fmt.Sprintf("#!/bin/sh\necho 1 >> %q\nidx=$(wc -l < %q | tr -d ' ')\ntouch \"%s/started_${idx}\"\nwhile [ ! -f %q ]; do\n  sleep 0.02\ndone\necho '{\"id\":\"1577719286659006464\",\"title\":\"Busy isolation test\",\"formats\":[{\"format_id\":\"http-2176\",\"url\":\"https://video.twimg.com/ext_tw_video/1577719236209922048/pu/vid/1280x720/vid.mp4\",\"ext\":\"mp4\",\"protocol\":\"https\",\"width\":1280,\"height\":720,\"vcodec\":\"avc1.64001f\",\"acodec\":\"mp4a.40.2\"}]}'\n",
-		countFile, countFile, coordDir, releaseFile)
+	scriptBody := fmt.Sprintf("#!/bin/sh\nset -eu\nmktemp \"%s/inv.XXXXXX\" >/dev/null\nwhile [ ! -f %q ]; do\n  sleep 0.01\ndone\nprintf '%%s\\n' '{\"id\":\"1577719286659006464\",\"title\":\"Busy isolation test\",\"formats\":[{\"format_id\":\"http-2176\",\"url\":\"https://video.twimg.com/ext_tw_video/1577719236209922048/pu/vid/1280x720/vid.mp4\",\"ext\":\"mp4\",\"protocol\":\"https\",\"width\":1280,\"height\":720,\"vcodec\":\"avc1.64001f\",\"acodec\":\"mp4a.40.2\"}]}'\n",
+		invDir, releaseFile)
 	if err := os.WriteFile(scriptPath, []byte(scriptBody), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +262,7 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 		BinaryPath:     scriptPath,
 		AllowedHashes:  map[string]string{digest: "yt-dlp"},
 		MaxConcurrency: 2,
-		Timeout:        5 * time.Second,
+		Timeout:        25 * time.Second,
 		Resolver:       staticPublicResolver{},
 	})
 	if err != nil || !baseEng.Enabled() {
@@ -282,26 +300,41 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 	// 1. Occupy the 2 shared yt-dlp execution slots from 2 distinct client IPs.
 	var inFlightWG sync.WaitGroup
 	inFlightCodes := make([]int, 2)
+	inFlightDone := make(chan int, 2)
 	inFlightWG.Add(2)
+	t.Cleanup(func() {
+		_ = os.WriteFile(releaseFile, []byte("cleanup"), 0o600)
+		inFlightWG.Wait()
+	})
 	go func() {
 		defer inFlightWG.Done()
 		req := edgeRequest("/api/parse?schema_version=1.0&url="+url.QueryEscape("https://x.com/UltimaShadowX/status/1577719286659006464"), "198.51.100.1")
 		inFlightCodes[0] = call(entry, req).Code
+		inFlightDone <- inFlightCodes[0]
 	}()
 	go func() {
 		defer inFlightWG.Done()
 		req := edgeRequest("/api/parse?schema_version=1.0&url="+url.QueryEscape("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "198.51.100.2")
 		inFlightCodes[1] = call(entry, req).Code
+		inFlightDone <- inFlightCodes[1]
 	}()
 
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		_, err1 := os.Stat(filepath.Join(coordDir, "started_1"))
-		_, err2 := os.Stat(filepath.Join(coordDir, "started_2"))
-		if err1 == nil && err2 == nil {
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancelWait()
+	for {
+		if n := countInvocationMarkers(t, invDir); n >= 2 {
+			if n != 2 {
+				t.Fatalf("expected exactly 2 started yt-dlp subprocesses, got %d", n)
+			}
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		select {
+		case code := <-inFlightDone:
+			t.Fatalf("in-flight yt-dlp request exited before release with HTTP %d", code)
+		case <-waitCtx.Done():
+			t.Fatalf("timed out waiting for 2 yt-dlp subprocesses to start (saw %d)", countInvocationMarkers(t, invDir))
+		case <-time.After(5 * time.Millisecond):
+		}
 	}
 
 	// 2. Send 8 additional yt-dlp requests across distinct client IPs while the 2 slots are full.
@@ -343,12 +376,8 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 	}
 
 	// Verify only 2 yt-dlp subprocesses were spawned during the entire busy window.
-	countBytes, err := os.ReadFile(countFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if lines := strings.Split(strings.TrimSpace(string(countBytes)), "\n"); len(lines) != 2 {
-		t.Fatalf("expected only 2 spawned subprocesses, got %d", len(lines))
+	if got := countInvocationMarkers(t, invDir); got != 2 {
+		t.Fatalf("expected only 2 spawned subprocesses, got %d", got)
 	}
 
 	// 4. Release the 2 in-flight yt-dlp subprocesses and verify they complete cleanly.
@@ -365,6 +394,9 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 	wAfter := call(entry, reqAfter)
 	if wAfter.Code != http.StatusOK {
 		t.Fatalf("expected X request after slot release to return 200 OK, got %d: %s", wAfter.Code, wAfter.Body.String())
+	}
+	if got := countInvocationMarkers(t, invDir); got != 3 {
+		t.Fatalf("expected 3 total spawned subprocesses after slot release, got %d", got)
 	}
 }
 

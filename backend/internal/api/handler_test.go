@@ -2,15 +2,23 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/fetch"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/ytgeneric"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
 func testHandler(t *testing.T, adapter Adapter) *Handler {
@@ -275,5 +283,158 @@ func TestPlatformErrorCodesDistinguishUnsupportedVsMismatch(t *testing.T) {
 	}
 	if unsupportedMsg == "" || mismatchMsg == "" || unsupportedMsg == mismatchMsg {
 		t.Fatalf("expected distinct error messages for unsupported platform (%q) vs mismatch (%q)", unsupportedMsg, mismatchMsg)
+	}
+}
+
+type countingHTTPExecutor struct {
+	calls int
+}
+
+func (e *countingHTTPExecutor) Do(_ context.Context, _ fetch.Request) (fetch.Response, error) {
+	e.calls++
+	return fetch.Response{}, nil
+}
+
+type countingDNSResolver struct {
+	calls int
+}
+
+func (r *countingDNSResolver) LookupNetIP(_ context.Context, _, _ string) ([]netip.Addr, error) {
+	r.calls++
+	return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+}
+
+func TestFBWatchLocalHintZeroOutboundAndDailymotionNotFound404(t *testing.T) {
+	const now int64 = 1793448000
+
+	dir := t.TempDir()
+	invDir := filepath.Join(dir, "invocations")
+	if err := os.MkdirAll(invDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(dir, "yt-dlp")
+	scriptBody := "#!/bin/sh\nset -eu\nmktemp \"" + invDir + "/inv.XXXXXX\" >/dev/null\necho 'ERROR: [dailymotion] x9zzzzzz999: Not found.' >&2\nexit 1\n"
+	if err := os.WriteFile(scriptPath, []byte(scriptBody), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(scriptBody))
+	digest := hex.EncodeToString(sum[:])
+
+	resolver := &countingDNSResolver{}
+	httpExec := &countingHTTPExecutor{}
+	baseEng, err := ytengine.New(ytengine.Config{
+		BinaryPath:    scriptPath,
+		AllowedHashes: map[string]string{digest: "yt-dlp"},
+		Resolver:      resolver,
+	})
+	if err != nil || !baseEng.Enabled() {
+		t.Fatalf("ytengine.New failed: %v", err)
+	}
+
+	c, err := catalog.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fbSpec, _ := ytgeneric.LookupSite("facebook")
+	dmSpec, _ := ytgeneric.LookupSite("dailymotion")
+	for _, entry := range []unified.Object{fbSpec.CatalogEntry(), dmSpec.CatalogEntry()} {
+		if err := c.Register(entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fbPolicy := ytgeneric.NewWithResolver(fbSpec, nil, nil, resolver)
+	fbEng := baseEng.WithTargetPolicy(fbPolicy.AllowedTargetURL, fbPolicy.AllowedOutboundHost).WithExtractors(fbSpec.Extractors...)
+	dmPolicy := ytgeneric.NewWithResolver(dmSpec, nil, nil, resolver)
+	dmEng := baseEng.WithTargetPolicy(dmPolicy.AllowedTargetURL, dmPolicy.AllowedOutboundHost).WithExtractors(dmSpec.Extractors...)
+
+	adapters := map[string]Adapter{
+		"facebook":    ytgeneric.NewWithResolver(fbSpec, fbEng, ytengine.NewSizeProber(httpExec, fbPolicy.AllowedMediaURL), resolver),
+		"dailymotion": ytgeneric.NewWithResolver(dmSpec, dmEng, nil, resolver),
+	}
+	h, err := New(c, adapters, func() time.Time { return time.Unix(now, 0) }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. fb.watch short links (and share text) return 400 INVALID_INPUT locally with actionable copy and 0 outbound calls.
+	for _, rawInput := range []string{
+		"https://fb.watch/vtkorrRM0p/",
+		"看看这个视频 https://fb.watch/vv4KcJ16Ft/ 太好看了",
+	} {
+		q := url.Values{"schema_version": {"1.0"}, "url": {rawInput}}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/parse?"+q.Encode(), nil))
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("fb.watch(%q) status=%d, want 400: %s", rawInput, w.Code, w.Body.String())
+		}
+		payload, err := unified.Decode(w.Body.Bytes())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := unified.ValidateEnvelopeAt(payload, now); err != nil {
+			t.Fatalf("ValidateEnvelopeAt failed: %v", err)
+		}
+		errObj := unified.Map(payload["error"])
+		msg := unified.Str(errObj["message"])
+		if unified.Str(payload["code"]) != "INVALID_INPUT" || errObj["retryable"] == true || !strings.Contains(msg, "facebook.com 的完整视频链接") {
+			t.Fatalf("unexpected fb.watch payload: %v", payload)
+		}
+		if httpExec.calls != 0 || resolver.calls != 0 || countInvocationMarkers(t, invDir) != 0 {
+			t.Fatalf("fb.watch made outbound calls: http=%d dns=%d ytdlp=%d, want 0/0/0", httpExec.calls, resolver.calls, countInvocationMarkers(t, invDir))
+		}
+	}
+
+	// 2. fb.watch is still recognized as facebook in catalog (mismatch when platform=douyin, NOT UNSUPPORTED_PLATFORM).
+	mismatchQ := url.Values{"schema_version": {"1.0"}, "url": {"https://fb.watch/vtkorrRM0p/"}, "platform": {"douyin"}}
+	wMismatch := httptest.NewRecorder()
+	h.ServeHTTP(wMismatch, httptest.NewRequest(http.MethodGet, "/api/parse?"+mismatchQ.Encode(), nil))
+	mismatchPayload, err := unified.Decode(wMismatch.Body.Bytes())
+	if err != nil || wMismatch.Code != http.StatusBadRequest || unified.Str(mismatchPayload["code"]) != "INVALID_INPUT" {
+		t.Fatalf("expected 400 INVALID_INPUT platform mismatch for fb.watch + platform=douyin, got status=%d body=%s", wMismatch.Code, wMismatch.Body.String())
+	}
+
+	// 3. Lookalike domains, subdomains, userinfo, and non-default ports are rejected with 0 outbound calls.
+	for _, bad := range []struct {
+		url      string
+		wantCode string
+	}{
+		{"https://evilfb.watch/vtkorrRM0p/", "UNSUPPORTED_PLATFORM"},
+		{"https://fb.watch.evil.com/vtkorrRM0p/", "UNSUPPORTED_PLATFORM"},
+		{"https://www.fb.watch/vtkorrRM0p/", "UNSUPPORTED_PLATFORM"},
+		{"https://sub.fb.watch/vtkorrRM0p/", "UNSUPPORTED_PLATFORM"},
+		{"https://user:pass@fb.watch/vtkorrRM0p/", "INVALID_INPUT"},
+		{"https://fb.watch:8080/vtkorrRM0p/", "INVALID_INPUT"},
+		{"https://fb.watch:8443/vtkorrRM0p/", "INVALID_INPUT"},
+	} {
+		q := url.Values{"schema_version": {"1.0"}, "url": {bad.url}}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/parse?"+q.Encode(), nil))
+		payload, err := unified.Decode(w.Body.Bytes())
+		if err != nil || w.Code != http.StatusBadRequest || unified.Str(payload["code"]) != bad.wantCode {
+			t.Fatalf("bad URL %q => status=%d code=%v, want 400 %s", bad.url, w.Code, payload["code"], bad.wantCode)
+		}
+		if httpExec.calls != 0 || resolver.calls != 0 || countInvocationMarkers(t, invDir) != 0 {
+			t.Fatalf("bad URL %q made outbound calls: http=%d dns=%d ytdlp=%d", bad.url, httpExec.calls, resolver.calls, countInvocationMarkers(t, invDir))
+		}
+	}
+
+	// 4. Dailymotion non-existent video ("ERROR: [dailymotion] x9zzzzzz999: Not found.") returns 404 CONTENT_UNAVAILABLE.
+	dmQ := url.Values{"schema_version": {"1.0"}, "url": {"https://www.dailymotion.com/video/x9zzzzzz999"}}
+	wDM := httptest.NewRecorder()
+	h.ServeHTTP(wDM, httptest.NewRequest(http.MethodGet, "/api/parse?"+dmQ.Encode(), nil))
+	if wDM.Code != http.StatusNotFound {
+		t.Fatalf("dailymotion non-existent video status=%d, want 404: %s", wDM.Code, wDM.Body.String())
+	}
+	dmPayload, err := unified.Decode(wDM.Body.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unified.ValidateEnvelopeAt(dmPayload, now); err != nil {
+		t.Fatalf("dailymotion 404 ValidateEnvelopeAt failed: %v", err)
+	}
+	dmErr := unified.Map(dmPayload["error"])
+	if unified.Str(dmPayload["code"]) != "CONTENT_UNAVAILABLE" || dmErr["retryable"] == true {
+		t.Fatalf("unexpected dailymotion 404 payload: %v", dmPayload)
 	}
 }
