@@ -1438,6 +1438,423 @@ func TestParseCacheExcludesRequesterBoundContent(t *testing.T) {
 	}
 }
 
+type canaryPanicPayload struct {
+	detail string
+}
+
+func (c canaryPanicPayload) Error() string  { return c.detail }
+func (c canaryPanicPayload) String() string { return c.detail }
+
+func TestSingleflightPanicRecoveryIsolatesWaitersLogsTypeOnlyAndRecovers(t *testing.T) {
+	const baseNow int64 = 1793448000
+	c := loadCacheTestCatalog(t)
+
+	var rawCanary [16]byte
+	if _, err := rand.Read(rawCanary[:]); err != nil {
+		t.Fatal(err)
+	}
+	canary := "canary-" + hex.EncodeToString(rawCanary[:])
+
+	var (
+		upstreamCalls     atomic.Int32
+		panicMode         atomic.Int32 // 1 = string panic, 2 = custom struct panic, 3 = abandoned panic, 0 = healthy 200 OK
+		parseStarted      = make(chan struct{})
+		parseOnce         sync.Once
+		releaseParse      = make(chan struct{})
+		resolveStarted    = make(chan struct{})
+		resolveOnce       sync.Once
+		releaseResolve    = make(chan struct{})
+		abandonedStarted  = make(chan struct{})
+		abandonedFinished = make(chan struct{})
+	)
+	panicMode.Store(1)
+
+	adapter := AdapterFunc(func(ctx context.Context, source string, now int64) (unified.Object, error) {
+		upstreamCalls.Add(1)
+		switch panicMode.Load() {
+		case 1:
+			parseOnce.Do(func() { close(parseStarted) })
+			<-releaseParse
+			panic("adapter exploded on " + source + " " + canary)
+		case 2:
+			resolveOnce.Do(func() { close(resolveStarted) })
+			<-releaseResolve
+			panic(canaryPanicPayload{detail: "resolve boom " + source + " " + canary})
+		case 3:
+			defer close(abandonedFinished)
+			close(abandonedStarted)
+			<-ctx.Done()
+			panic("abandoned panic " + source + " " + canary)
+		default:
+			exp := time.Unix(now+1800, 0).UTC().Format(time.RFC3339)
+			return makeSyntheticEnvelope("bilibili", source, now, exp, "part-1", "part-2"), nil
+		}
+	})
+
+	h, err := New(c, map[string]Adapter{"bilibili": adapter}, func() time.Time { return time.Unix(baseNow, 0) }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		logMu     sync.Mutex
+		panicLogs []string
+	)
+	h.panicLogf = func(format string, args ...any) {
+		line := fmt.Sprintf(format, args...)
+		logMu.Lock()
+		panicLogs = append(panicLogs, line)
+		logMu.Unlock()
+	}
+
+	waitForWaiters := func(want int) {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			h.cache.mu.Lock()
+			got := 0
+			for _, call := range h.cache.inflight {
+				got = call.waiters
+			}
+			h.cache.mu.Unlock()
+			if got == want {
+				return
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for %d coalesced waiters", want)
+	}
+
+	assertInternalError500 := func(idx int, w *httptest.ResponseRecorder) {
+		t.Helper()
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("caller %d: status=%d, want 500 body=%s", idx, w.Code, w.Body.String())
+		}
+		if got := w.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("caller %d: Cache-Control=%q, want no-store", idx, got)
+		}
+		if got := w.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+			t.Fatalf("caller %d: Content-Type=%q", idx, got)
+		}
+		bodyStr := w.Body.String()
+		for _, forbidden := range []string{canary, "bilibili.com", "BV1panic999", "exploded", "boom"} {
+			if strings.Contains(bodyStr, forbidden) {
+				t.Fatalf("caller %d: response leaked %q: %s", idx, forbidden, bodyStr)
+			}
+		}
+		doc, err := unified.Decode(w.Body.Bytes())
+		if err != nil {
+			t.Fatalf("caller %d: invalid JSON response: %v", idx, err)
+		}
+		if err := unified.ValidateEnvelope(doc); err != nil {
+			t.Fatalf("caller %d: contract validation failed: %v (%s)", idx, err, bodyStr)
+		}
+		if unified.Str(doc["code"]) != "INTERNAL_ERROR" || unified.Str(unified.Map(doc["error"])["code"]) != "INTERNAL_ERROR" {
+			t.Fatalf("caller %d: unexpected error envelope: %v", idx, doc)
+		}
+	}
+
+	// 1. 10 active + 2 concurrently-canceling same-key /api/parse callers when adapter panics with string.
+	const (
+		activeParseWaiters   = 10
+		canceledParseWaiters = 2
+		totalParseWaiters    = activeParseWaiters + canceledParseWaiters
+	)
+	rawURL1 := "https://www.bilibili.com/video/BV1panic999?p=2&from=" + canary
+	rawURL2 := "HTTPS://WWW.BILIBILI.COM:443/video/BV1panic999?p=2&from=" + canary + "#section"
+	parseRecorders := make([]*httptest.ResponseRecorder, totalParseWaiters)
+	cancelFuncs := make([]context.CancelFunc, canceledParseWaiters)
+	var parseWG sync.WaitGroup
+	for i := 0; i < totalParseWaiters; i++ {
+		parseRecorders[i] = httptest.NewRecorder()
+		target := rawURL1
+		if i%2 == 1 {
+			target = rawURL2
+		}
+		req := httptest.NewRequest(http.MethodGet, "/api/parse?schema_version=1.0&url="+url.QueryEscape(target), nil)
+		if i >= activeParseWaiters {
+			ctx, cancel := context.WithCancel(req.Context())
+			cancelFuncs[i-activeParseWaiters] = cancel
+			req = req.WithContext(ctx)
+		}
+		parseWG.Add(1)
+		go func(idx int, r *http.Request) {
+			defer parseWG.Done()
+			h.ServeHTTP(parseRecorders[idx], r)
+		}(i, req)
+	}
+
+	<-parseStarted
+	waitForWaiters(totalParseWaiters)
+	for _, cancel := range cancelFuncs {
+		go cancel()
+	}
+	close(releaseParse)
+	parseWG.Wait()
+
+	if got := upstreamCalls.Load(); got != 1 {
+		t.Fatalf("expected 1 coalesced upstream /api/parse call, got %d", got)
+	}
+	for i := 0; i < activeParseWaiters; i++ {
+		assertInternalError500(i, parseRecorders[i])
+	}
+
+	// 2. 5 concurrent same-key /api/resolve callers when adapter panics with a custom error/Stringer struct.
+	panicMode.Store(2)
+	const resolveWaiters = 5
+	resolvePath := "/api/resolve?schema_version=1.0&url=" + url.QueryEscape(rawURL1) + "&item_id=part-2"
+	resolveRecorders := make([]*httptest.ResponseRecorder, resolveWaiters)
+	var resolveWG sync.WaitGroup
+	for i := 0; i < resolveWaiters; i++ {
+		resolveRecorders[i] = httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, resolvePath, nil)
+		resolveWG.Add(1)
+		go func(idx int, r *http.Request) {
+			defer resolveWG.Done()
+			h.ServeHTTP(resolveRecorders[idx], r)
+		}(i, req)
+	}
+
+	<-resolveStarted
+	waitForWaiters(resolveWaiters)
+	close(releaseResolve)
+	resolveWG.Wait()
+
+	if got := upstreamCalls.Load(); got != 2 {
+		t.Fatalf("expected 2 total upstream calls after /api/resolve panic, got %d", got)
+	}
+	for i, w := range resolveRecorders {
+		assertInternalError500(i, w)
+	}
+
+	// Verify panic logs contain ONLY platform + Go panic type (%T), one line per panic.
+	logMu.Lock()
+	logsCopy := append([]string(nil), panicLogs...)
+	logMu.Unlock()
+	if len(logsCopy) != 2 {
+		t.Fatalf("expected exactly 2 panic log lines, got %d: %v", len(logsCopy), logsCopy)
+	}
+	wantLines := []string{
+		"dokitool: parse panic recovered: platform=bilibili panic_type=string",
+		"dokitool: parse panic recovered: platform=bilibili panic_type=api.canaryPanicPayload",
+	}
+	for i, line := range logsCopy {
+		trimmed := strings.TrimSuffix(line, "\n")
+		if strings.Contains(trimmed, "\n") || strings.Contains(trimmed, "\r") {
+			t.Fatalf("log %d is not single-line: %q", i, line)
+		}
+		if trimmed != wantLines[i] {
+			t.Fatalf("log %d = %q, want %q", i, trimmed, wantLines[i])
+		}
+		for _, forbidden := range []string{canary, "bilibili.com", "BV1panic999", "p=2", "part-2", "exploded", "boom"} {
+			if strings.Contains(line, forbidden) {
+				t.Fatalf("log %d leaked %q: %q", i, forbidden, line)
+			}
+		}
+	}
+
+	// Verify neither panic wrote to cache nor left a stale inflight entry.
+	if entries, usedBytes := h.cache.stats(); entries != 0 || usedBytes != 0 {
+		t.Fatalf("panicked calls polluted parseCache: entries=%d bytes=%d", entries, usedBytes)
+	}
+	h.cache.mu.Lock()
+	inflightAfterPanic := len(h.cache.inflight)
+	h.cache.mu.Unlock()
+	if inflightAfterPanic != 0 {
+		t.Fatalf("stale inflight entries remained after panic: %d", inflightAfterPanic)
+	}
+
+	// 3. Immediately next same-key /api/parse and /api/resolve requests re-invoke adapter and succeed (200 OK).
+	panicMode.Store(0)
+	parsePath := "/api/parse?schema_version=1.0&url=" + url.QueryEscape(rawURL1)
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, parsePath, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("post-panic /api/parse attempt %d status=%d body=%s", i, w.Code, w.Body.String())
+		}
+	}
+	if got := upstreamCalls.Load(); got != 3 {
+		t.Fatalf("expected 1 fresh /api/parse invocation followed by cache hit (total=3), got %d", got)
+	}
+
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, resolvePath, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("post-panic /api/resolve attempt %d status=%d body=%s", i, w.Code, w.Body.String())
+		}
+	}
+	if got := upstreamCalls.Load(); got != 4 {
+		t.Fatalf("expected 1 fresh /api/resolve invocation followed by cache hit (total=4), got %d", got)
+	}
+
+	// 4. Sole caller cancels (abandoning call) and adapter panics anyway after execCtx cancels:
+	// no process crash, no double-close, and single-line type-only log emitted.
+	panicMode.Store(3)
+	abandonedURL := "https://www.bilibili.com/video/BV1abandoned888?token=" + canary
+	abandonedCtx, cancelAbandoned := context.WithCancel(context.Background())
+	abandonedReq := httptest.NewRequest(http.MethodGet, "/api/parse?schema_version=1.0&url="+url.QueryEscape(abandonedURL), nil).WithContext(abandonedCtx)
+	var abandonedWG sync.WaitGroup
+	abandonedWG.Add(1)
+	go func() {
+		defer abandonedWG.Done()
+		h.ServeHTTP(httptest.NewRecorder(), abandonedReq)
+	}()
+	<-abandonedStarted
+	cancelAbandoned()
+	abandonedWG.Wait()
+	<-abandonedFinished
+
+	// Wait briefly for runSingleflight's deferred recover + unlock to complete.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		logMu.Lock()
+		n := len(panicLogs)
+		logMu.Unlock()
+		if n == 3 {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	logMu.Lock()
+	finalLogs := append([]string(nil), panicLogs...)
+	logMu.Unlock()
+	if len(finalLogs) != 3 || strings.TrimSuffix(finalLogs[2], "\n") != "dokitool: parse panic recovered: platform=bilibili panic_type=string" {
+		t.Fatalf("unexpected logs after abandoned panic: %v", finalLogs)
+	}
+	if strings.Contains(finalLogs[2], canary) || strings.Contains(finalLogs[2], "BV1abandoned888") {
+		t.Fatalf("abandoned panic log leaked sensitive input: %q", finalLogs[2])
+	}
+}
+
+func TestLoadCacheConfigAndDisabledSwitchBypassesCacheAndSingleflight(t *testing.T) {
+	if _, err := LoadCacheConfig(nil); err == nil {
+		t.Fatal("expected LoadCacheConfig(nil) to fail")
+	}
+
+	for _, val := range []string{"", "on"} {
+		cfg, err := LoadCacheConfig(func(k string) string {
+			if k == "DOKITOOL_PARSE_CACHE" {
+				return val
+			}
+			return ""
+		})
+		if err != nil {
+			t.Fatalf("LoadCacheConfig(%q) unexpected error: %v", val, err)
+		}
+		if cfg != DefaultCacheConfig() || cfg.Disabled {
+			t.Fatalf("LoadCacheConfig(%q) = %+v, want %+v", val, cfg, DefaultCacheConfig())
+		}
+	}
+
+	offCfg, err := LoadCacheConfig(func(k string) string {
+		if k == "DOKITOOL_PARSE_CACHE" {
+			return "off"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("LoadCacheConfig(\"off\") unexpected error: %v", err)
+	}
+	if !offCfg.Disabled || offCfg.MaxEntries != 0 || offCfg.MaxBytes != 0 {
+		t.Fatalf("LoadCacheConfig(\"off\") = %+v, want Disabled=true", offCfg)
+	}
+
+	for _, bad := range []string{"ON", "OFF", "On", "Off", " on", "off ", "on\n", "true", "false", "1", "0", "auto", "disabled"} {
+		cfg, err := LoadCacheConfig(func(k string) string {
+			if k == "DOKITOOL_PARSE_CACHE" {
+				return bad
+			}
+			return ""
+		})
+		if err == nil || !strings.Contains(err.Error(), "DOKITOOL_PARSE_CACHE must be on or off") {
+			t.Fatalf("LoadCacheConfig(%q) = (%+v, %v), want startup error", bad, cfg, err)
+		}
+	}
+
+	// Verify DOKITOOL_PARSE_CACHE=off wired into NewWithCacheConfig bypasses BOTH parseCache and singleflight.
+	const baseNow int64 = 1793448000
+	c := loadCacheTestCatalog(t)
+
+	var (
+		upstreamCalls atomic.Int32
+		concurrentIn  atomic.Int32
+		bothEntered   = make(chan struct{})
+		bothOnce      sync.Once
+		useBarrier    atomic.Bool
+	)
+	useBarrier.Store(true)
+
+	adapter := AdapterFunc(func(ctx context.Context, source string, now int64) (unified.Object, error) {
+		upstreamCalls.Add(1)
+		if useBarrier.Load() {
+			if concurrentIn.Add(1) >= 2 {
+				bothOnce.Do(func() { close(bothEntered) })
+			}
+			select {
+			case <-bothEntered:
+			case <-time.After(2 * time.Second):
+				return nil, errors.New("second concurrent caller was coalesced instead of bypassing singleflight")
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		exp := time.Unix(now+1800, 0).UTC().Format(time.RFC3339)
+		return makeSyntheticEnvelope("kuaishou", source, now, exp, "ks-1"), nil
+	})
+
+	h, err := NewWithCacheConfig(c, map[string]Adapter{"kuaishou": adapter}, func() time.Time {
+		return time.Unix(baseNow, 0)
+	}, nil, offCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parsePath := "/api/parse?schema_version=1.0&url=" + url.QueryEscape("https://www.kuaishou.com/short-video/3xdisabled1")
+	var wg sync.WaitGroup
+	recs := [2]*httptest.ResponseRecorder{httptest.NewRecorder(), httptest.NewRecorder()}
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			h.ServeHTTP(recs[idx], httptest.NewRequest(http.MethodGet, parsePath, nil))
+		}(i)
+	}
+	wg.Wait()
+	for i, w := range recs {
+		if w.Code != http.StatusOK {
+			t.Fatalf("concurrent disabled caller %d status=%d body=%s", i, w.Code, w.Body.String())
+		}
+	}
+	if got := upstreamCalls.Load(); got != 2 {
+		t.Fatalf("expected 2 uncoalesced upstream calls when DOKITOOL_PARSE_CACHE=off, got %d", got)
+	}
+
+	// Sequential /api/parse and /api/resolve must also bypass parseCache every time.
+	useBarrier.Store(false)
+	wParse := httptest.NewRecorder()
+	h.ServeHTTP(wParse, httptest.NewRequest(http.MethodGet, parsePath, nil))
+	if wParse.Code != http.StatusOK || upstreamCalls.Load() != 3 {
+		t.Fatalf("sequential /api/parse with cache off: status=%d calls=%d", wParse.Code, upstreamCalls.Load())
+	}
+
+	resolvePath := "/api/resolve?schema_version=1.0&url=" + url.QueryEscape("https://www.kuaishou.com/short-video/3xdisabled1") + "&item_id=ks-1"
+	for i := 0; i < 2; i++ {
+		wRes := httptest.NewRecorder()
+		h.ServeHTTP(wRes, httptest.NewRequest(http.MethodGet, resolvePath, nil))
+		if wRes.Code != http.StatusOK {
+			t.Fatalf("sequential /api/resolve %d status=%d body=%s", i, wRes.Code, wRes.Body.String())
+		}
+	}
+	if got := upstreamCalls.Load(); got != 5 {
+		t.Fatalf("expected 5 total upstream calls with DOKITOOL_PARSE_CACHE=off, got %d", got)
+	}
+	if entries, usedBytes := h.cache.stats(); entries != 0 || usedBytes != 0 {
+		t.Fatalf("disabled parseCache stored data: entries=%d bytes=%d", entries, usedBytes)
+	}
+}
+
 // TestBenchmarkLocalFakeUpstreamBeforeAfter runs an offline httptest load
 // comparison when DOKITOOL_RUN_CACHE_BENCH=1 is set (0 real network calls):
 //   - simulates fast pure-Go (0.5s), Shanghai channel (0.8s), slow yt-dlp (3.0s),

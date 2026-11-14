@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -45,6 +46,7 @@ type Handler struct {
 	weiboRelay    http.Handler
 	youtubeHelper YouTubeHelper
 	cache         *parseCache
+	panicLogf     func(string, ...any)
 }
 
 func New(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, media PublicMedia) (*Handler, error) {
@@ -72,7 +74,14 @@ func NewWithCacheConfig(c *catalog.Catalog, adapters map[string]Adapter, now fun
 	if now == nil {
 		now = time.Now
 	}
-	return &Handler{catalog: c, adapters: registered, now: now, publicMedia: media, cache: cache}, nil
+	return &Handler{
+		catalog:     c,
+		adapters:    registered,
+		now:         now,
+		publicMedia: media,
+		cache:       cache,
+		panicLogf:   log.Printf,
+	}, nil
 }
 
 // SetWeiboRelay registers a binary-only handler before server startup.
@@ -365,27 +374,50 @@ func (h *Handler) runSingleflight(
 	path, platform, source, itemID string,
 	debug bool,
 ) {
-	defer cancel()
-	res, payload, encOK := h.executeParse(ctx, path, platform, source, itemID, debug, h.now())
-	finishNow := h.now()
 	var (
+		res       cachedResponse
+		finishNow time.Time
 		ttl       time.Duration
 		cacheable bool
+		completed bool
 	)
+	defer func() {
+		if p := recover(); p != nil {
+			res, _ = encodeResponse(http.StatusInternalServerError, contractErrorForStatus(http.StatusInternalServerError, "解析服务内部错误"))
+			cacheable = false
+			logf := h.panicLogf
+			if logf == nil {
+				logf = log.Printf
+			}
+			logf("dokitool: parse panic recovered: platform=%s panic_type=%T", platform, p)
+		} else if !completed {
+			res, _ = encodeResponse(http.StatusInternalServerError, contractErrorForStatus(http.StatusInternalServerError, "解析服务内部错误"))
+			cacheable = false
+		}
+
+		h.cache.mu.Lock()
+		if h.cache.inflight[key] == call {
+			delete(h.cache.inflight, key)
+		}
+		if !call.abandoned && ctx.Err() == nil && cacheable {
+			h.cache.putLocked(key, res, finishNow.Add(ttl))
+		}
+		call.res = res
+		close(call.done)
+		h.cache.mu.Unlock()
+		cancel()
+	}()
+
+	var (
+		payload unified.Object
+		encOK   bool
+	)
+	res, payload, encOK = h.executeParse(ctx, path, platform, source, itemID, debug, h.now())
+	finishNow = h.now()
 	if encOK && payload != nil {
 		ttl, cacheable = computeCacheTTL(payload, finishNow)
 	}
-
-	h.cache.mu.Lock()
-	if h.cache.inflight[key] == call {
-		delete(h.cache.inflight, key)
-	}
-	if !call.abandoned && ctx.Err() == nil && cacheable {
-		h.cache.putLocked(key, res, finishNow.Add(ttl))
-	}
-	call.res = res
-	close(call.done)
-	h.cache.mu.Unlock()
+	completed = true
 }
 
 func (h *Handler) executeParse(

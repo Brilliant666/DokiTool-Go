@@ -48,6 +48,23 @@ func DefaultCacheConfig() CacheConfig {
 	}
 }
 
+// LoadCacheConfig reads DOKITOOL_PARSE_CACHE before server startup.
+// Unset or "on" returns DefaultCacheConfig(); "off" disables both parseCache
+// and singleflight coalescing; any other value fails startup.
+func LoadCacheConfig(getenv func(string) string) (CacheConfig, error) {
+	if getenv == nil {
+		return CacheConfig{}, fmt.Errorf("missing cache configuration reader")
+	}
+	switch getenv("DOKITOOL_PARSE_CACHE") {
+	case "", "on":
+		return DefaultCacheConfig(), nil
+	case "off":
+		return CacheConfig{Disabled: true}, nil
+	default:
+		return CacheConfig{}, fmt.Errorf("DOKITOOL_PARSE_CACHE must be on or off")
+	}
+}
+
 // Validate enforces lower and upper bounds on all cache capacity parameters.
 func (c CacheConfig) Validate() error {
 	if c.Disabled {

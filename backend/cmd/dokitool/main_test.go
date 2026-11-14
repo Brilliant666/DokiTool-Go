@@ -495,3 +495,31 @@ func TestXTombstoneFallbackFlagAndConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCacheStartupSwitch(t *testing.T) {
+	for _, invalid := range []string{"true", "false", "1", "0", "ON", "OFF", " on", "off ", "auto"} {
+		t.Setenv("DOKITOOL_PARSE_CACHE", invalid)
+		occupied, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		runErr := run([]string{"serve", "-listen", occupied.Addr().String(), "-client-identity", "direct"})
+		occupied.Close()
+		if runErr == nil || !strings.Contains(runErr.Error(), "DOKITOOL_PARSE_CACHE must be on or off") {
+			t.Fatalf("want DOKITOOL_PARSE_CACHE startup error before binding listener for %q, got %v", invalid, runErr)
+		}
+	}
+
+	for _, valid := range []string{"", "on", "off"} {
+		t.Setenv("DOKITOOL_PARSE_CACHE", valid)
+		occupied, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		runErr := run([]string{"serve", "-listen", occupied.Addr().String(), "-client-identity", "direct"})
+		occupied.Close()
+		if runErr == nil || strings.Contains(runErr.Error(), "DOKITOOL_PARSE_CACHE") {
+			t.Fatalf("valid DOKITOOL_PARSE_CACHE=%q should reach listener bind (expected address-in-use error), got %v", valid, runErr)
+		}
+	}
+}

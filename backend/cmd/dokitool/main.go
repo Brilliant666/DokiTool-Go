@@ -123,6 +123,10 @@ func run(args []string) error {
 	if err := x.ValidateTombstoneFallback(*xTombstoneFallback); err != nil {
 		return err
 	}
+	cacheCfg, err := api.LoadCacheConfig(os.Getenv)
+	if err != nil {
+		return err
+	}
 	executor := fetch.New()
 	japan := probe.New(executor, douyin.AllowedMediaURL)
 	shanghai, control, err := configureShanghai(executor, os.Getenv)
@@ -155,7 +159,7 @@ func run(args []string) error {
 	if err := configureYTDLPWithOptions(c, adapters, executor, *xTombstoneFallback, os.Getenv); err != nil {
 		return err
 	}
-	handler, err := api.New(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")))
+	handler, err := api.NewWithCacheConfig(c, adapters, time.Now, preparePublicMedia(os.Getenv("SNAP_MEDIA_SIGNING_KEY")), cacheCfg)
 	if err != nil {
 		return err
 	}
