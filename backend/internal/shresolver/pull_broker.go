@@ -21,6 +21,7 @@ const (
 	ClaimPath            = "/internal/shanghai/claim"
 	ResultPath           = "/internal/shanghai/result"
 	PullWait             = 15 * time.Second
+	PullStaleClaimGrace  = 5 * time.Second
 	DefaultPullQueueWait = 300 * time.Millisecond
 	pullCapacity         = MaxPullWorkers * 2
 	pullQueueCapacity    = MaxPullWorkers * 4
@@ -72,8 +73,10 @@ type pullQueueEntry struct {
 }
 
 // PullBroker matches requests immediately to waiting Shanghai workers, or holds
-// requests in a bounded FIFO queue for up to DefaultPullQueueWait before falling
-// back so brief worker saturation does not immediately lose domestic routes.
+// requests in a bounded FIFO queue for up to DefaultPullQueueWait when a worker
+// has claimed within PullWait+PullStaleClaimGrace so brief worker saturation or
+// long-poll reconnects do not lose domestic routes while an offline Shanghai node
+// still falls back immediately.
 type PullBroker struct {
 	responseValidator
 	token                   string
@@ -81,6 +84,7 @@ type PullBroker struct {
 	queueCap                int
 	claimSlots, resultSlots chan struct{}
 	mu                      sync.Mutex
+	lastClaimAt             time.Time
 	waiting                 []*pullWaiter
 	queue                   []*pullQueueEntry
 	pending                 map[string]*pullTask
@@ -99,6 +103,20 @@ func NewPullBroker(token string) (*PullBroker, error) {
 		resultSlots:       make(chan struct{}, pullCapacity),
 		pending:           make(map[string]*pullTask),
 	}, nil
+}
+
+func (b *PullBroker) currentTime() time.Time {
+	if b.now != nil {
+		return b.now()
+	}
+	return time.Now()
+}
+
+func (b *PullBroker) hasRecentClaimLocked() bool {
+	if b.lastClaimAt.IsZero() {
+		return false
+	}
+	return b.currentTime().Sub(b.lastClaimAt) <= PullWait+PullStaleClaimGrace
 }
 
 func (b *PullBroker) newPullTaskLocked(ctx context.Context, protocol int, videoID, awemeID string) *pullTask {
@@ -152,7 +170,7 @@ func (b *PullBroker) acquireTask(ctx context.Context, protocol int, videoID, awe
 	}
 
 	wait := b.queueWait
-	if wait <= 0 || b.queueCap <= 0 || len(b.queue) >= b.queueCap {
+	if wait <= 0 || b.queueCap <= 0 || len(b.queue) >= b.queueCap || !b.hasRecentClaimLocked() {
 		b.mu.Unlock()
 		return nil, errUnavailable
 	}
@@ -338,6 +356,7 @@ func (b *PullBroker) claim(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	b.lastClaimAt = b.currentTime()
 	for i := 0; i < len(b.queue); {
 		e := b.queue[i]
 		if e.done {
