@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -30,25 +31,37 @@ func run(args []string) error {
 	cert := flags.String("tls-cert", "", "PEM certificate chain for native HTTPS")
 	key := flags.String("tls-key", "", "PEM private key for native HTTPS")
 	origin := flags.String("pull-origin", "", "Japan HTTPS origin for outbound original lookup")
+	workers := flags.Int("workers", shresolver.DefaultPullWorkers, "concurrent pull worker loops (1-8)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
 	}
+	if *workers < shresolver.MinPullWorkers || *workers > shresolver.MaxPullWorkers {
+		return fmt.Errorf("workers must be between %d and %d", shresolver.MinPullWorkers, shresolver.MaxPullWorkers)
+	}
 	p := probe.New(fetch.New(), douyin.AllowedMediaURL).WithTimeout(shresolver.ProbeTimeout)
-	pull := false
+	var pull, serverOpt, workersOpt bool
 	flags.Visit(func(f *flag.Flag) {
-		if f.Name == "pull-origin" {
+		switch f.Name {
+		case "pull-origin":
 			pull = true
+		case "workers":
+			workersOpt = true
+		case "listen", "tls-cert", "tls-key":
+			serverOpt = true
 		}
 	})
 	if pull {
-		if flags.NFlag() != 1 {
+		if serverOpt {
 			return errors.New("pull mode does not accept listener or TLS server options")
 		}
 		w, err := shresolver.NewPullWorkerWithDetail(*origin, os.Getenv("DOKITOOL_SHANGHAI_PULL_TOKEN"), fetch.New(), fetch.New(), p)
 		if err != nil {
+			return err
+		}
+		if _, err = w.WithWorkers(*workers); err != nil {
 			return err
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -57,6 +70,9 @@ func run(args []string) error {
 			return nil
 		}
 		return err
+	}
+	if workersOpt {
+		return errors.New("workers option requires -pull-origin")
 	}
 	if (*cert == "") != (*key == "") {
 		return errors.New("tls-cert and tls-key must be set together")

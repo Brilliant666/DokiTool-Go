@@ -607,15 +607,16 @@ func TestPullWorkerThreeConcurrentJobsAndFourthImmediateFallback(t *testing.T) {
 		t.Fatalf("did not dispatch 3 concurrent jobs simultaneously (active=%d)", active.Load())
 	}
 
-	// 1. While all 3 workers are busy, the 4th parse must immediately fall back to Japan without waiting.
+	// 1. While all 3 workers remain stalled past the 300ms short wait queue, the 4th parse
+	//    waits up to DefaultPullQueueWait (~300ms) and then cleanly falls back to Japan.
 	fourthStart := time.Now()
 	fourthData, err := parser.Parse(t.Context(), "https://www.douyin.com/video/"+awemeIDs[3], now)
 	fourthElapsed := time.Since(fourthStart)
 	if err != nil {
 		t.Fatalf("4th concurrent parse failed: %v", err)
 	}
-	if fourthElapsed > 500*time.Millisecond {
-		t.Fatalf("4th parse blocked while all 3 workers were busy: elapsed=%v", fourthElapsed)
+	if fourthElapsed < DefaultPullQueueWait-30*time.Millisecond || fourthElapsed > 2*time.Second {
+		t.Fatalf("4th parse did not wait ~300ms before falling back: elapsed=%v", fourthElapsed)
 	}
 	fourthView := unified.PublicView(fourthData, false, now)
 	if err := unified.ValidateEnvelopeAt(fourthView, now); err != nil {
@@ -665,4 +666,143 @@ func TestPullWorkerThreeConcurrentJobsAndFourthImmediateFallback(t *testing.T) {
 
 	cancel()
 	<-workerDone
+}
+
+func TestPullWorkerWithWorkersBoundsAndConcurrency(t *testing.T) {
+	const origin = "https://japan.example.org"
+	token := randomBrokerToken(t)
+	noopExec := resolveExecutor(func(context.Context, fetch.Request) (fetch.Response, error) {
+		return fetch.Response{}, errors.New("unexpected call")
+	})
+	noopProbe := resolverFunc(func(context.Context, string) ([]unified.Object, error) {
+		return nil, errors.New("unexpected probe")
+	})
+
+	base, err := NewPullWorkerWithDetail(origin, token, noopExec, noopExec, noopProbe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []int{-2, -1, 0, 9, 100} {
+		if got, wErr := base.WithWorkers(invalid); wErr == nil || got != nil {
+			t.Fatalf("WithWorkers(%d) = (%v, %v), want error", invalid, got, wErr)
+		}
+	}
+	var nilWorker *PullWorker
+	if _, err := nilWorker.WithWorkers(3); err == nil {
+		t.Fatal("nil PullWorker accepted WithWorkers")
+	}
+	if err := (&PullWorker{}).Run(t.Context()); err == nil {
+		t.Fatal("zero-initialized PullWorker.Run succeeded without valid worker count")
+	}
+
+	// Verify boundary worker counts (1, 3, 8) register exact concurrent claims and dispatch N jobs in parallel.
+	for _, nWorkers := range []int{1, 3, 8} {
+		t.Run(fmt.Sprintf("workers_%d", nWorkers), func(t *testing.T) {
+			subToken := randomBrokerToken(t)
+			broker, err := NewPullBroker(subToken)
+			if err != nil {
+				t.Fatal(err)
+			}
+			broker.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+				return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+			}
+			srv := httptest.NewTLSServer(broker)
+			defer srv.Close()
+
+			var active atomic.Int32
+			allActive := make(chan struct{})
+			releaseAll := make(chan struct{})
+
+			detailFor := func(awemeID, host string) []byte {
+				objKey := "/video/tos/cn/tos-cn-v-0015c001-alinc2/oWorker" + awemeID[len(awemeID)-2:]
+				u1080 := "https://" + host + "/" + strings.Repeat("1", 32) + "/6a000001" + objKey + "/?a=6383&mime_type=video_mp4"
+				www := "https://www.douyin.com/aweme/v1/play/?video_id=" + wireVideo
+				return []byte(`{"status_code":0,"aweme_detail":{"aweme_id":"` + awemeID + `","video":{"duration":13667,"play_addr":{"uri":"` + wireVideo + `"},"bit_rate":[` +
+					`{"gear_name":"normal_1080_0","format":"mp4","bit_rate":2100000,"play_addr":{"uri":"` + wireVideo + `","file_hash":"h` + awemeID + `","width":1920,"height":1080,"data_size":3500000,"url_list":["` + u1080 + `","` + www + `"]}}` +
+					`]}}}`)
+			}
+
+			shDetail := resolveExecutor(func(ctx context.Context, req fetch.Request) (fetch.Response, error) {
+				_, id, _ := strings.Cut(req.URL, "aweme_id=")
+				if idx := strings.IndexByte(id, '&'); idx >= 0 {
+					id = id[:idx]
+				}
+				if int(active.Add(1)) == nWorkers {
+					close(allActive)
+				}
+				select {
+				case <-releaseAll:
+				case <-ctx.Done():
+					return fetch.Response{}, ctx.Err()
+				}
+				shHost := fmt.Sprintf("v%s-weba.douyinvod.com", id[len(id)-2:])
+				return fetch.Response{StatusCode: 200, Body: detailFor(id, shHost)}, nil
+			})
+			shProbe := resolverFunc(func(_ context.Context, _ string) ([]unified.Object, error) {
+				return []unified.Object{deliveryRow("v26-cold.douyinvod.com", "objectA", "a")}, nil
+			})
+			jpDetail := resolveExecutor(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+				_, id, _ := strings.Cut(req.URL, "aweme_id=")
+				if idx := strings.IndexByte(id, '&'); idx >= 0 {
+					id = id[:idx]
+				}
+				return fetch.Response{StatusCode: 200, Body: detailFor(id, "v3-dy-ov.zjcdn.com")}, nil
+			})
+
+			w, err := NewPullWorkerWithDetail(origin, subToken, controlTransportForTLS(srv, origin), shDetail, shProbe)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.WithWorkers(nWorkers); err != nil {
+				t.Fatal(err)
+			}
+			wCtx, wCancel := context.WithCancel(t.Context())
+			defer wCancel()
+			wDone := make(chan error, 1)
+			go func() { wDone <- w.Run(wCtx) }()
+			waitForPullCount(t, broker, nWorkers)
+
+			parser := douyin.NewWithOriginalResolver(jpDetail, nil, broker)
+			now := time.Now().Unix()
+
+			// Dispatch nWorkers+1 requests: first nWorkers occupy all workers; (nWorkers+1)th enters 300ms queue,
+			// and when workers release within 70ms, the queued request ALSO hits Shanghai domestic routes!
+			totalReqs := nWorkers + 1
+			errs := make(chan error, totalReqs)
+			for i := range totalReqs {
+				id := fmt.Sprintf("77040567372336%05d", 10010+i)
+				wantHost := fmt.Sprintf("v%s-weba.douyinvod.com", id[len(id)-2:])
+				go func() {
+					data, pErr := parser.Parse(t.Context(), "https://www.douyin.com/video/"+id, now)
+					if pErr != nil {
+						errs <- pErr
+						return
+					}
+					raw, _ := json.Marshal(unified.PublicView(data, false, now))
+					if !bytes.Contains(raw, []byte(wantHost)) {
+						errs <- fmt.Errorf("request %s missed Shanghai domestic host %s: %s", id, wantHost, raw)
+						return
+					}
+					errs <- nil
+				}()
+			}
+
+			select {
+			case <-allActive:
+			case <-time.After(2 * time.Second):
+				t.Fatalf("did not reach %d concurrent active workers (got %d)", nWorkers, active.Load())
+			}
+			waitForQueueCount(t, broker, 1)
+			time.Sleep(50 * time.Millisecond)
+			close(releaseAll)
+
+			for range totalReqs {
+				if rErr := <-errs; rErr != nil {
+					t.Fatal(rErr)
+				}
+			}
+			wCancel()
+			<-wDone
+		})
+	}
 }

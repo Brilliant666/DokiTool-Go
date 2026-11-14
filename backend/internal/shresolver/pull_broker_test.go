@@ -3,17 +3,23 @@ package shresolver
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
 )
 
 func waitForPullWaiter(t *testing.T, b *PullBroker) {
@@ -495,5 +501,274 @@ func TestPullClaimCanceledContextClosesConnection(t *testing.T) {
 	}
 	if !errors.Is(err, context.DeadlineExceeded) || dials.Load() != 2 {
 		t.Fatalf("conn #2 reuse after normal 15s timeout: err=%v dials=%d, want DeadlineExceeded and dials=2", err, dials.Load())
+	}
+}
+
+func randomBrokerToken(t *testing.T) string {
+	t.Helper()
+	var buf [24]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		t.Fatal(err)
+	}
+	return hex.EncodeToString(buf[:])
+}
+
+func pullV2ClaimRequest(b *PullBroker, ctx context.Context, token string) *httptest.ResponseRecorder {
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, ClaimPath, nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Set(ProtocolHeader, "2")
+	w := httptest.NewRecorder()
+	b.ServeHTTP(w, r)
+	return w
+}
+
+func waitForQueueCount(t *testing.T, b *PullBroker, n int) {
+	t.Helper()
+	stop := time.After(2 * time.Second)
+	for {
+		b.mu.Lock()
+		got := len(b.queue)
+		b.mu.Unlock()
+		if got == n {
+			return
+		}
+		select {
+		case <-stop:
+			t.Fatalf("did not observe %d queued requests (got %d)", n, got)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+func TestPullShortWaitQueueHandsOffWithin300msAndRejectsLateWorker(t *testing.T) {
+	token := randomBrokerToken(t)
+	b, err := NewPullBroker(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.now = func() time.Time { return time.Unix(wireNow, 0) }
+	b.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+	}
+
+	// 1. Queued v2 ResolveWork (no worker initially idle) is claimed when a worker arrives within 300ms,
+	//    preserving FIFO order across queued requests, while an unmatched request falls back after ~300ms.
+	awemeIDs := []string{"7704056737233449701", "7704056737233449702", "7704056737233449703"}
+	outcomes := make([]chan error, 3)
+	for i, id := range awemeIDs {
+		ch := make(chan error, 1)
+		outcomes[i] = ch
+		aweme := id
+		go func() {
+			work, rErr := b.ResolveWork(t.Context(), aweme)
+			if rErr == nil && (work == nil || work.VideoID != wireVideo) {
+				rErr = errors.New("missing validated work")
+			}
+			ch <- rErr
+		}()
+		waitForQueueCount(t, b, i+1)
+	}
+
+	time.Sleep(60 * time.Millisecond)
+	for idx := range 2 {
+		rec := pullV2ClaimRequest(b, t.Context(), token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("claim %d status=%d, want 200", idx, rec.Code)
+		}
+		var job PullJob
+		if err := json.Unmarshal(rec.Body.Bytes(), &job); err != nil {
+			t.Fatal(err)
+		}
+		if job.Protocol != ProtocolV2 || job.AwemeID != awemeIDs[idx] {
+			t.Fatalf("FIFO violation on claim %d: got aweme=%q want %q", idx, job.AwemeID, awemeIDs[idx])
+		}
+		workResp := WorkResponse{
+			Protocol:   ProtocolV2,
+			AwemeID:    job.AwemeID,
+			VideoID:    wireVideo,
+			Candidates: goodResponse().Candidates,
+		}
+		rawWork, _ := json.Marshal(workResp)
+		rawReceipt, _ := json.Marshal(PullResult{PullJob: job, Result: rawWork})
+		if ack := pullTestRequest(b, t.Context(), ResultPath, token, rawReceipt); ack.Code != http.StatusNoContent {
+			t.Fatalf("result %d status=%d, want 204", idx, ack.Code)
+		}
+		if rErr := <-outcomes[idx]; rErr != nil {
+			t.Fatalf("queued ResolveWork %d failed: %v", idx, rErr)
+		}
+	}
+
+	// Request #3 receives no worker within 300ms and must time out cleanly with errUnavailable.
+	select {
+	case err3 := <-outcomes[2]:
+		if !errors.Is(err3, errUnavailable) {
+			t.Fatalf("3rd queued request error = %v, want errUnavailable", err3)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("3rd queued request did not fall back after 300ms queue window")
+	}
+
+	b.mu.Lock()
+	qLen, pLen := len(b.queue), len(b.pending)
+	b.mu.Unlock()
+	if qLen != 0 || pLen != 0 {
+		t.Fatalf("stale state after queue timeout: queue=%d pending=%d", qLen, pLen)
+	}
+
+	// A late worker arriving AFTER 300ms must NOT claim the already-abandoned 3rd request;
+	// instead it must park in b.waiting until cancelled.
+	lateCtx, cancelLate := context.WithCancel(t.Context())
+	lateRec := make(chan *httptest.ResponseRecorder, 1)
+	go func() { lateRec <- pullV2ClaimRequest(b, lateCtx, token) }()
+	waitForPullCount(t, b, 1)
+	cancelLate()
+	if rec := <-lateRec; rec.Code != http.StatusNoContent {
+		t.Fatalf("late worker unexpectedly claimed abandoned task: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// 2. Legacy v1 worker arriving while ResolveWork is queued immediately wakes ResolveWork with ErrProtocolV1
+	//    and stays parked for the follow-up ResolveOriginal call.
+	v2ErrCh := make(chan error, 1)
+	startV1 := time.Now()
+	go func() {
+		_, rErr := b.ResolveWork(t.Context(), awemeIDs[0])
+		v2ErrCh <- rErr
+	}()
+	waitForQueueCount(t, b, 1)
+
+	v1ClaimCtx, cancelV1Claim := context.WithCancel(t.Context())
+	defer cancelV1Claim()
+	v1ClaimCh := make(chan *httptest.ResponseRecorder, 1)
+	go func() { v1ClaimCh <- pullTestRequest(b, v1ClaimCtx, ClaimPath, token, nil) }()
+
+	if rErr := <-v2ErrCh; !errors.Is(rErr, douyin.ErrProtocolV1) || time.Since(startV1) > 150*time.Millisecond {
+		t.Fatalf("v1 worker arrival did not immediately wake ResolveWork with ErrProtocolV1: err=%v elapsed=%v", rErr, time.Since(startV1))
+	}
+	origDone := make(chan error, 1)
+	go func() {
+		_, oErr := b.ResolveOriginal(t.Context(), wireVideo)
+		origDone <- oErr
+	}()
+	v1Rec := <-v1ClaimCh
+	if v1Rec.Code != http.StatusOK {
+		t.Fatalf("preserved v1 worker did not receive ResolveOriginal job: %d", v1Rec.Code)
+	}
+	var v1Job PullJob
+	if err := json.Unmarshal(v1Rec.Body.Bytes(), &v1Job); err != nil {
+		t.Fatal(err)
+	}
+	rawMedia, _ := json.Marshal(goodResponse())
+	rawV1Receipt, _ := json.Marshal(PullResult{PullJob: v1Job, Result: rawMedia})
+	if ack := pullTestRequest(b, t.Context(), ResultPath, token, rawV1Receipt); ack.Code != http.StatusNoContent {
+		t.Fatalf("v1 receipt status=%d", ack.Code)
+	}
+	if oErr := <-origDone; oErr != nil {
+		t.Fatalf("ResolveOriginal after ErrProtocolV1 wakeup failed: %v", oErr)
+	}
+}
+
+func TestPullShortWaitQueueCancellationFreesSlotAndSurvivesRace(t *testing.T) {
+	token := randomBrokerToken(t)
+	b, err := NewPullBroker(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.now = func() time.Time { return time.Unix(wireNow, 0) }
+	b.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+	}
+
+	// 1. Fill all pullQueueCapacity slots; verify (pullQueueCapacity+1)th fails fast without waiting.
+	cancels := make([]context.CancelFunc, pullQueueCapacity)
+	errs := make([]chan error, pullQueueCapacity)
+	for i := range pullQueueCapacity {
+		cCtx, cancel := context.WithCancel(t.Context())
+		cancels[i] = cancel
+		ch := make(chan error, 1)
+		errs[i] = ch
+		id := fmt.Sprintf("77040567372334%05d", 10000+i)
+		go func() {
+			_, rErr := b.ResolveWork(cCtx, id)
+			ch <- rErr
+		}()
+	}
+	waitForQueueCount(t, b, pullQueueCapacity)
+
+	overflowStart := time.Now()
+	_, overflowErr := b.ResolveWork(t.Context(), "7704056737233499999")
+	if !errors.Is(overflowErr, errUnavailable) || time.Since(overflowStart) > 50*time.Millisecond {
+		t.Fatalf("overflow request when queue full: err=%v elapsed=%v", overflowErr, time.Since(overflowStart))
+	}
+
+	// 2. Cancelling slot #0 must exit immediately with context.Canceled and free its slot right away.
+	cancelStart := time.Now()
+	cancels[0]()
+	if cErr := <-errs[0]; !errors.Is(cErr, context.Canceled) || time.Since(cancelStart) > 100*time.Millisecond {
+		t.Fatalf("cancelled queued request did not exit promptly: err=%v elapsed=%v", cErr, time.Since(cancelStart))
+	}
+	waitForQueueCount(t, b, pullQueueCapacity-1)
+
+	// Cancel all remaining queued requests and confirm a subsequent worker never sees a cancelled job.
+	for i := 1; i < pullQueueCapacity; i++ {
+		cancels[i]()
+	}
+	for i := 1; i < pullQueueCapacity; i++ {
+		if cErr := <-errs[i]; !errors.Is(cErr, context.Canceled) {
+			t.Fatalf("slot %d cancel err=%v", i, cErr)
+		}
+	}
+	waitForQueueCount(t, b, 0)
+
+	checkCtx, cancelCheck := context.WithCancel(t.Context())
+	checkCh := make(chan *httptest.ResponseRecorder, 1)
+	go func() { checkCh <- pullV2ClaimRequest(b, checkCtx, token) }()
+	waitForPullCount(t, b, 1)
+	cancelCheck()
+	if rec := <-checkCh; rec.Code != http.StatusNoContent {
+		t.Fatalf("worker received cancelled task: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// 3. Concurrent race stress: overlapping cancellations, short queue timeouts, and live worker handoffs.
+	b.queueWait = 40 * time.Millisecond
+	var wg sync.WaitGroup
+	for i := range 48 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			cCtx, cancel := context.WithTimeout(t.Context(), time.Duration(10+(idx%50))*time.Millisecond)
+			defer cancel()
+			if idx%3 == 0 {
+				go func() {
+					time.Sleep(time.Duration(idx%25) * time.Millisecond)
+					cancel()
+				}()
+			}
+			_, _ = b.ResolveWork(cCtx, fmt.Sprintf("77040567372335%05d", 10000+idx))
+		}(i)
+		if i%2 == 0 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				claimCtx, stopClaim := context.WithTimeout(t.Context(), 60*time.Millisecond)
+				defer stopClaim()
+				rec := pullV2ClaimRequest(b, claimCtx, token)
+				if rec.Code == http.StatusOK {
+					var job PullJob
+					if json.Unmarshal(rec.Body.Bytes(), &job) == nil {
+						workResp := WorkResponse{Protocol: ProtocolV2, AwemeID: job.AwemeID, VideoID: wireVideo, Candidates: goodResponse().Candidates}
+						rawWork, _ := json.Marshal(workResp)
+						rawReceipt, _ := json.Marshal(PullResult{PullJob: job, Result: rawWork})
+						_ = pullTestRequest(b, t.Context(), ResultPath, token, rawReceipt)
+					}
+				}
+			}()
+		}
+	}
+	wg.Wait()
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.queue) != 0 || len(b.pending) != 0 {
+		t.Fatalf("leaked broker entries after race stress: queue=%d pending=%d", len(b.queue), len(b.pending))
 	}
 }

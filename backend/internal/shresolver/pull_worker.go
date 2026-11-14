@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -19,15 +20,23 @@ import (
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/douyin"
 )
 
-const pullWorkers = 3
+const (
+	MinPullWorkers     = 1
+	DefaultPullWorkers = 3
+	MaxPullWorkers     = 8
+
+	pullWorkers = DefaultPullWorkers
+)
 
 var errPullAuth = errors.New("Shanghai pull credential rejected")
 
-// PullWorker runs pullWorkers concurrent lease loops. Only the pinned Japanese control
-// endpoints receive its bearer. Detail lookups and media probes use separate transports.
+// PullWorker runs concurrent lease loops (DefaultPullWorkers by default, bounded
+// to MinPullWorkers..MaxPullWorkers). Only the pinned Japanese control endpoints
+// receive its bearer. Detail lookups and media probes use separate transports.
 type PullWorker struct {
 	origin  string
 	token   string
+	workers int
 	control fetch.Executor
 	detail  fetch.Executor
 	probe   originalProbe
@@ -54,7 +63,24 @@ func newPullWorker(origin, token string, control, detail fetch.Executor, p origi
 	if ip, err := netip.ParseAddr(u.Hostname()); err == nil && !fetch.PublicIP(ip) {
 		return nil, errors.New("pull origin requires a public address")
 	}
-	return &PullWorker{origin: "https://" + u.Host, token: token, control: control, detail: detail, probe: p}, nil
+	return &PullWorker{
+		origin:  "https://" + u.Host,
+		token:   token,
+		workers: DefaultPullWorkers,
+		control: control,
+		detail:  detail,
+		probe:   p,
+	}, nil
+}
+
+// WithWorkers configures the number of concurrent pull lease loops within
+// [MinPullWorkers, MaxPullWorkers].
+func (w *PullWorker) WithWorkers(n int) (*PullWorker, error) {
+	if w == nil || n < MinPullWorkers || n > MaxPullWorkers {
+		return nil, fmt.Errorf("Shanghai pull workers must be between %d and %d", MinPullWorkers, MaxPullWorkers)
+	}
+	w.workers = n
+	return w, nil
 }
 
 func (w *PullWorker) post(ctx context.Context, path string, body []byte, timeout time.Duration) (fetch.Response, error) {
@@ -220,6 +246,9 @@ func (w *PullWorker) runLoop(ctx context.Context) error {
 }
 
 func (w *PullWorker) Run(ctx context.Context) error {
+	if w == nil || w.workers < MinPullWorkers || w.workers > MaxPullWorkers {
+		return fmt.Errorf("Shanghai pull workers must be between %d and %d", MinPullWorkers, MaxPullWorkers)
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -228,7 +257,7 @@ func (w *PullWorker) Run(ctx context.Context) error {
 		fatalOnce sync.Once
 		fatalErr  error
 	)
-	for range pullWorkers {
+	for range w.workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

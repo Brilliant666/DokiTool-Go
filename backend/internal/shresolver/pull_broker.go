@@ -18,10 +18,12 @@ import (
 )
 
 const (
-	ClaimPath    = "/internal/shanghai/claim"
-	ResultPath   = "/internal/shanghai/result"
-	PullWait     = 15 * time.Second
-	pullCapacity = 8
+	ClaimPath            = "/internal/shanghai/claim"
+	ResultPath           = "/internal/shanghai/result"
+	PullWait             = 15 * time.Second
+	DefaultPullQueueWait = 300 * time.Millisecond
+	pullCapacity         = MaxPullWorkers * 2
+	pullQueueCapacity    = MaxPullWorkers * 4
 )
 
 // PullJob is a single-use lease. DeadlineMS is absolute; another poll cannot
@@ -55,14 +57,32 @@ type pullTask struct {
 	received bool
 }
 
-// PullBroker matches requests only to already waiting workers. No queue of
-// users accumulates while Shanghai is offline, busy or reconnecting.
+type pullQueueOutcome struct {
+	task *pullTask
+	err  error
+}
+
+type pullQueueEntry struct {
+	ctx      context.Context
+	protocol int
+	videoID  string
+	awemeID  string
+	ready    chan pullQueueOutcome
+	done     bool
+}
+
+// PullBroker matches requests immediately to waiting Shanghai workers, or holds
+// requests in a bounded FIFO queue for up to DefaultPullQueueWait before falling
+// back so brief worker saturation does not immediately lose domestic routes.
 type PullBroker struct {
 	responseValidator
 	token                   string
+	queueWait               time.Duration
+	queueCap                int
 	claimSlots, resultSlots chan struct{}
 	mu                      sync.Mutex
 	waiting                 []*pullWaiter
+	queue                   []*pullQueueEntry
 	pending                 map[string]*pullTask
 }
 
@@ -70,68 +90,132 @@ func NewPullBroker(token string) (*PullBroker, error) {
 	if !ValidToken(token) {
 		return nil, errUnavailable
 	}
-	return &PullBroker{responseValidator: newResponseValidator(), token: token,
-		claimSlots: make(chan struct{}, pullCapacity), resultSlots: make(chan struct{}, pullCapacity),
-		pending: make(map[string]*pullTask)}, nil
+	return &PullBroker{
+		responseValidator: newResponseValidator(),
+		token:             token,
+		queueWait:         DefaultPullQueueWait,
+		queueCap:          pullQueueCapacity,
+		claimSlots:        make(chan struct{}, pullCapacity),
+		resultSlots:       make(chan struct{}, pullCapacity),
+		pending:           make(map[string]*pullTask),
+	}, nil
 }
 
-func (b *PullBroker) dispatch(ctx context.Context, videoID string) *pullTask {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if len(b.pending) >= pullCapacity {
-		return nil
+func (b *PullBroker) newPullTaskLocked(ctx context.Context, protocol int, videoID, awemeID string) *pullTask {
+	var ids [32]byte
+	rand.Read(ids[:])
+	deadline, _ := ctx.Deadline()
+	job := PullJob{
+		TaskID:     hex.EncodeToString(ids[:16]),
+		AttemptID:  hex.EncodeToString(ids[16:]),
+		DeadlineMS: deadline.UnixMilli(),
 	}
-	for len(b.waiting) > 0 {
-		w := b.waiting[0]
-		b.waiting = slices.Delete(b.waiting, 0, 1)
-		if w.ctx.Err() != nil {
-			continue
-		}
-		var ids [32]byte
-		rand.Read(ids[:])
-		deadline, _ := ctx.Deadline()
-		job := PullJob{TaskID: hex.EncodeToString(ids[:16]), AttemptID: hex.EncodeToString(ids[16:]), VideoID: videoID, DeadlineMS: deadline.UnixMilli()}
-		t := &pullTask{job: job, ctx: ctx, result: make(chan json.RawMessage, 1)}
-		b.pending[job.TaskID] = t
-		w.job <- job
-		return t
+	if protocol == ProtocolV2 {
+		job.Protocol = ProtocolV2
+		job.AwemeID = awemeID
+	} else {
+		job.VideoID = videoID
 	}
-	return nil
+	t := &pullTask{job: job, ctx: ctx, result: make(chan json.RawMessage, 1)}
+	b.pending[job.TaskID] = t
+	return t
 }
 
-func (b *PullBroker) dispatchWork(ctx context.Context, awemeID string) (*pullTask, error) {
+func (b *PullBroker) acquireTask(ctx context.Context, protocol int, videoID, awemeID string) (*pullTask, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.waiting = slices.DeleteFunc(b.waiting, func(w *pullWaiter) bool { return w.ctx.Err() != nil })
-	if len(b.pending) >= pullCapacity {
+	b.queue = slices.DeleteFunc(b.queue, func(e *pullQueueEntry) bool { return e.done })
+
+	if len(b.pending) < pullCapacity {
+		for i, w := range b.waiting {
+			if protocol == ProtocolV2 && w.protocol < ProtocolV2 {
+				continue
+			}
+			b.waiting = slices.Delete(b.waiting, i, i+1)
+			t := b.newPullTaskLocked(ctx, protocol, videoID, awemeID)
+			w.job <- t.job
+			b.mu.Unlock()
+			return t, nil
+		}
+		if protocol == ProtocolV2 && len(b.waiting) > 0 {
+			// Only legacy v1 workers are waiting; preserve their claim so
+			// ResolveOriginal can dispatch a v1 video_id lease after detail completes.
+			b.mu.Unlock()
+			return nil, douyin.ErrProtocolV1
+		}
+	} else if len(b.waiting) > 0 {
+		b.mu.Unlock()
 		return nil, errUnavailable
 	}
-	for i, w := range b.waiting {
-		if w.protocol < ProtocolV2 {
-			continue
-		}
-		b.waiting = slices.Delete(b.waiting, i, i+1)
-		var ids [32]byte
-		rand.Read(ids[:])
-		deadline, _ := ctx.Deadline()
-		job := PullJob{
-			Protocol:   ProtocolV2,
-			TaskID:     hex.EncodeToString(ids[:16]),
-			AttemptID:  hex.EncodeToString(ids[16:]),
-			AwemeID:    awemeID,
-			DeadlineMS: deadline.UnixMilli(),
-		}
-		t := &pullTask{job: job, ctx: ctx, result: make(chan json.RawMessage, 1)}
-		b.pending[job.TaskID] = t
-		w.job <- job
-		return t, nil
+
+	wait := b.queueWait
+	if wait <= 0 || b.queueCap <= 0 || len(b.queue) >= b.queueCap {
+		b.mu.Unlock()
+		return nil, errUnavailable
 	}
-	if len(b.waiting) > 0 {
-		// Only legacy v1 workers are waiting; preserve their claim so
-		// ResolveOriginal can dispatch a v1 video_id lease after detail completes.
-		return nil, douyin.ErrProtocolV1
+	entry := &pullQueueEntry{
+		ctx:      ctx,
+		protocol: protocol,
+		videoID:  videoID,
+		awemeID:  awemeID,
+		ready:    make(chan pullQueueOutcome, 1),
 	}
-	return nil, errUnavailable
+	b.queue = append(b.queue, entry)
+	b.mu.Unlock()
+
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+
+	select {
+	case out := <-entry.ready:
+		if err := ctx.Err(); err != nil {
+			if out.task != nil {
+				b.mu.Lock()
+				delete(b.pending, out.task.job.TaskID)
+				b.mu.Unlock()
+			}
+			return nil, err
+		}
+		return out.task, out.err
+	case <-ctx.Done():
+		b.mu.Lock()
+		if !entry.done {
+			entry.done = true
+			b.queue = slices.DeleteFunc(b.queue, func(v *pullQueueEntry) bool { return v == entry })
+			b.mu.Unlock()
+			return nil, ctx.Err()
+		}
+		b.mu.Unlock()
+		out := <-entry.ready
+		if out.task != nil {
+			b.mu.Lock()
+			delete(b.pending, out.task.job.TaskID)
+			b.mu.Unlock()
+		}
+		return nil, ctx.Err()
+	case <-timer.C:
+		b.mu.Lock()
+		if !entry.done {
+			entry.done = true
+			b.queue = slices.DeleteFunc(b.queue, func(v *pullQueueEntry) bool { return v == entry })
+			b.mu.Unlock()
+			return nil, errUnavailable
+		}
+		b.mu.Unlock()
+		out := <-entry.ready
+		if err := ctx.Err(); err != nil {
+			if out.task != nil {
+				b.mu.Lock()
+				delete(b.pending, out.task.job.TaskID)
+				b.mu.Unlock()
+			}
+			return nil, err
+		}
+		return out.task, out.err
+	}
 }
 
 func (b *PullBroker) ResolveOriginal(parent context.Context, videoID string) ([]unified.Object, error) {
@@ -143,9 +227,9 @@ func (b *PullBroker) ResolveOriginal(parent context.Context, videoID string) ([]
 	}
 	ctx, cancel := context.WithTimeout(parent, clientTimeout)
 	defer cancel()
-	task := b.dispatch(ctx, videoID)
-	if task == nil {
-		return nil, errUnavailable
+	task, err := b.acquireTask(ctx, 0, videoID, "")
+	if err != nil {
+		return nil, err
 	}
 	defer func() {
 		b.mu.Lock()
@@ -172,7 +256,7 @@ func (b *PullBroker) ResolveWork(parent context.Context, awemeID string) (*douyi
 	}
 	ctx, cancel := context.WithTimeout(parent, WorkTimeout)
 	defer cancel()
-	task, err := b.dispatchWork(ctx, awemeID)
+	task, err := b.acquireTask(ctx, ProtocolV2, "", awemeID)
 	if err != nil {
 		return nil, err
 	}
@@ -246,10 +330,59 @@ func (b *PullBroker) claim(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get(ProtocolHeader) == "2" {
 		proto = ProtocolV2
 	}
-	waiter := &pullWaiter{ctx: ctx, protocol: proto, job: make(chan PullJob, 1)}
+
 	b.mu.Lock()
+	if ctx.Err() != nil {
+		b.mu.Unlock()
+		w.Header().Set("Connection", "close")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	for i := 0; i < len(b.queue); {
+		e := b.queue[i]
+		if e.done {
+			b.queue = slices.Delete(b.queue, i, i+1)
+			continue
+		}
+		if err := e.ctx.Err(); err != nil {
+			e.done = true
+			b.queue = slices.Delete(b.queue, i, i+1)
+			e.ready <- pullQueueOutcome{err: err}
+			continue
+		}
+		i++
+	}
+	if len(b.pending) < pullCapacity {
+		for i, e := range b.queue {
+			if e.protocol == ProtocolV2 && proto < ProtocolV2 {
+				continue
+			}
+			e.done = true
+			b.queue = slices.Delete(b.queue, i, i+1)
+			t := b.newPullTaskLocked(e.ctx, e.protocol, e.videoID, e.awemeID)
+			e.ready <- pullQueueOutcome{task: t}
+			b.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(t.job); err != nil {
+				b.finish(t.job, nil)
+			}
+			return
+		}
+	}
+	waiter := &pullWaiter{ctx: ctx, protocol: proto, job: make(chan PullJob, 1)}
 	b.waiting = append(b.waiting, waiter)
+	if proto < ProtocolV2 && len(b.pending) < pullCapacity {
+		for i, e := range b.queue {
+			if e.protocol == ProtocolV2 {
+				e.done = true
+				b.queue = slices.Delete(b.queue, i, i+1)
+				e.ready <- pullQueueOutcome{err: douyin.ErrProtocolV1}
+				break
+			}
+		}
+	}
 	b.mu.Unlock()
+
 	select {
 	case job := <-waiter.job:
 		w.Header().Set("Content-Type", "application/json")
@@ -336,6 +469,7 @@ func (b *PullBroker) finish(job PullJob, payload json.RawMessage) bool {
 		return false
 	}
 	task.received = true
+	delete(b.pending, job.TaskID)
 	task.result <- payload
 	return true
 }
