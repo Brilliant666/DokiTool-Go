@@ -33,8 +33,10 @@
 !/backend/tests/
 /docs/*
 !/docs/API.md
+!/docs/CONFIGURATION.md
 !/docs/DEPLOYMENT.md
 !/docs/DOWNLOADS.md
+!/docs/HISTORY.md
 !/docs/UNIFIED-MEDIA-ACCEPTANCE.md
 !/docs/UPSTREAM-MAINTENANCE.md
 !/docs/UPSTREAM-WATCH.md

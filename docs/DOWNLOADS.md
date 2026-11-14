@@ -9,7 +9,32 @@ Weibo's signed `/api/media/weibo` route remains a server relay when required.
 
 ## Production download capabilities
 
-下表区分生产按钮验收、浏览器直接打开附件的实测，以及需要手动保存的入口。结论仅限所测作品、版本和网络；截至 [#33 发布回执](https://github.com/Brilliant666/DokiTool-Go/pull/33#issuecomment-6649301507)，日本 Go/Vue 为 `d82ff77`，生产下载 Worker 为 `downloads-20261104.1`；该轮因下述实况 ZIP 缺口尚未接收为新稳定基线。
+### 当前前端下载交互与保护规则
+
+以下规则反映当前线上前端（`frontend/src/composables/useMediaDownload.ts`、`ResultSection.vue`、`DownloadCard.vue`、`App.vue`、`downloads/routeProbe.ts`、`utils/videoFilename.ts`）的实际行为：
+
+1. **切换画质保留多线路并发测速**：
+   - 用户在结果区点击画质卡片切换清晰度时，前端仅更新所选 `variant_id`，**不锁死单个 `source_id`**（仅在 `<video>` 播放器当前地址报错自动故障转移，或下载中途切换可用线路回写时才绑定 `source_id`）。
+   - 点击下载时，只要所选清晰度包含多条来源且存在支持跨域读取（`browser_fetch: "allowed"`）的线路，下载器会先对最多 **3 条**候选线路并发发起 `0–512 KiB`（最长 `3s`）的 Range 测速（面板提示「`正在优选下载线路...`」），自动择优走最快 CDN（如抖音上海 `*.douyinvod.com` 国内线路与海外源同组竞速）。
+   - 画质卡片直接展示后端确认的画质名称（如 `原画` / `Original`、`1080p` 等）与文件体积，不再展示「N 条线路」角标。
+2. **单张图片直接保存原图，多图/多集打包命名与 `500 MiB` 上限**：
+   - **单张图片不打 ZIP**：作品仅含 **1 张图片**（`type: "image"`）时，点击「保存全部图片」直接下载单张原图文件，不再额外包裹成 `.zip`（实况照片 `live_photo` 因包含静图与动态视频成对资源，单组下载仍按实况配对包或单资源按钮处理）。
+   - **ZIP 命名与安全截断**：多图或多集批量打包统一命名为 **`<标题或作者>_<N>P.zip`**（标题与作者均缺失时回退 `<哈希>_<N>P.zip`）；基础文件名按 **Unicode 码点**截断（上限 64 个码点），避免切断 UTF-16 代理对产生乱码。
+   - **`500 MiB` 打包体积上限（`MAX_ARCHIVE_BYTES`）**：打包前先按已知 `size_bytes` 预检总和，流式拉取成员期间再实时累加实际字节数；任一环节累计超过 **`500 MiB`** 立即中止并提示分批保存，防止单标签页内存溢出。
+   - **多 P / 打包遇 `429` 自动退避重试**：批量或按需调用 `/api/resolve` 收到 `429 RATE_LIMITED` 且 `0 < retry_after_seconds <= 15` 时，任务卡片展示 `请求受限，等待 N 秒后重试...` 倒计时并自动重试（最多重试 2 次）。
+3. **调试开关（默认隐藏诊断信息）**：
+   - 普通访问默认隐藏底层 CDN 域名与流分段耗时。
+   - 当页面 URL 携带 **`?debug=1`**，或在控制台设置 **`localStorage.setItem('dokitool:debug', '1')`** 时，下载卡片额外显示当前任务连接的 CDN 主机名（`[data-download-host]`）以及可展开一键复制的「分段计时」面板。
+4. **应用内置浏览器顶部提示**：
+   - 页面初始化时检测微信、QQ、微博、抖音、小红书、哔哩哔哩、支付宝、Instagram、Facebook 等应用内嵌 WebView UA；命中时在顶部展示非阻断横幅：**`检测到应用内置浏览器，保存文件可能受限，请在系统浏览器中打开。`**（英文界面显示对应提示）。
+5. **本地生成文件 `ObjectURL` 45 秒延迟回收**：
+   - Blob 兼容下载（`blob.ts`）、fMP4 HLS / 字节分片拼接（`segmentDownload.ts`）以及 ZIP 打包（`useMediaDownload.ts`）在触发浏览器保存后，统一延迟 **`45 秒`（`45_000 ms`）** 再执行 `URL.revokeObjectURL`，防止系统保存对话框未确认前对象地址失效。
+
+---
+
+### 早期九平台生产交付基线记录
+
+下表保留早期九平台生产按钮验收、浏览器直接打开附件实测及手动保存入口记录。截至历史 [#33 发布回执](https://github.com/Brilliant666/DokiTool-Go/pull/33#issuecomment-6649301507)（后续抖音上海 `v2` 升级见 [douyin-shanghai.md](go-migration/douyin-shanghai.md)，15 平台完整矩阵见根 [README.md](../README.md)）：
 
 | 平台 | 已确认的能力和边界 |
 | --- | --- |
@@ -103,8 +128,8 @@ the unified parser or of any real platform's current availability.
 3. `blob.ts`: a compatibility path only when streaming capability is definitely
    unavailable before START. There is no fixed file-size cutoff; unknown or encoded
    lengths can download without fabricated percentages. Known decoded lengths are
-   still checked. One Blob transfer runs per page, and object URLs retain the
-   existing four-second release delay. Chunks are released after success/failure;
+   still checked. One Blob transfer runs per page, and object URLs use a
+   45-second (`45_000 ms`) release delay. Chunks are released after success/failure;
    allocation or delivery errors do not retry the whole file on other routes.
    A missing browser capability permits fallback; registration, bridge-loading or
    protocol failures do not. CORS errors, source failures and ambiguous START
@@ -811,13 +836,15 @@ HTTP 升级不是可用性证明：实际浏览器仍须通过 TLS、CORS、完�
 的视频、封面、ZIP 完整保存/解码、CRC/配对及同源成员一致性。未取得
 该证据前保持“修复候选”，不重新运行大文件下载或 CDN 排名。
 
-### YouTube 第一阶段：用户脚本 `GM_download` 下载模式与内存边界
+### YouTube：用户脚本（`1.3.1`）分块并发拉取与浏览器内无损合并
 
-YouTube 第一阶段不走服务器媒体中转或页面 Service Worker 流式下载：
-- `360p (含音频, itag=18)` 通过浏览器原生标签页打开包含 `&title=<标题>_360p` 的直连地址交由浏览器直接保存；
-- 仅视频轨（如 `1080p`、`4K` MP4）与 `M4A` 音轨（`itag=140`）由同源页面通过 `CustomEvent` 委托 `dokitool-youtube.user.js` 调用 Tampermonkey `GM_download` 从 `*.googlevideo.com` 直接下载。
+YouTube 下载全程不经过本站服务器中转媒体字节，由桌面浏览器安装并启用同源公开用户脚本 `frontend/public/helper/dokitool-youtube.user.js`（当前版本 `1.3.1`）配合完成：
 
-Tampermonkey 下载模式与内存边界（同一条 `tO01J-M3g0U` `1440p60` `itag=700` 仅视频轨，`267,476,589` 字节 ≈ 255.09 MiB，有界面 Chrome 147 + Tampermonkey 5.5.1 实测对比）：
+- **自带音频直链（如 `360p`，`itag=18`）**：支持直接交给浏览器原生附件保存，或经脚本拉取保存。
+- **高画质分离音视频（如 `1080p`、`1440p`、`4K` 仅视频轨 + 最优配对音轨）**：点击主下载按钮时，页面通过 `mux_download` 委托用户脚本以 `anonymous: true`（不带 Cookie）分块并发从 `*.googlevideo.com` 拉取视频轨与配对音轨，并在浏览器内使用内嵌的 **Mediabunny**（`1.65.2`）执行无损容器封装，直接输出完整有声 `.mp4` 或 `.webm` 文件：
+  - 支持 OPFS（Origin Private File System）流式写入时优先走 `StreamTarget` 分块写盘，避免整片常驻 JS 堆内存；
+  - OPFS 不可用时回退内存 `BufferTarget`，并强制设置 **`1 GiB` 内存上限保护**（超出立即中止清理）。
+- **单轨独立保存与历史第一阶段 `GM_download` 模式对比**：用户也可单独保存仅视频轨或 `.m4a` 音轨。以下保留第一阶段纯 `GM_download` 单轨模式的内存实测基线供参考（同一条 `tO01J-M3g0U` `1440p60` `itag=700` 仅视频轨，`267,476,589` 字节 ≈ 255.09 MiB，Chrome 147 + Tampermonkey 5.5.1）：
 - **Tampermonkey「默认」（`default`）下载模式**：`GM_download` 会在扩展后台通过 XHR 将完整响应读入内存（`responseType: "blob"`）后再触发保存。实测耗时 `83.84s`，保存期间 Chrome 进程总 RSS 从基线 `1106.39 MiB` 升至峰值 `1808.09 MiB`（峰值增量 `+701.70 MiB`，页面 JS Heap 峰值 `13.17 MiB`）；超大体积（如数 GiB 的 4K 60fps 长视频）在该模式下受扩展单进程 Blob 内存上限约束。
 - **Tampermonkey「浏览器 API」（`chrome`）下载模式**：对 `.mp4` 仅视频轨直接调用 `chrome.downloads.download` 流式落盘，无需在扩展内存中缓冲整段视频。实测耗时 `83.92s`，保存期间 Chrome 进程总 RSS 从基线 `1280.42 MiB` 到峰值 `1312.44 MiB`（峰值增量仅 `+32.02 MiB`，下载完成后 `1234.42 MiB`，页面 JS Heap 峰值 `7.67 MiB`）。
 - **`.m4a` 扩展名保留与 `mode: "native"`**：Chromium 的 `chrome.downloads.download` 会根据上游 `Content-Type: audio/mp4` 将 `.m4a` 文件名改写为 `.mp4`。因此用户脚本对 `.m4a` 音轨显式传入 `mode: "native"`，由扩展走 Blob 锚点保存以保留 `<标题>_audio.m4a` 后缀；音轨体积通常较小（数 MiB 至数十 MiB），在内存边界之内。
