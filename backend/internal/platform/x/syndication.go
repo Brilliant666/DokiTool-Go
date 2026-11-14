@@ -41,7 +41,11 @@ const (
 var (
 	photoKeyPattern        = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 	trailingTCoRegex       = regexp.MustCompile(`(?:\s+https?://t\.co/[A-Za-z0-9]+)+\s*$`)
+	syndicationInlineURLRe = regexp.MustCompile(`\s+https?://[^ ]+`)
 	videoDimSegmentPattern = regexp.MustCompile(`^([1-9][0-9]{1,4})x([1-9][0-9]{1,4})$`)
+	syndicationMediaIDRe   = regexp.MustCompile(`_video/([1-9][0-9]{0,19})/`)
+	syndicationThumbIDRe   = regexp.MustCompile(`_video_thumb/([1-9][0-9]{0,19})/`)
+	tweetVideoKeyPattern   = regexp.MustCompile(`^/tweet_video/([A-Za-z0-9_-]{1,64})\.mp4$`)
 	safeCodecPattern       = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
 	safeMediaIDPattern     = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
@@ -65,13 +69,92 @@ type syndicationPhoto struct {
 }
 
 type syndicationTweet struct {
-	Text            string
-	Author          unified.Object
-	HasVideo        bool
-	Tombstone       bool
-	Photos          []syndicationPhoto
-	ByAttachmentPos map[int]syndicationPhoto
-	AttachmentCount int
+	Text             string
+	RawText          string
+	Author           unified.Object
+	VideoUploader    string
+	VideoUploaderID  string
+	VideoUploaderURL string
+	Timestamp        *float64
+	LikeCount        *int64
+	CommentCount     *int64
+	Tags             []string
+	HasVideo         bool
+	Tombstone        bool
+	Photos           []syndicationPhoto
+	Videos           []ytengine.Info
+	IncompleteVideo  bool
+	HasCard          bool
+	HasQuotedMedia   bool
+	ByAttachmentPos  map[int]syndicationPhoto
+	AttachmentCount  int
+}
+
+func (st *syndicationTweet) canUseSyndicationVideos() bool {
+	return st != nil && !st.Tombstone && !st.IncompleteVideo && !st.HasQuotedMedia && len(st.Videos) > 0
+}
+
+func (st *syndicationTweet) toYTInfo(tweetID string) *ytengine.Info {
+	baseTitle := buildSyndicationVideoTitle(st.RawText, st.VideoUploader, tweetID)
+	desc := buildSyndicationVideoDescription(st.RawText)
+	entries := make([]ytengine.Info, len(st.Videos))
+	copy(entries, st.Videos)
+
+	usedIDs := make(map[string]bool, len(entries))
+	for i := range entries {
+		if entries[i].DisplayID == "" {
+			entries[i].DisplayID = tweetID
+		}
+		if entries[i].ID == "" || usedIDs[entries[i].ID] {
+			if len(entries) == 1 && !usedIDs[tweetID] {
+				entries[i].ID = tweetID
+			} else {
+				entries[i].ID = fmt.Sprintf("%s-%d", tweetID, i+1)
+			}
+		}
+		usedIDs[entries[i].ID] = true
+		if len(entries) > 1 {
+			entries[i].Title = fmt.Sprintf("%s #%d", baseTitle, i+1)
+		} else {
+			entries[i].Title = baseTitle
+		}
+	}
+
+	var tagsCopy []string
+	if len(st.Tags) > 0 {
+		tagsCopy = make([]string, len(st.Tags))
+		copy(tagsCopy, st.Tags)
+	}
+
+	if len(entries) == 1 {
+		single := entries[0]
+		single.Title = baseTitle
+		single.Description = desc
+		single.Uploader = st.VideoUploader
+		single.UploaderID = st.VideoUploaderID
+		single.UploaderURL = st.VideoUploaderURL
+		single.Timestamp = st.Timestamp
+		single.LikeCount = st.LikeCount
+		single.CommentCount = st.CommentCount
+		single.Tags = tagsCopy
+		return &single
+	}
+
+	return &ytengine.Info{
+		ID:           tweetID,
+		DisplayID:    tweetID,
+		Type:         "playlist",
+		Title:        baseTitle,
+		Description:  desc,
+		Uploader:     st.VideoUploader,
+		UploaderID:   st.VideoUploaderID,
+		UploaderURL:  st.VideoUploaderURL,
+		Timestamp:    st.Timestamp,
+		LikeCount:    st.LikeCount,
+		CommentCount: st.CommentCount,
+		Tags:         tagsCopy,
+		Entries:      entries,
+	}
 }
 
 func (st *syndicationTweet) photoAt(oneBased int) (syndicationPhoto, bool) {
@@ -92,12 +175,47 @@ func (st *syndicationTweet) photoAt(oneBased int) (syndicationPhoto, bool) {
 	return syndicationPhoto{}, false
 }
 
-// Only read photo list, video marker, and tweet text per Issue #62 boundary.
 type syndicationTweetPayload struct {
-	Typename     string                  `json:"__typename"`
-	Text         string                  `json:"text"`
+	Typename          string                         `json:"__typename"`
+	IDStr             string                         `json:"id_str"`
+	Text              string                         `json:"text"`
+	CreatedAt         string                         `json:"created_at"`
+	FavoriteCount     *int64                         `json:"favorite_count"`
+	ConversationCount *int64                         `json:"conversation_count"`
+	User              *syndicationUserPayload        `json:"user"`
+	Entities          *syndicationEntitiesPayload    `json:"entities"`
+	Video             json.RawMessage                `json:"video"`
+	Card              *syndicationCardPayload        `json:"card"`
+	QuotedTweet       *syndicationQuotedTweetPayload `json:"quoted_tweet"`
+	Photos            []syndicationPhotoEntry        `json:"photos"`
+	MediaDetails      []syndicationMediaEntry        `json:"mediaDetails"`
+}
+
+type syndicationUserPayload struct {
+	Name       string `json:"name"`
+	ScreenName string `json:"screen_name"`
+}
+
+type syndicationEntitiesPayload struct {
+	Hashtags []syndicationHashtagPayload `json:"hashtags"`
+}
+
+type syndicationHashtagPayload struct {
+	Text string `json:"text"`
+}
+
+type syndicationCardPayload struct {
+	Name          string                               `json:"name"`
+	BindingValues map[string]syndicationBindingPayload `json:"binding_values"`
+}
+
+type syndicationBindingPayload struct {
+	StringValue string `json:"string_value"`
+}
+
+type syndicationQuotedTweetPayload struct {
 	Video        json.RawMessage         `json:"video"`
-	Photos       []syndicationPhotoEntry `json:"photos"`
+	Card         json.RawMessage         `json:"card"`
 	MediaDetails []syndicationMediaEntry `json:"mediaDetails"`
 }
 
@@ -108,14 +226,63 @@ type syndicationPhotoEntry struct {
 }
 
 type syndicationMediaEntry struct {
-	Type          string                 `json:"type"`
-	MediaURLHTTPS string                 `json:"media_url_https"`
-	OriginalInfo  syndicationMediaBounds `json:"original_info"`
+	IDStr         string                     `json:"id_str"`
+	Type          string                     `json:"type"`
+	MediaURLHTTPS string                     `json:"media_url_https"`
+	OriginalInfo  syndicationMediaBounds     `json:"original_info"`
+	Sizes         map[string]json.RawMessage `json:"sizes"`
+	VideoInfo     *syndicationVideoInfo      `json:"video_info"`
+}
+
+type syndicationVideoInfo struct {
+	DurationMillis *int64                    `json:"duration_millis"`
+	Variants       []syndicationVideoVariant `json:"variants"`
+}
+
+type syndicationVideoVariant struct {
+	Bitrate     *int64 `json:"bitrate"`
+	ContentType string `json:"content_type"`
+	URL         string `json:"url"`
 }
 
 type syndicationMediaBounds struct {
 	Width  int64 `json:"width"`
 	Height int64 `json:"height"`
+}
+
+type syndicationUnifiedCardPayload struct {
+	MediaEntities orderedSyndicationMediaEntities `json:"media_entities"`
+}
+
+type orderedSyndicationMediaEntities struct {
+	Entries []syndicationMediaEntry
+}
+
+func (o *orderedSyndicationMediaEntities) UnmarshalJSON(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if tok == nil {
+		return nil
+	}
+	delim, ok := tok.(json.Delim)
+	if !ok || delim != '{' {
+		return errors.New("expected JSON object for media_entities")
+	}
+	for dec.More() {
+		if _, err := dec.Token(); err != nil {
+			return err
+		}
+		var entry syndicationMediaEntry
+		if err := dec.Decode(&entry); err != nil {
+			return err
+		}
+		o.Entries = append(o.Entries, entry)
+	}
+	_, err = dec.Token()
+	return err
 }
 
 // SyndicationToken computes the public syndication query token from a numeric tweet ID.
@@ -345,12 +512,50 @@ func fetchSyndicationTweet(ctx context.Context, fetcher fetch.Executor, tweetID 
 
 	out := &syndicationTweet{
 		Text:            strings.TrimSpace(payload.Text),
+		RawText:         sanitizeSyndicationRawText(payload.Text),
+		Timestamp:       parseSyndicationTimestamp(payload.CreatedAt),
 		ByAttachmentPos: make(map[int]syndicationPhoto),
 		AttachmentCount: len(payload.MediaDetails),
 	}
+	out.VideoUploader, out.VideoUploaderID, out.VideoUploaderURL = sanitizeSyndicationUser(payload.User)
+	if payload.FavoriteCount != nil && *payload.FavoriteCount >= 0 && *payload.FavoriteCount <= maxSafeInteger {
+		likes := *payload.FavoriteCount
+		out.LikeCount = &likes
+	}
+	if payload.ConversationCount != nil && *payload.ConversationCount >= 0 && *payload.ConversationCount <= maxSafeInteger {
+		comments := *payload.ConversationCount
+		out.CommentCount = &comments
+	}
+	if payload.Entities != nil && len(payload.Entities.Hashtags) > 0 {
+		for _, ht := range payload.Entities.Hashtags {
+			if len(out.Tags) >= 64 {
+				break
+			}
+			if cleanedTag := cleanThirdPartyText(ht.Text, 100, false); cleanedTag != "" {
+				out.Tags = append(out.Tags, cleanedTag)
+			}
+		}
+	}
+
 	rawVideo := bytes.TrimSpace(payload.Video)
 	if len(rawVideo) > 0 && !bytes.Equal(rawVideo, []byte("null")) {
 		out.HasVideo = true
+	}
+
+	if payload.QuotedTweet != nil {
+		qtVideo := bytes.TrimSpace(payload.QuotedTweet.Video)
+		qtCard := bytes.TrimSpace(payload.QuotedTweet.Card)
+		if (len(qtVideo) > 0 && !bytes.Equal(qtVideo, []byte("null"))) ||
+			(len(qtCard) > 0 && !bytes.Equal(qtCard, []byte("null"))) {
+			out.HasQuotedMedia = true
+		}
+		for _, qm := range payload.QuotedTweet.MediaDetails {
+			qKind := strings.ToLower(strings.TrimSpace(qm.Type))
+			if qKind != "" && qKind != "photo" {
+				out.HasQuotedMedia = true
+				break
+			}
+		}
 	}
 
 	seenKeys := make(map[string]int)
@@ -389,6 +594,14 @@ func fetchSyndicationTweet(ctx context.Context, fetcher fetch.Executor, tweetID 
 		switch kind {
 		case "video", "animated_gif":
 			out.HasVideo = true
+			if len(out.Videos) >= maxTweetVideos {
+				continue
+			}
+			if entry, ok := buildSyndicationVideoEntry(md, tweetID); ok {
+				out.Videos = append(out.Videos, entry)
+			} else {
+				out.IncompleteVideo = true
+			}
 		case "photo":
 			if p, ok := addPhoto(md.MediaURLHTTPS, md.OriginalInfo.Width, md.OriginalInfo.Height); ok {
 				out.ByAttachmentPos[idx+1] = p
@@ -396,7 +609,344 @@ func fetchSyndicationTweet(ctx context.Context, fetcher fetch.Executor, tweetID 
 		}
 	}
 
+	if payload.Card != nil {
+		cardName := strings.ToLower(strings.TrimSpace(payload.Card.Name))
+		if colon := strings.LastIndexByte(cardName, ':'); colon >= 0 {
+			cardName = cardName[colon+1:]
+		}
+		if cardName == "unified_card" {
+			rawUC := payload.Card.BindingValues["unified_card"].StringValue
+			if rawUC == "" || len(rawUC) > syndicationMaxBytes {
+				out.HasCard = true
+				out.IncompleteVideo = true
+			} else {
+				var uc syndicationUnifiedCardPayload
+				if err := json.Unmarshal([]byte(rawUC), &uc); err != nil {
+					out.HasCard = true
+					out.IncompleteVideo = true
+				} else {
+					sawCardVideo := false
+					for _, md := range uc.MediaEntities.Entries {
+						kind := strings.ToLower(strings.TrimSpace(md.Type))
+						if kind != "video" && kind != "animated_gif" {
+							continue
+						}
+						sawCardVideo = true
+						out.HasVideo = true
+						if len(out.Videos) >= maxTweetVideos {
+							continue
+						}
+						if entry, ok := buildSyndicationVideoEntry(md, tweetID); ok {
+							out.Videos = append(out.Videos, entry)
+						} else {
+							out.IncompleteVideo = true
+						}
+					}
+					if !sawCardVideo {
+						out.HasCard = true
+					}
+				}
+			}
+		} else if cardName != "" {
+			out.HasCard = true
+			out.IncompleteVideo = true
+		}
+	}
+
 	return out, nil
+}
+
+func buildSyndicationVideoEntry(md syndicationMediaEntry, tweetID string) (ytengine.Info, bool) {
+	kind := strings.ToLower(strings.TrimSpace(md.Type))
+	if kind != "video" && kind != "animated_gif" {
+		return ytengine.Info{}, false
+	}
+	if md.VideoInfo == nil || len(md.VideoInfo.Variants) == 0 {
+		return ytengine.Info{}, false
+	}
+
+	isGIF := kind == "animated_gif"
+
+	type mp4Candidate struct {
+		url     string
+		urlPath string
+		bitrate int64
+		hasRate bool
+		gifKey  string
+	}
+
+	var (
+		mp4Candidates  []mp4Candidate
+		seenURLs       = make(map[string]bool)
+		mediaIDFromURL string
+	)
+
+	for _, vr := range md.VideoInfo.Variants {
+		cleanURL, ext, ok := sanitizeFxTwitterVideoURL(vr.URL)
+		if !ok {
+			continue
+		}
+		if mediaIDFromURL == "" {
+			if m := syndicationMediaIDRe.FindStringSubmatch(cleanURL); len(m) == 2 {
+				mediaIDFromURL = m[1]
+			}
+		}
+		if ext != ".mp4" {
+			continue
+		}
+		ct := strings.ToLower(strings.TrimSpace(vr.ContentType))
+		if ct != "" && ct != "video/mp4" {
+			continue
+		}
+		if seenURLs[cleanURL] {
+			continue
+		}
+		var bitrate int64
+		var hasRate bool
+		if vr.Bitrate != nil {
+			if *vr.Bitrate < 0 || *vr.Bitrate > 500_000_000 {
+				continue
+			}
+			bitrate = *vr.Bitrate
+			hasRate = true
+		}
+		parsedURL, err := url.Parse(cleanURL)
+		if err != nil {
+			continue
+		}
+		var gifKey string
+		if strings.Contains(parsedURL.Path, "/tweet_video/") {
+			isGIF = true
+			if m := tweetVideoKeyPattern.FindStringSubmatch(parsedURL.Path); len(m) == 2 {
+				gifKey = m[1]
+			}
+		}
+		seenURLs[cleanURL] = true
+		mp4Candidates = append(mp4Candidates, mp4Candidate{
+			url:     cleanURL,
+			urlPath: parsedURL.Path,
+			bitrate: bitrate,
+			hasRate: hasRate,
+			gifKey:  gifKey,
+		})
+	}
+
+	if len(mp4Candidates) == 0 {
+		return ytengine.Info{}, false
+	}
+
+	var durPtr *float64
+	if !isGIF {
+		if md.VideoInfo.DurationMillis == nil || *md.VideoInfo.DurationMillis <= 0 || *md.VideoInfo.DurationMillis > 86_400_000 {
+			return ytengine.Info{}, false
+		}
+		dur := float64(*md.VideoInfo.DurationMillis) / 1000.0
+		durPtr = &dur
+	} else if md.VideoInfo.DurationMillis != nil {
+		if *md.VideoInfo.DurationMillis < 0 || *md.VideoInfo.DurationMillis > 86_400_000 {
+			return ytengine.Info{}, false
+		}
+		if *md.VideoInfo.DurationMillis > 0 {
+			dur := float64(*md.VideoInfo.DurationMillis) / 1000.0
+			durPtr = &dur
+		}
+	}
+
+	usedFormatIDs := make(map[string]bool, len(mp4Candidates))
+	nextFormatID := func(kbps int64, seq int) string {
+		base := "http"
+		if kbps > 0 {
+			base = fmt.Sprintf("http-%d", kbps)
+		}
+		if !usedFormatIDs[base] {
+			usedFormatIDs[base] = true
+			return base
+		}
+		var id string
+		if kbps > 0 {
+			id = fmt.Sprintf("http-%d-%d", kbps, seq)
+		} else {
+			id = fmt.Sprintf("http-%d", seq)
+		}
+		usedFormatIDs[id] = true
+		return id
+	}
+
+	formats := make([]ytengine.Format, 0, len(mp4Candidates))
+	var firstGIFKey string
+	for i, c := range mp4Candidates {
+		if firstGIFKey == "" && c.gifKey != "" {
+			firstGIFKey = c.gifKey
+		}
+		w, h := extractDimensionsFromVideoPath(c.urlPath)
+		if (w == 0 || h == 0) && len(mp4Candidates) == 1 &&
+			md.OriginalInfo.Width > 0 && md.OriginalInfo.Width <= 65535 &&
+			md.OriginalInfo.Height > 0 && md.OriginalInfo.Height <= 65535 {
+			w, h = md.OriginalInfo.Width, md.OriginalInfo.Height
+		}
+		if w <= 0 || h <= 0 {
+			return ytengine.Info{}, false
+		}
+
+		var tbrPtr *float64
+		var kbps int64
+		if c.hasRate && c.bitrate > 0 {
+			tbr := float64(c.bitrate) / 1000.0
+			tbrPtr = &tbr
+			kbps = c.bitrate / 1000
+		}
+
+		wVal, hVal := w, h
+		acodec := ""
+		if isGIF {
+			acodec = "none"
+		}
+		formats = append(formats, ytengine.Format{
+			FormatID: nextFormatID(kbps, i+1),
+			URL:      c.url,
+			Ext:      "mp4",
+			Protocol: "https",
+			Width:    &wVal,
+			Height:   &hVal,
+			TBR:      tbrPtr,
+			ACodec:   acodec,
+		})
+	}
+
+	coverURL := sanitizeSyndicationCoverURL(md.MediaURLHTTPS, len(md.Sizes) > 0)
+
+	entryID := strings.TrimSpace(md.IDStr)
+	if !safeMediaIDPattern.MatchString(entryID) {
+		entryID = ""
+	}
+	if entryID == "" && mediaIDFromURL != "" {
+		entryID = mediaIDFromURL
+	}
+	if entryID == "" && coverURL != "" {
+		if m := syndicationThumbIDRe.FindStringSubmatch(coverURL); len(m) == 2 {
+			entryID = m[1]
+		}
+	}
+	if entryID == "" && firstGIFKey != "" {
+		entryID = firstGIFKey
+	}
+
+	return ytengine.Info{
+		ID:        entryID,
+		DisplayID: tweetID,
+		Type:      "video",
+		Duration:  durPtr,
+		Thumbnail: coverURL,
+		Formats:   formats,
+	}, true
+}
+
+func sanitizeSyndicationCoverURL(raw string, hasSizes bool) string {
+	clean := sanitizeFxTwitterCoverURL(raw)
+	if clean == "" {
+		return ""
+	}
+	u, err := url.Parse(clean)
+	if err != nil {
+		return ""
+	}
+	if u.Query().Get("name") == "" && (hasSizes || strings.Contains(u.Path, "_video_thumb/") || strings.Contains(u.Path, "/media/")) {
+		if u.RawQuery == "" {
+			clean += "?name=orig"
+		} else {
+			clean += "&name=orig"
+		}
+		clean = sanitizeXMediaURL(clean)
+		if clean == "" || unified.Source(clean) == nil {
+			return ""
+		}
+	}
+	return clean
+}
+
+func sanitizeSyndicationUser(u *syndicationUserPayload) (string, string, string) {
+	if u == nil {
+		return "", "", ""
+	}
+	name := cleanThirdPartyText(u.Name, 80, false)
+	sn := strings.TrimSpace(u.ScreenName)
+	var profileURL string
+	if screenNamePattern.MatchString(sn) && !reservedHandles[strings.ToLower(sn)] {
+		profileURL = "https://twitter.com/" + sn
+	} else {
+		sn = ""
+	}
+	return name, sn, profileURL
+}
+
+func sanitizeSyndicationRawText(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	valid := strings.ToValidUTF8(raw, "")
+	valid = strings.ReplaceAll(valid, "\r\n", "\n")
+	valid = strings.ReplaceAll(valid, "\r", "\n")
+	var b strings.Builder
+	b.Grow(len(valid))
+	for _, r := range valid {
+		if r == '\n' {
+			b.WriteByte('\n')
+			continue
+		}
+		if r == '\t' {
+			b.WriteByte(' ')
+			continue
+		}
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	cleaned := b.String()
+	runes := []rune(cleaned)
+	if len(runes) > 4000 {
+		cleaned = string(runes[:4000])
+	}
+	return cleaned
+}
+
+func buildSyndicationVideoDescription(rawText string) string {
+	return strings.TrimSpace(strings.ReplaceAll(rawText, "\n", " "))
+}
+
+func buildSyndicationVideoTitle(rawText, uploader, tweetID string) string {
+	flat := strings.TrimSpace(strings.ReplaceAll(rawText, "\n", " "))
+	stripped := strings.TrimSpace(syndicationInlineURLRe.ReplaceAllString(flat, ""))
+	runes := []rune(stripped)
+	if len(runes) > 72 {
+		stripped = string(runes[:69]) + "..."
+	}
+	if uploader != "" {
+		if stripped != "" {
+			return uploader + " - " + stripped
+		}
+		return uploader
+	}
+	return tweetTextTitle(rawText, tweetID)
+}
+
+func parseSyndicationTimestamp(raw string) *float64 {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		time.RubyDate,
+		"Mon Jan 02 15:04:05 -0700 2006",
+	} {
+		if t, err := time.Parse(layout, trimmed); err == nil && t.Unix() > 0 {
+			ts := float64(t.Unix())
+			return &ts
+		}
+	}
+	return nil
 }
 
 func syndicationContractError(err error) unified.Object {
