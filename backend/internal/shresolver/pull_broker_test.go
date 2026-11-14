@@ -540,6 +540,19 @@ func waitForQueueCount(t *testing.T, b *PullBroker, n int) {
 	}
 }
 
+func primeRecentPullClaim(t *testing.T, b *PullBroker, token string) {
+	t.Helper()
+	claimCtx, cancel := context.WithCancel(t.Context())
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() { done <- pullV2ClaimRequest(b, claimCtx, token) }()
+	waitForPullCount(t, b, 1)
+	cancel()
+	if rec := <-done; rec.Code != http.StatusNoContent {
+		t.Fatalf("initial claim status = %d, want 204", rec.Code)
+	}
+	waitForPullCount(t, b, 0)
+}
+
 func TestPullShortWaitQueueHandsOffWithin300msAndRejectsLateWorker(t *testing.T) {
 	token := randomBrokerToken(t)
 	b, err := NewPullBroker(token)
@@ -550,6 +563,7 @@ func TestPullShortWaitQueueHandsOffWithin300msAndRejectsLateWorker(t *testing.T)
 	b.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
 	}
+	primeRecentPullClaim(t, b, token)
 
 	// 1. Queued v2 ResolveWork (no worker initially idle) is claimed when a worker arrives within 300ms,
 	//    preserving FIFO order across queued requests, while an unmatched request falls back after ~300ms.
@@ -677,6 +691,7 @@ func TestPullShortWaitQueueCancellationFreesSlotAndSurvivesRace(t *testing.T) {
 	b.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
 	}
+	primeRecentPullClaim(t, b, token)
 
 	// 1. Fill all pullQueueCapacity slots; verify (pullQueueCapacity+1)th fails fast without waiting.
 	cancels := make([]context.CancelFunc, pullQueueCapacity)
@@ -771,4 +786,225 @@ func TestPullShortWaitQueueCancellationFreesSlotAndSurvivesRace(t *testing.T) {
 	if len(b.queue) != 0 || len(b.pending) != 0 {
 		t.Fatalf("leaked broker entries after race stress: queue=%d pending=%d", len(b.queue), len(b.pending))
 	}
+}
+
+func TestPullShortWaitQueueSkipsWhenShanghaiNeverClaimedOrStale(t *testing.T) {
+	candidatesAt := func(ts time.Time) []Candidate {
+		cands := goodResponse().Candidates
+		out := make([]Candidate, len(cands))
+		copy(out, cands)
+		for i := range out {
+			out[i].ObtainedAt = ts.Unix()
+		}
+		return out
+	}
+
+	newClockBroker := func(t *testing.T, base time.Time) (*PullBroker, string, *atomic.Int64) {
+		t.Helper()
+		token := randomBrokerToken(t)
+		b, err := NewPullBroker(token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var nowNano atomic.Int64
+		nowNano.Store(base.UnixNano())
+		b.now = func() time.Time { return time.Unix(0, nowNano.Load()) }
+		b.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+		}
+		return b, token, &nowNano
+	}
+
+	assertImmediateUnavailable := func(t *testing.T, b *PullBroker, label string, call func() error) {
+		t.Helper()
+		start := time.Now()
+		err := call()
+		elapsed := time.Since(start)
+		if !errors.Is(err, errUnavailable) {
+			t.Fatalf("%s error = %v, want errUnavailable", label, err)
+		}
+		if elapsed >= 30*time.Millisecond {
+			t.Fatalf("%s waited %v (want immediate fallback <30ms, queueWait=%v)", label, elapsed, b.queueWait)
+		}
+		b.mu.Lock()
+		qLen, pLen := len(b.queue), len(b.pending)
+		b.mu.Unlock()
+		if qLen != 0 || pLen != 0 {
+			t.Fatalf("%s left broker state queue=%d pending=%d", label, qLen, pLen)
+		}
+	}
+
+	fulfillQueuedV2 := func(t *testing.T, b *PullBroker, token, awemeID string, now time.Time) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			work, rErr := b.ResolveWork(t.Context(), awemeID)
+			if rErr == nil && (work == nil || work.VideoID != wireVideo || len(work.Candidates) != 1) {
+				rErr = errors.New("missing validated v2 ShanghaiWork")
+			}
+			done <- rErr
+		}()
+		waitForQueueCount(t, b, 1)
+		rec := pullV2ClaimRequest(b, t.Context(), token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("v2 claim status = %d, want 200", rec.Code)
+		}
+		var job PullJob
+		if err := json.Unmarshal(rec.Body.Bytes(), &job); err != nil {
+			t.Fatal(err)
+		}
+		if job.Protocol != ProtocolV2 || job.AwemeID != awemeID {
+			t.Fatalf("unexpected v2 job: %+v", job)
+		}
+		rawWork, _ := json.Marshal(WorkResponse{
+			Protocol:   ProtocolV2,
+			AwemeID:    awemeID,
+			VideoID:    wireVideo,
+			Candidates: candidatesAt(now),
+		})
+		rawReceipt, _ := json.Marshal(PullResult{PullJob: job, Result: rawWork})
+		if ack := pullTestRequest(b, t.Context(), ResultPath, token, rawReceipt); ack.Code != http.StatusNoContent {
+			t.Fatalf("v2 receipt status = %d, want 204", ack.Code)
+		}
+		if err := <-done; err != nil {
+			t.Fatalf("queued ResolveWork failed: %v", err)
+		}
+	}
+
+	fulfillQueuedV1 := func(t *testing.T, b *PullBroker, token string, now time.Time) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			rows, rErr := b.ResolveOriginal(t.Context(), wireVideo)
+			if rErr == nil && len(rows) != 1 {
+				rErr = errors.New("missing validated v1 candidate")
+			}
+			done <- rErr
+		}()
+		waitForQueueCount(t, b, 1)
+		rec := pullTestRequest(b, t.Context(), ClaimPath, token, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("v1 claim status = %d, want 200", rec.Code)
+		}
+		var job PullJob
+		if err := json.Unmarshal(rec.Body.Bytes(), &job); err != nil {
+			t.Fatal(err)
+		}
+		if job.Protocol != 0 || job.VideoID != wireVideo {
+			t.Fatalf("unexpected v1 job: %+v", job)
+		}
+		rawMedia, _ := json.Marshal(Response{
+			VideoID:    wireVideo,
+			Candidates: candidatesAt(now),
+		})
+		rawReceipt, _ := json.Marshal(PullResult{PullJob: job, Result: rawMedia})
+		if ack := pullTestRequest(b, t.Context(), ResultPath, token, rawReceipt); ack.Code != http.StatusNoContent {
+			t.Fatalf("v1 receipt status = %d, want 204", ack.Code)
+		}
+		if err := <-done; err != nil {
+			t.Fatalf("queued ResolveOriginal failed: %v", err)
+		}
+	}
+
+	// Case 1: Never had a worker (zero prior claims, plus rejected/canceled claim attempts).
+	t.Run("never_claimed_skips_queue_immediately", func(t *testing.T) {
+		base := time.Unix(wireNow, 0)
+		b, token, _ := newClockBroker(t, base)
+		wrongToken := randomBrokerToken(t)
+
+		if r := pullTestRequest(b, t.Context(), ClaimPath, "", nil); r.Code != http.StatusUnauthorized {
+			t.Fatalf("missing auth status = %d, want 401", r.Code)
+		}
+		if r := pullTestRequest(b, t.Context(), ClaimPath, wrongToken, nil); r.Code != http.StatusUnauthorized {
+			t.Fatalf("wrong auth status = %d, want 401", r.Code)
+		}
+		if r := pullTestRequest(b, t.Context(), ClaimPath, token, []byte("{}")); r.Code != http.StatusBadRequest {
+			t.Fatalf("body claim status = %d, want 400", r.Code)
+		}
+		canceledCtx, cancel := context.WithCancel(t.Context())
+		cancel()
+		if r := pullV2ClaimRequest(b, canceledCtx, token); r.Code != http.StatusNoContent {
+			t.Fatalf("canceled claim status = %d, want 204", r.Code)
+		}
+
+		b.mu.Lock()
+		neverClaimed := b.lastClaimAt.IsZero()
+		b.mu.Unlock()
+		if !neverClaimed {
+			t.Fatal("rejected or canceled claim unexpectedly set lastClaimAt")
+		}
+
+		assertImmediateUnavailable(t, b, "fresh ResolveWork", func() error {
+			_, err := b.ResolveWork(t.Context(), "7704056737233449701")
+			return err
+		})
+		assertImmediateUnavailable(t, b, "fresh ResolveOriginal", func() error {
+			_, err := b.ResolveOriginal(t.Context(), wireVideo)
+			return err
+		})
+	})
+
+	// Case 2: Worker left recently (now - lastClaimAt <= PullWait + PullStaleClaimGrace, including exact boundary).
+	t.Run("recent_claim_within_and_at_threshold_queues_and_succeeds", func(t *testing.T) {
+		base := time.Unix(wireNow, 0)
+		b, token, nowNano := newClockBroker(t, base)
+		primeRecentPullClaim(t, b, token)
+
+		// Within threshold (PullWait + 2s = 17s <= 20s): queues and hands off to reconnecting worker.
+		t1 := base.Add(PullWait + 2*time.Second)
+		nowNano.Store(t1.UnixNano())
+		fulfillQueuedV2(t, b, token, "7704056737233449702", t1)
+
+		// Exact threshold boundary (now - lastClaimAt == PullWait + PullStaleClaimGrace == 20s) for v2 ResolveWork.
+		t2 := t1.Add(PullWait + PullStaleClaimGrace)
+		nowNano.Store(t2.UnixNano())
+		fulfillQueuedV2(t, b, token, "7704056737233449703", t2)
+
+		// Exact threshold boundary (now - lastClaimAt == PullWait + PullStaleClaimGrace == 20s) for v1 ResolveOriginal.
+		t3 := t2.Add(PullWait + PullStaleClaimGrace)
+		nowNano.Store(t3.UnixNano())
+		fulfillQueuedV1(t, b, token, t3)
+	})
+
+	// Case 3: Worker left past threshold (now - lastClaimAt > PullWait + PullStaleClaimGrace) skips queue immediately,
+	// and resumes queueing as soon as a valid worker claim arrives again.
+	t.Run("stale_claim_past_threshold_skips_queue_until_worker_reclaims", func(t *testing.T) {
+		base := time.Unix(wireNow, 0)
+		b, token, nowNano := newClockBroker(t, base)
+		wrongToken := randomBrokerToken(t)
+		primeRecentPullClaim(t, b, token)
+
+		// 1ms past threshold (20s + 1ms > PullWait + 5s): both v2 and v1 skip 300ms queue immediately.
+		staleAt := base.Add(PullWait + PullStaleClaimGrace + time.Millisecond)
+		nowNano.Store(staleAt.UnixNano())
+		assertImmediateUnavailable(t, b, "stale +1ms ResolveWork", func() error {
+			_, err := b.ResolveWork(t.Context(), "7704056737233449704")
+			return err
+		})
+		assertImmediateUnavailable(t, b, "stale +1ms ResolveOriginal", func() error {
+			_, err := b.ResolveOriginal(t.Context(), wireVideo)
+			return err
+		})
+
+		// Long offline window + unauthorized probe still keeps lastClaimAt stale.
+		longOfflineAt := base.Add(10 * time.Minute)
+		nowNano.Store(longOfflineAt.UnixNano())
+		if r := pullTestRequest(b, t.Context(), ClaimPath, wrongToken, nil); r.Code != http.StatusUnauthorized {
+			t.Fatalf("wrong auth during offline window status = %d, want 401", r.Code)
+		}
+		assertImmediateUnavailable(t, b, "long-offline ResolveWork", func() error {
+			_, err := b.ResolveWork(t.Context(), "7704056737233449705")
+			return err
+		})
+
+		// Worker comes back online and claims; subsequent busy-gap requests queue and succeed again.
+		primeRecentPullClaim(t, b, token)
+		busyGapAt := longOfflineAt.Add(500 * time.Millisecond)
+		nowNano.Store(busyGapAt.UnixNano())
+		fulfillQueuedV2(t, b, token, "7704056737233449706", busyGapAt)
+
+		busyGapV1At := busyGapAt.Add(500 * time.Millisecond)
+		nowNano.Store(busyGapV1At.UnixNano())
+		fulfillQueuedV1(t, b, token, busyGapV1At)
+	})
 }
