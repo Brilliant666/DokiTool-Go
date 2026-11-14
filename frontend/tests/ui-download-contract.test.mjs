@@ -2913,11 +2913,24 @@ test('file download speed-probes browser_fetch=allowed sources before starting t
   const prevManager = globalThis.__uiDownloadManager;
   globalThis.fetch = async (url, init = {}) => {
     rangeProbes.push({ url, range: init.headers?.Range });
-    const delayMs = url === fastUrl ? 1 : url === backupUrl ? 10 : 25;
-    await new Promise(resolve => setTimeout(resolve, delayMs));
+    const ttfbMs = url === slowUrl ? 1 : url === backupUrl ? 8 : 20;
+    const bodyDelayMs = url === fastUrl ? 2 : url === backupUrl ? 16 : 40;
+    await new Promise(resolve => setTimeout(resolve, ttfbMs));
     const buf = new Uint8Array(64 * 1024);
     buf[3] = 0x18;
-    return new Response(buf, {
+    let delivered = false;
+    const body = new ReadableStream({
+      async pull(controller) {
+        if (delivered) {
+          controller.close();
+          return;
+        }
+        delivered = true;
+        await new Promise(resolve => setTimeout(resolve, bodyDelayMs));
+        controller.enqueue(buf);
+      },
+    });
+    return new Response(body, {
       status: 206,
       headers: {
         'content-type': 'video/mp4',
@@ -2956,6 +2969,7 @@ test('file download speed-probes browser_fetch=allowed sources before starting t
     await settled(h.store.downloads[0]);
 
     assert.equal(rangeProbes.length, 3);
+    assert.ok(rangeProbes.every(p => p.range === 'bytes=0-2097151'), 'large file (> 50 MiB) must probe 2 MiB window');
     assert.equal(launchedRequests.length, 1);
     assert.equal(launchedRequests[0].url, fastUrl);
     assert.deepEqual(launchedRequests[0].routes, [fastUrl, backupUrl, slowUrl]);
@@ -3018,11 +3032,22 @@ test('#91 PR1 item 1: clicking quality card emits variant_id only so download ru
   const prevManager = globalThis.__uiDownloadManager;
   globalThis.fetch = async (url, init) => {
     rangeProbes.push({ url, range: init?.headers?.Range });
-    const delayMs = url === fastUrl ? 1 : url === midUrl ? 10 : 25;
-    await new Promise(r => setTimeout(r, delayMs));
+    const bodyDelayMs = url === fastUrl ? 2 : url === midUrl ? 16 : 40;
     const buf = new Uint8Array(512 * 1024);
     buf[3] = 0x18;
-    return new Response(buf, {
+    let delivered = false;
+    const body = new ReadableStream({
+      async pull(controller) {
+        if (delivered) {
+          controller.close();
+          return;
+        }
+        delivered = true;
+        await new Promise(r => setTimeout(r, bodyDelayMs));
+        controller.enqueue(buf);
+      },
+    });
+    return new Response(body, {
       status: 206,
       headers: { 'content-type': 'video/mp4', 'content-range': `bytes 0-${buf.length - 1}/10485760` },
     });
@@ -3067,6 +3092,7 @@ test('#91 PR1 item 1: clicking quality card emits variant_id only so download ru
     await h.instance.downloadMainVideo();
     await settled(h.store.downloads[0]);
     assert.equal(rangeProbes.length, 3, 'routeProbe must run across 3 allowed routes after quality switch');
+    assert.ok(rangeProbes.every(p => p.range === 'bytes=0-524287'), 'small file (<= 50 MiB) must keep 512 KiB probe window');
     assert.equal(launchedRequests[0].url, fastUrl, 'fastest probed route must win');
 
     // Player playback error fallback MUST still pin source_id

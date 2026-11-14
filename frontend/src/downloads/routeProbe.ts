@@ -8,6 +8,8 @@ import {
 
 export const ROUTE_PROBE_MAX_SOURCES = 3;
 export const ROUTE_PROBE_BYTES = 512 * 1024;
+export const ROUTE_PROBE_LARGE_FILE_THRESHOLD_BYTES = 50 * 1024 * 1024;
+export const ROUTE_PROBE_LARGE_BYTES = 2 * 1024 * 1024;
 export const ROUTE_PROBE_TIMEOUT_MS = 3000;
 
 const BAD_PROBE_CONTENT_TYPE =
@@ -26,6 +28,7 @@ export interface RouteProbeObservation {
 export interface RouteProbeOptions {
   maxSources?: number;
   probeBytes?: number;
+  sizeBytes?: number;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   nowFn?: () => number;
@@ -83,6 +86,47 @@ function buildRoutesForOrder(
   return routes;
 }
 
+function positiveSizeBytes(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function maxPositiveSourceSize(sources: Source[]): number | undefined {
+  let max: number | undefined;
+  for (const source of sources) {
+    const size = positiveSizeBytes(source?.size_bytes);
+    if (size !== undefined && (max === undefined || size > max)) {
+      max = size;
+    }
+  }
+  return max;
+}
+
+export function resolveRouteProbeBytes(
+  options: Pick<RouteProbeOptions, "probeBytes" | "sizeBytes"> = {},
+  sources: Source[] = [],
+  available: Source[] = sources,
+): number {
+  if (
+    options.probeBytes !== undefined &&
+    Number.isFinite(options.probeBytes)
+  ) {
+    return Math.max(1, Math.floor(options.probeBytes));
+  }
+  const knownSizeBytes =
+    positiveSizeBytes(options.sizeBytes) ??
+    maxPositiveSourceSize(available) ??
+    maxPositiveSourceSize(sources);
+  if (
+    knownSizeBytes !== undefined &&
+    knownSizeBytes > ROUTE_PROBE_LARGE_FILE_THRESHOLD_BYTES
+  ) {
+    return ROUTE_PROBE_LARGE_BYTES;
+  }
+  return ROUTE_PROBE_BYTES;
+}
+
 export function shouldProbeRoutes(
   sources: Source[],
   context: TargetContext = {},
@@ -118,7 +162,7 @@ async function probeSingleSource(
     attempt.abort();
   }, timeoutMs);
 
-  const startedAt = nowFn();
+  let transferStartedAt: number | undefined;
   let bytesRead = 0;
   let checkedPrefix = false;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -134,6 +178,7 @@ async function probeSingleSource(
       signal: attempt.signal,
     });
     throwIfAborted(signal);
+    transferStartedAt = nowFn();
 
     const validStatus =
       response.status === 206
@@ -147,8 +192,8 @@ async function probeSingleSource(
       !response.body ||
       typeof response.body.getReader !== "function"
     ) {
+      const elapsedMs = Math.max(1, nowFn() - transferStartedAt);
       await response.body?.cancel?.().catch(() => {});
-      const elapsedMs = Math.max(1, nowFn() - startedAt);
       return {
         source,
         url,
@@ -175,10 +220,11 @@ async function probeSingleSource(
       if (bytesRead >= probeBytes) break;
     }
 
+    const elapsedMs = Math.max(1, nowFn() - transferStartedAt);
     attempt.abort();
     await reader.cancel().catch(() => {});
+    throwIfAborted(signal);
 
-    const elapsedMs = Math.max(1, nowFn() - startedAt);
     if (bytesRead <= 0) {
       return {
         source,
@@ -197,15 +243,18 @@ async function probeSingleSource(
       elapsedMs,
       bytesPerSecond: (bytesRead * 1000) / elapsedMs,
     };
-  } catch (error) {
+  } catch {
+    const elapsedMs =
+      transferStartedAt !== undefined
+        ? Math.max(1, nowFn() - transferStartedAt)
+        : 0;
     await reader?.cancel?.().catch(() => {});
     if (signal.aborted) {
       throw signal.reason instanceof Error
         ? signal.reason
         : new DOMException("Aborted", "AbortError");
     }
-    const elapsedMs = Math.max(1, nowFn() - startedAt);
-    if (timedOut && bytesRead > 0) {
+    if (transferStartedAt !== undefined && timedOut && bytesRead > 0) {
       return {
         source,
         url,
@@ -231,10 +280,11 @@ async function probeSingleSource(
 
 /**
  * Probes up to the first N (<= 3) CORS-readable (`browser_fetch === "allowed"`)
- * direct sources of a file variant using bounded Range requests before starting
- * the full download. Sources whose probe traffic cannot be read/counted are
- * skipped without failing the download; remaining sources stay ordered as
- * failover backups.
+ * direct sources of a file variant using bounded Range requests (512 KiB for
+ * <= 50 MiB or unknown size, 2 MiB for > 50 MiB) and ranks candidates by
+ * post-header body transfer throughput. Sources whose probe traffic cannot be
+ * read/counted are skipped without failing the download; remaining sources stay
+ * ordered as failover backups.
  */
 export async function probeAndOrderSources(
   sources: Source[],
@@ -247,7 +297,6 @@ export async function probeAndOrderSources(
     ROUTE_PROBE_MAX_SOURCES,
     Math.max(0, options.maxSources ?? ROUTE_PROBE_MAX_SOURCES),
   );
-  const probeBytes = Math.max(1, options.probeBytes ?? ROUTE_PROBE_BYTES);
   const timeoutMs = Math.max(1, options.timeoutMs ?? ROUTE_PROBE_TIMEOUT_MS);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const nowFn =
@@ -286,6 +335,7 @@ export async function probeAndOrderSources(
     };
   }
 
+  const probeBytes = resolveRouteProbeBytes(options, sources, available);
   const eligible = available.filter(isDirectCorsAllowed).slice(0, maxSources);
   const observations = await Promise.all(
     eligible.map((source) =>
@@ -348,7 +398,10 @@ export async function probeFileTarget<
     source: Source;
     url: string;
     routes: string[];
-    variant: { delivery: { kind: string; sources?: Source[] } };
+    variant: {
+      metadata?: unknown;
+      delivery: { kind: string; sources?: Source[] };
+    };
   },
 >(
   target: T,
@@ -357,6 +410,7 @@ export async function probeFileTarget<
   context: TargetContext,
   signal: AbortSignal,
   onStatus?: (statusText: string) => unknown,
+  options: RouteProbeOptions = {},
 ): Promise<T> {
   throwIfAborted(signal);
   if (
@@ -370,9 +424,26 @@ export async function probeFileTarget<
     target.variant.delivery.kind === "file"
       ? (target.variant.delivery.sources ?? [])
       : [];
-  if (!shouldProbeRoutes(sources, context)) return target;
+  const maxSources = Math.min(
+    ROUTE_PROBE_MAX_SOURCES,
+    Math.max(0, options.maxSources ?? ROUTE_PROBE_MAX_SOURCES),
+  );
+  if (!shouldProbeRoutes(sources, context, maxSources)) return target;
+  const metadataSize =
+    target.variant.metadata && typeof target.variant.metadata === "object"
+      ? positiveSizeBytes(
+          (target.variant.metadata as { size_bytes?: unknown }).size_bytes,
+        )
+      : undefined;
+  const sizeBytes =
+    positiveSizeBytes(options.sizeBytes) ??
+    positiveSizeBytes(target.source?.size_bytes) ??
+    metadataSize;
   onStatus?.("正在优选下载线路...");
-  const probed = await probeAndOrderSources(sources, context, signal);
+  const probed = await probeAndOrderSources(sources, context, signal, {
+    ...options,
+    ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+  });
   return probed.primary && probed.url
     ? {
         ...target,
