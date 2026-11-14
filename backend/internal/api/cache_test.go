@@ -21,8 +21,12 @@ import (
 	"time"
 
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/catalog"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/instagram"
 	weiboplatform "github.com/Brilliant666/DokiTool-Go/backend/internal/platform/weibo"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/x"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/platform/ytgeneric"
 	"github.com/Brilliant666/DokiTool-Go/backend/internal/unified"
+	"github.com/Brilliant666/DokiTool-Go/backend/internal/ytengine"
 )
 
 func loadCacheTestCatalog(t *testing.T) *catalog.Catalog {
@@ -37,6 +41,15 @@ func loadCacheTestCatalog(t *testing.T) *catalog.Catalog {
 		catalog.InstagramPlatform(),
 	} {
 		if err := c.Register(extra); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, siteID := range []string{"facebook", "tumblr", "dailymotion"} {
+		spec, ok := ytgeneric.LookupSite(siteID)
+		if !ok {
+			t.Fatalf("missing builtin site %q", siteID)
+		}
+		if err := c.Register(spec.CatalogEntry()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -291,11 +304,14 @@ func TestNormalizeCacheURLAliasesAndDistinctQueries(t *testing.T) {
 			platform: "x",
 			inputs: []string{
 				"https://x.com/user/status/123",
+				"http://x.com:80/user/status/123",
 				"HTTPS://WWW.X.COM:443/user/status/123#reply",
 				"https://twitter.com/user/status/123",
 				"https://www.twitter.com/user/status/123",
 				"https://mobile.twitter.com/user/status/123",
+				"https://m.twitter.com/user/status/123",
 				"https://mobile.x.com/user/status/123",
+				"https://m.x.com/user/status/123",
 			},
 			want: "https://x.com/user/status/123",
 		},
@@ -303,6 +319,8 @@ func TestNormalizeCacheURLAliasesAndDistinctQueries(t *testing.T) {
 			platform: "instagram",
 			inputs: []string{
 				"https://instagram.com/reel/CTApqC8BGWd/",
+				"https://m.instagram.com/reel/CTApqC8BGWd/",
+				"http://www.instagram.com:80/reel/CTApqC8BGWd/",
 				"https://www.instagram.com:443/reel/CTApqC8BGWd/#ig",
 			},
 			want: "https://www.instagram.com/reel/CTApqC8BGWd/",
@@ -328,10 +346,21 @@ func TestNormalizeCacheURLAliasesAndDistinctQueries(t *testing.T) {
 			platform: "dailymotion",
 			inputs: []string{
 				"https://dai.ly/x8t9abc",
+				"https://dai.ly/x8t9abc/",
+				"https://dai.ly/x8t9abc?",
 				"https://dailymotion.com/video/x8t9abc",
 				"https://www.dailymotion.com/video/x8t9abc#start",
 			},
 			want: "https://www.dailymotion.com/video/x8t9abc",
+		},
+		{
+			platform: "dailymotion",
+			inputs: []string{
+				"https://dai.ly/x8t9abc?playlist=1",
+				"https://dailymotion.com/video/x8t9abc?playlist=1#frag",
+				"https://www.dailymotion.com/video/x8t9abc?playlist=1",
+			},
+			want: "https://www.dailymotion.com/video/x8t9abc?playlist=1",
 		},
 	}
 	for _, grp := range equivalentGroups {
@@ -342,6 +371,28 @@ func TestNormalizeCacheURLAliasesAndDistinctQueries(t *testing.T) {
 		}
 	}
 
+	// Invalid dai.ly paths MUST NOT rewrite onto www.dailymotion.com/video/...
+	for _, badShort := range []string{
+		"https://dai.ly///x8t9abc///",
+		"https://dai.ly/foo-bar",
+		"https://dai.ly/",
+		"https://dai.ly/x8t9abc/extra",
+		"https://dai.ly/" + strings.Repeat("a", 65),
+	} {
+		got := normalizeCacheURL("dailymotion", badShort)
+		if strings.Contains(got, "dailymotion.com/video/") {
+			t.Fatalf("invalid dai.ly URL %q rewrote to %q", badShort, got)
+		}
+	}
+
+	// >2048-byte inputs on strict platforms MUST NEVER collide with <=2048-byte keys
+	// (including when a valid <=2048-byte dai.ly short link expands past 2048 bytes).
+	validShortExpanded := "https://dai.ly/x8t9abc?" + strings.Repeat("a", 2020)                 // len == 2043 <= 2048
+	invalidExpanded := "https://www.dailymotion.com/video/x8t9abc?" + strings.Repeat("a", 2020) // len == 2062 > 2048
+	if normalizeCacheURL("dailymotion", validShortExpanded) == normalizeCacheURL("dailymotion", invalidExpanded) {
+		t.Fatal("overlong dailymotion URL collided with expanded valid dai.ly short URL")
+	}
+
 	// Distinct media selectors / query tokens MUST remain distinct.
 	if normalizeCacheURL("x", "https://x.com/u/status/1/photo/1") == normalizeCacheURL("x", "https://x.com/u/status/1/photo/2") {
 		t.Fatal("X /photo/1 and /photo/2 collided")
@@ -349,6 +400,166 @@ func TestNormalizeCacheURLAliasesAndDistinctQueries(t *testing.T) {
 	if normalizeCacheURL("xiaohongshu", "https://www.xiaohongshu.com/explore/1?xsec_token=a") ==
 		normalizeCacheURL("xiaohongshu", "https://www.xiaohongshu.com/explore/1?xsec_token=b") {
 		t.Fatal("XHS xsec_token collided")
+	}
+}
+
+func TestWarmCacheDoesNotBypassPlatformURLValidation(t *testing.T) {
+	const nowUnix int64 = 1793448000
+	c := loadCacheTestCatalog(t)
+
+	w720, h720 := int64(1280), int64(720)
+	dur := 10.0
+	tbr := 1800.0
+
+	var dmExtracts atomic.Int32
+	mkExtractor := func(mediaURL, thumbURL string, counter *atomic.Int32) ytengine.Extractor {
+		return &stubXExtractor{
+			enabled: true,
+			extract: func(_ context.Context, rawURL string) (*ytengine.Info, error) {
+				if counter != nil {
+					counter.Add(1)
+				}
+				return &ytengine.Info{
+					ID:         "vid123456",
+					DisplayID:  "vid123456",
+					Title:      "Sample",
+					Duration:   &dur,
+					Thumbnail:  thumbURL,
+					WebpageURL: rawURL,
+					Formats: []ytengine.Format{
+						{
+							FormatID: "mp4-720p",
+							URL:      mediaURL,
+							Ext:      "mp4",
+							Protocol: "https",
+							Width:    &w720,
+							Height:   &h720,
+							TBR:      &tbr,
+							VCodec:   "avc1.64001f",
+							ACodec:   "mp4a.40.2",
+						},
+					},
+				}, nil
+			},
+		}
+	}
+	dmExtractor := &stubXExtractor{
+		enabled: true,
+		extract: func(_ context.Context, rawURL string) (*ytengine.Info, error) {
+			dmExtracts.Add(1)
+			return &ytengine.Info{
+				ID:         "x8t9abc",
+				DisplayID:  "x8t9abc",
+				Title:      "Dailymotion Sample",
+				Duration:   &dur,
+				Thumbnail:  "https://s2.dmcdn.net/v/x8t9abc/x1080",
+				WebpageURL: rawURL,
+				Formats: []ytengine.Format{
+					{
+						FormatID: "hls-1080",
+						URL:      "https://vod2.cf.dmcdn.net/sec2(tok)/cloud/fmp4/1/h264_aac_fhd/1/manifest.m3u8",
+						Ext:      "mp4",
+						Protocol: "m3u8_native",
+						Width:    &w720,
+						Height:   &h720,
+						TBR:      &tbr,
+						VCodec:   "avc1.64001f",
+						ACodec:   "mp4a.40.2",
+					},
+				},
+			}, nil
+		},
+	}
+
+	fbSpec, _ := ytgeneric.LookupSite("facebook")
+	tumblrSpec, _ := ytgeneric.LookupSite("tumblr")
+	dmSpec, _ := ytgeneric.LookupSite("dailymotion")
+
+	h, err := New(c, map[string]Adapter{
+		"x":           x.New(mkExtractor("https://video.twimg.com/ext_tw_video/1/pu/vid/1280x720/a.mp4", "https://pbs.twimg.com/media/a.jpg", nil)),
+		"instagram":   instagram.New(mkExtractor("https://scontent.cdninstagram.com/v/t50.2886-16/100_n.mp4", "https://scontent.cdninstagram.com/v/t51.2885-15/100_n.jpg", nil)),
+		"facebook":    ytgeneric.NewWithResolver(fbSpec, mkExtractor("https://video.xx.fbcdn.net/v/t42.1790-2/100_n.mp4", "https://scontent.xx.fbcdn.net/v/t15.5256-10/100_n.jpg", nil), nil, staticPublicResolver{}),
+		"tumblr":      ytgeneric.NewWithResolver(tumblrSpec, mkExtractor("https://va.media.tumblr.com/tumblr_abc_720.mp4", "https://64.media.tumblr.com/thumb.jpg", nil), nil, staticPublicResolver{}),
+		"dailymotion": ytgeneric.NewWithResolver(dmSpec, dmExtractor, nil, staticPublicResolver{}),
+	}, func() time.Time { return time.Unix(nowUnix, 0) }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	callParse := func(rawURL string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		q := url.Values{"schema_version": {"1.0"}, "url": {rawURL}}
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/parse?"+q.Encode(), nil))
+		return w
+	}
+
+	// 1. Warm Dailymotion entries and verify dai.ly validation parity + query rewrite.
+	for _, warmURL := range []string{
+		"https://www.dailymotion.com/video/x8t9abc",
+		"https://www.dailymotion.com/video/foo-bar",
+		"https://dai.ly/x8t9abc?playlist=1",
+	} {
+		if w := callParse(warmURL); w.Code != http.StatusOK {
+			t.Fatalf("warm %q status=%d body=%s", warmURL, w.Code, w.Body.String())
+		}
+	}
+	beforeShared := dmExtracts.Load()
+	if w := callParse("https://www.dailymotion.com/video/x8t9abc?playlist=1"); w.Code != http.StatusOK || dmExtracts.Load() != beforeShared {
+		t.Fatalf("expected dai.ly?playlist=1 to share cache with www.dailymotion.com/video/x8t9abc?playlist=1: status=%d extracts=%d->%d",
+			w.Code, beforeShared, dmExtracts.Load())
+	}
+	for _, invalidShort := range []string{
+		"https://dai.ly///x8t9abc///",
+		"https://dai.ly/foo-bar",
+		"https://dai.ly/",
+		"https://dai.ly/x8t9abc/extra",
+	} {
+		w := callParse(invalidShort)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("warm cache bypassed dai.ly validation for %q: got status=%d body=%s, want 400",
+				invalidShort, w.Code, w.Body.String())
+		}
+	}
+
+	// 2. Warm valid <=2048-byte URLs on all 5 strict platforms, then verify >2048-byte
+	// inputs STILL return 400 INVALID_INPUT (both shrinkage and dai.ly expansion cases).
+	qPad := strings.Repeat("a", 2020)
+	longShortValid := "https://dai.ly/x8t9abc?" + strings.Repeat("b", 2020) // 2043 bytes <= 2048
+	for _, warmURL := range []string{
+		"https://x.com/user/status/1577719286659006464",
+		"https://x.com/user/status/1577719286659006464?" + strings.Repeat("q", 1995),
+		"https://www.instagram.com/reel/CTApqC8BGWd/",
+		"https://www.facebook.com/reel/1517545242764683",
+		"https://www.tumblr.com/blog/123456",
+		longShortValid,
+	} {
+		if len(warmURL) > maxYTDLPInputBytes {
+			t.Fatalf("test bug: warmURL len=%d > %d", len(warmURL), maxYTDLPInputBytes)
+		}
+		if w := callParse(warmURL); w.Code != http.StatusOK {
+			t.Fatalf("warm %q status=%d body=%s", warmURL, w.Code, w.Body.String())
+		}
+	}
+
+	overlongCases := []string{
+		"https://x.com/user/status/1577719286659006464#" + qPad,
+		"https://mobile.twitter.com:443/user/status/1577719286659006464?" + strings.Repeat("q", 1995),
+		"https://m.x.com:443/user/status/1577719286659006464#" + qPad,
+		"https://m.instagram.com:443/reel/CTApqC8BGWd/#" + qPad,
+		"https://m.facebook.com:443/reel/1517545242764683#" + qPad,
+		"https://tumblr.com:443/blog/123456#" + qPad,
+		"https://www.dailymotion.com/video/x8t9abc#" + qPad,
+		"https://www.dailymotion.com/video/x8t9abc?" + strings.Repeat("b", 2020), // 2062 bytes > 2048, matches expanded longShortValid!
+	}
+	for _, overlong := range overlongCases {
+		if len(overlong) <= maxYTDLPInputBytes {
+			t.Fatalf("test bug: overlong len=%d <= %d: %q", len(overlong), maxYTDLPInputBytes, overlong)
+		}
+		w := callParse(overlong)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("warm cache bypassed >2048-byte rejection for len=%d (%s...): status=%d body=%s",
+				len(overlong), overlong[:48], w.Code, w.Body.String())
+		}
 	}
 }
 

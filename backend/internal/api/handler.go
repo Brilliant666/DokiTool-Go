@@ -299,7 +299,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "/api/resolve" {
 		resolveItemID = itemID
 	}
-	if h.cache == nil || h.cache.cfg.Disabled || !cacheablePlatform(platform) {
+	if h.cache == nil || h.cache.cfg.Disabled || !cacheableRequest(platform, source) {
 		ctx, cancel := context.WithTimeout(r.Context(), parseTimeout)
 		defer cancel()
 		res, _, _ := h.executeParse(ctx, path, platform, source, resolveItemID, debugView, h.now())

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -13,7 +14,8 @@ import (
 )
 
 const (
-	parseTimeout = 45 * time.Second
+	parseTimeout       = 45 * time.Second
+	maxYTDLPInputBytes = 2048
 
 	defaultCacheMaxEntries = 4096
 	minCacheMaxEntries     = 1
@@ -79,6 +81,27 @@ func cacheablePlatform(platform string) bool {
 	default:
 		return true
 	}
+}
+
+var dailyShortPath = regexp.MustCompile(`^/([A-Za-z0-9]{1,64})/?$`)
+
+func hasStrictInputLen2048(platform string) bool {
+	switch platform {
+	case "x", "instagram", "facebook", "tumblr", "dailymotion":
+		return true
+	default:
+		return false
+	}
+}
+
+func cacheableRequest(platform, source string) bool {
+	if !cacheablePlatform(platform) {
+		return false
+	}
+	if hasStrictInputLen2048(platform) && len(source) > maxYTDLPInputBytes {
+		return false
+	}
+	return true
 }
 
 type cacheKey struct {
@@ -223,6 +246,11 @@ func (c *parseCache) stats() (entries int, totalBytes int64) {
 // aliases without reordering or stripping query parameters (preserving ?p=N,
 // duplicate query precedence, xsec_token, modal_id, and path selectors).
 func normalizeCacheURL(platform, source string) string {
+	if hasStrictInputLen2048(platform) && len(source) > maxYTDLPInputBytes {
+		// Keep a disjoint prefix so >2048-byte inputs rejected by platform parsers
+		// never shrink or match a <=2048-byte alias that expanded on rewrite.
+		return "overlong:" + source
+	}
 	u, err := url.Parse(source)
 	if err != nil || u.Host == "" {
 		return source
@@ -234,17 +262,20 @@ func normalizeCacheURL(platform, source string) string {
 		port = ""
 	}
 	escapedPath := u.EscapedPath()
+	forceQuery := u.ForceQuery
 
 	switch platform {
 	case "x":
 		switch host {
-		case "twitter.com", "www.twitter.com", "mobile.twitter.com", "www.x.com", "mobile.x.com":
+		case "x.com", "www.x.com", "mobile.x.com", "m.x.com",
+			"twitter.com", "www.twitter.com", "mobile.twitter.com", "m.twitter.com":
 			host = "x.com"
 			scheme = "https"
 			port = ""
 		}
 	case "instagram":
-		if host == "instagram.com" {
+		switch host {
+		case "www.instagram.com", "instagram.com", "m.instagram.com":
 			host = "www.instagram.com"
 			scheme = "https"
 			port = ""
@@ -267,12 +298,14 @@ func normalizeCacheURL(platform, source string) string {
 			scheme = "https"
 			port = ""
 		} else if host == "dai.ly" {
-			trimmed := strings.Trim(escapedPath, "/")
-			if trimmed != "" && !strings.Contains(trimmed, "/") && u.RawQuery == "" {
+			if m := dailyShortPath.FindStringSubmatch(escapedPath); m != nil {
 				host = "www.dailymotion.com"
 				scheme = "https"
 				port = ""
-				escapedPath = "/video/" + trimmed
+				escapedPath = "/video/" + m[1]
+				if u.RawQuery == "" {
+					forceQuery = false
+				}
 			}
 		}
 	}
@@ -293,7 +326,7 @@ func normalizeCacheURL(platform, source string) string {
 		b.WriteString(port)
 	}
 	b.WriteString(escapedPath)
-	if u.ForceQuery || u.RawQuery != "" {
+	if forceQuery || u.RawQuery != "" {
 		b.WriteByte('?')
 		b.WriteString(u.RawQuery)
 	}
