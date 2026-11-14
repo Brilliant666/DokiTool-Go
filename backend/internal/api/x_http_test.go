@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -127,7 +128,9 @@ func TestXHTTPParseResolveAndDegradation(t *testing.T) {
 		}),
 		"x": x.New(xExtractor),
 	}
-	h, err := New(c, adapters, func() time.Time { return time.Unix(now, 0) }, nil)
+	var clockNow atomic.Int64
+	clockNow.Store(now)
+	h, err := New(c, adapters, func() time.Time { return time.Unix(clockNow.Load(), 0) }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +193,8 @@ func TestXHTTPParseResolveAndDegradation(t *testing.T) {
 	}
 
 	// 4. Degrade X engine (e.g. missing or mismatched yt-dlp binary):
-	// X returns 503 SERVICE_NOT_CONFIGURED cleanly while existing platforms (douyin) remain 200 OK.
+	// After cache TTL expires, X returns 503 SERVICE_NOT_CONFIGURED cleanly while existing platforms (douyin) remain 200 OK.
+	clockNow.Add(61)
 	xExtractor.enabled = false
 	xExtractor.extract = nil
 
@@ -287,7 +291,9 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 		"youtube":   youtube.New(baseEng.WithTargetPolicy(youtube.AllowedTargetURL, youtube.AllowedOutboundHost)),
 		"instagram": instagram.New(baseEng.WithTargetPolicy(instagram.AllowedTargetURL, instagram.AllowedOutboundHost)),
 	}
-	h, err := New(c, adapters, func() time.Time { return time.Unix(now, 0) }, nil)
+	var clockNow atomic.Int64
+	clockNow.Store(now)
+	h, err := New(c, adapters, func() time.Time { return time.Unix(clockNow.Load(), 0) }, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +395,8 @@ func TestYTDLPBusyDoesNotExhaustGlobalParsePoolForLegacyPlatforms(t *testing.T) 
 		t.Fatalf("expected first in-flight X request to return 200 OK after release, got %d", inFlightCodes[0])
 	}
 
-	// 5. Subsequent X request after slots are freed succeeds with 200 OK.
+	// 5. Subsequent X request after slots are freed (and short cache TTL expires) succeeds with 200 OK.
+	clockNow.Add(61)
 	reqAfter := edgeRequest("/api/parse?schema_version=1.0&url="+url.QueryEscape("https://x.com/UltimaShadowX/status/1577719286659006464"), "198.51.100.50")
 	wAfter := call(entry, reqAfter)
 	if wAfter.Code != http.StatusOK {

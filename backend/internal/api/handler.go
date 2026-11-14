@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -44,11 +45,21 @@ type Handler struct {
 	publicMedia   PublicMedia
 	weiboRelay    http.Handler
 	youtubeHelper YouTubeHelper
+	cache         *parseCache
+	panicLogf     func(string, ...any)
 }
 
 func New(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, media PublicMedia) (*Handler, error) {
+	return NewWithCacheConfig(c, adapters, now, media, DefaultCacheConfig())
+}
+
+func NewWithCacheConfig(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, media PublicMedia, cacheCfg CacheConfig) (*Handler, error) {
 	if c == nil {
 		return nil, fmt.Errorf("missing catalog")
+	}
+	cache, err := newParseCache(cacheCfg)
+	if err != nil {
+		return nil, err
 	}
 	registered := make(map[string]Adapter, len(adapters))
 	for id, adapter := range adapters {
@@ -63,7 +74,14 @@ func New(c *catalog.Catalog, adapters map[string]Adapter, now func() time.Time, 
 	if now == nil {
 		now = time.Now
 	}
-	return &Handler{catalog: c, adapters: registered, now: now, publicMedia: media}, nil
+	return &Handler{
+		catalog:     c,
+		adapters:    registered,
+		now:         now,
+		publicMedia: media,
+		cache:       cache,
+		panicLogf:   log.Printf,
+	}, nil
 }
 
 // SetWeiboRelay registers a binary-only handler before server startup.
@@ -160,26 +178,40 @@ func Status(payload unified.Object) int {
 	}
 }
 
-func send(w http.ResponseWriter, status int, payload unified.Object) {
+var internalEncodeErrorBody = []byte(`{"schema_version":"1.0","code":"INTERNAL_ERROR","error":{"code":"INTERNAL_ERROR","message":"响应编码失败"}}`)
+
+func encodeResponse(status int, payload unified.Object) (cachedResponse, bool) {
 	body, err := unified.Encode(payload)
 	if err != nil {
-		status = 500
-		body = []byte(`{"schema_version":"1.0","code":"INTERNAL_ERROR","error":{"code":"INTERNAL_ERROR","message":"响应编码失败"}}`)
+		return cachedResponse{status: 500, body: internalEncodeErrorBody}, false
 	}
+	retryAfter := ""
 	if unified.Str(payload["code"]) != "OK" {
-		if retryAfter, ok := unified.Numeric(unified.Map(payload["error"])["retry_after_seconds"]); ok && retryAfter >= 1 && w.Header().Get("Retry-After") == "" {
-			w.Header().Set("Retry-After", strconv.FormatInt(int64(retryAfter), 10))
+		if seconds, ok := unified.Numeric(unified.Map(payload["error"])["retry_after_seconds"]); ok && seconds >= 1 {
+			retryAfter = strconv.FormatInt(int64(seconds), 10)
 		}
+	}
+	return cachedResponse{status: status, body: body, retryAfter: retryAfter}, true
+}
+
+func writeResponse(w http.ResponseWriter, res cachedResponse) {
+	if res.retryAfter != "" && w.Header().Get("Retry-After") == "" {
+		w.Header().Set("Retry-After", res.retryAfter)
 	}
 	w.Header().Del("Access-Control-Allow-Origin")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	w.WriteHeader(res.status)
+	_, _ = w.Write(res.body)
 }
 
-func sendError(w http.ResponseWriter, status int, message string) {
+func send(w http.ResponseWriter, status int, payload unified.Object) {
+	res, _ := encodeResponse(status, payload)
+	writeResponse(w, res)
+}
+
+func contractErrorForStatus(status int, message string) unified.Object {
 	code := "UPSTREAM_INVALID_RESPONSE"
 	switch status {
 	case 400, 404, 405, 409, 410:
@@ -195,7 +227,11 @@ func sendError(w http.ResponseWriter, status int, message string) {
 	case 504:
 		code = "UPSTREAM_TIMEOUT"
 	}
-	send(w, status, unified.ContractError(code, message, status == 429 || status == 502 || status == 504))
+	return unified.ContractError(code, message, status == 429 || status == 502 || status == 504)
+}
+
+func sendError(w http.ResponseWriter, status int, message string) {
+	send(w, status, contractErrorForStatus(status, message))
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -266,49 +302,170 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sendError(w, 503, "解析服务未配置完成")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
-	now := h.now().Unix()
-	payload, err := adapter.Parse(ctx, source, now)
-	if err != nil {
-		sendError(w, 502, "上游返回不完整或不符合媒体合同的数据")
+	debug, _ := queryValue(r.URL.RawQuery, "debug")
+	debugView := debug == "1"
+	resolveItemID := ""
+	if path == "/api/resolve" {
+		resolveItemID = itemID
+	}
+	if h.cache == nil || h.cache.cfg.Disabled || !cacheableRequest(platform, source) {
+		ctx, cancel := context.WithTimeout(r.Context(), parseTimeout)
+		defer cancel()
+		res, _, _ := h.executeParse(ctx, path, platform, source, resolveItemID, debugView, h.now())
+		writeResponse(w, res)
 		return
 	}
-	if err := unified.ValidateEnvelopeAt(payload, now); err != nil {
-		sendError(w, 502, "解析接口合同校验失败")
+	key := cacheKey{
+		route:    path,
+		platform: platform,
+		url:      normalizeCacheURL(platform, source),
+		itemID:   resolveItemID,
+		debug:    debugView,
+	}
+	h.serveCachedParse(w, r, key, path, platform, source, resolveItemID, debugView)
+}
+
+func (h *Handler) serveCachedParse(
+	w http.ResponseWriter,
+	r *http.Request,
+	key cacheKey,
+	path, platform, source, itemID string,
+	debug bool,
+) {
+	h.cache.mu.Lock()
+	if res, ok := h.cache.getLocked(key, h.now()); ok {
+		h.cache.mu.Unlock()
+		writeResponse(w, res)
 		return
+	}
+	if r.Context().Err() != nil {
+		h.cache.mu.Unlock()
+		return
+	}
+	call, joining := h.cache.inflight[key]
+	if !joining {
+		execCtx, execCancel := context.WithTimeout(context.WithoutCancel(r.Context()), parseTimeout)
+		call = &inflightCall{
+			done:    make(chan struct{}),
+			cancel:  execCancel,
+			waiters: 1,
+		}
+		h.cache.inflight[key] = call
+		h.cache.mu.Unlock()
+		go h.runSingleflight(execCtx, execCancel, key, call, path, platform, source, itemID, debug)
+	} else {
+		call.waiters++
+		h.cache.mu.Unlock()
+	}
+
+	select {
+	case <-call.done:
+		writeResponse(w, call.res)
+	case <-r.Context().Done():
+		h.cache.onWaiterCanceled(key, call)
+	}
+}
+
+func (h *Handler) runSingleflight(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	key cacheKey,
+	call *inflightCall,
+	path, platform, source, itemID string,
+	debug bool,
+) {
+	var (
+		res       cachedResponse
+		finishNow time.Time
+		ttl       time.Duration
+		cacheable bool
+		completed bool
+	)
+	defer func() {
+		if p := recover(); p != nil {
+			res, _ = encodeResponse(http.StatusInternalServerError, contractErrorForStatus(http.StatusInternalServerError, "解析服务内部错误"))
+			cacheable = false
+			logf := h.panicLogf
+			if logf == nil {
+				logf = log.Printf
+			}
+			logf("dokitool: parse panic recovered: platform=%s panic_type=%T", platform, p)
+		} else if !completed {
+			res, _ = encodeResponse(http.StatusInternalServerError, contractErrorForStatus(http.StatusInternalServerError, "解析服务内部错误"))
+			cacheable = false
+		}
+
+		h.cache.mu.Lock()
+		if h.cache.inflight[key] == call {
+			delete(h.cache.inflight, key)
+		}
+		if !call.abandoned && ctx.Err() == nil && cacheable {
+			h.cache.putLocked(key, res, finishNow.Add(ttl))
+		}
+		call.res = res
+		close(call.done)
+		h.cache.mu.Unlock()
+		cancel()
+	}()
+
+	var (
+		payload unified.Object
+		encOK   bool
+	)
+	res, payload, encOK = h.executeParse(ctx, path, platform, source, itemID, debug, h.now())
+	finishNow = h.now()
+	if encOK && payload != nil {
+		ttl, cacheable = computeCacheTTL(payload, finishNow)
+	}
+	completed = true
+}
+
+func (h *Handler) executeParse(
+	ctx context.Context,
+	path, platform, source, itemID string,
+	debug bool,
+	nowTime time.Time,
+) (cachedResponse, unified.Object, bool) {
+	adapter := h.adapters[platform]
+	now := nowTime.Unix()
+	errorResult := func(status int, message string) (cachedResponse, unified.Object, bool) {
+		res, _ := encodeResponse(status, contractErrorForStatus(status, message))
+		return res, nil, false
+	}
+
+	payload, err := adapter.Parse(ctx, source, now)
+	if err != nil {
+		return errorResult(502, "上游返回不完整或不符合媒体合同的数据")
+	}
+	if err := unified.ValidateEnvelopeAt(payload, now); err != nil {
+		return errorResult(502, "解析接口合同校验失败")
 	}
 	status := Status(payload)
 	if status != 200 {
-		send(w, status, payload)
-		return
+		res, ok := encodeResponse(status, payload)
+		return res, payload, ok
 	}
 	data := unified.Map(payload["data"])
 	if unified.Str(data["platform"]) != platform {
-		sendError(w, 502, "内部解析接口平台不一致")
-		return
+		return errorResult(502, "内部解析接口平台不一致")
 	}
 	if h.publicMedia != nil {
 		payload, err = h.publicMedia(ctx, platform, payload, now)
 		if err != nil {
-			sendError(w, 503, "媒体服务尚未配置，请联系站点维护者")
-			return
+			return errorResult(503, "媒体服务尚未配置，请联系站点维护者")
 		}
 		if err := unified.ValidateEnvelopeAt(payload, now); err != nil {
-			sendError(w, 502, "解析接口合同校验失败")
-			return
+			return errorResult(502, "解析接口合同校验失败")
 		}
 		if status := Status(payload); status != 200 {
-			send(w, status, payload)
-			return
+			res, ok := encodeResponse(status, payload)
+			return res, payload, ok
 		}
 		if unified.Str(unified.Map(payload["data"])["platform"]) != platform {
-			sendError(w, 502, "内部解析接口平台不一致")
-			return
+			return errorResult(502, "内部解析接口平台不一致")
 		}
 	}
-	debug, _ := queryValue(r.URL.RawQuery, "debug")
-	payload = unified.PublicView(payload, debug == "1", now)
+	payload = unified.PublicView(payload, debug, now)
 	if path == "/api/resolve" {
 		found := false
 		data = unified.Map(payload["data"])
@@ -320,16 +477,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-			send(w, 404, unified.ContractError("CONTENT_UNAVAILABLE", "请求的媒体条目暂时不可用", false))
-			return
+			notFound := unified.ContractError("CONTENT_UNAVAILABLE", "请求的媒体条目暂时不可用", false)
+			res, ok := encodeResponse(404, notFound)
+			return res, notFound, ok
 		}
 		data["default_item_id"] = itemID
 	}
 	if err := unified.ValidateEnvelopeAt(payload, now); err != nil {
-		sendError(w, 502, "解析接口合同校验失败")
-		return
+		return errorResult(502, "解析接口合同校验失败")
 	}
-	send(w, 200, payload)
+	res, ok := encodeResponse(200, payload)
+	return res, payload, ok
 }
 
 func queryPresent(raw, name string) bool {
