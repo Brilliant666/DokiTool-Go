@@ -804,3 +804,319 @@ func TestPullProtocolV2OldNewInterop(t *testing.T) {
 		}
 	})
 }
+
+type interopStatusWriter struct {
+	http.ResponseWriter
+	code int
+}
+
+func (w *interopStatusWriter) WriteHeader(statusCode int) {
+	w.code = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *interopStatusWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// frozenMain7ed670fBroker models main (7ed670f) Japan PullBroker:
+// pullCapacity = 8, 0ms queue wait, WorkTimeout = 9s, DisallowUnknownFields().
+func newFrozenMain7ed670fBroker(t *testing.T, token string) *PullBroker {
+	t.Helper()
+	b, err := NewPullBroker(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.queueWait = 0
+	b.queueCap = 0
+	b.claimSlots = make(chan struct{}, 8)
+	b.resultSlots = make(chan struct{}, 8)
+	b.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+	}
+	return b
+}
+
+func TestPullProtocolPR3RollingRestartAndMutualInterop(t *testing.T) {
+	const origin = "https://japan.example.org"
+
+	detailFor := func(awemeID, host1080 string) []byte {
+		objKey := "/video/tos/cn/tos-cn-v-0015c001-alinc2/oPR3Interop" + awemeID[len(awemeID)-2:]
+		u1080 := "https://" + host1080 + "/" + strings.Repeat("1", 32) + "/6a000001" + objKey + "/?a=6383&mime_type=video_mp4"
+		www := "https://www.douyin.com/aweme/v1/play/?video_id=" + wireVideo
+		return []byte(`{"status_code":0,"aweme_detail":{"aweme_id":"` + awemeID + `","video":{"duration":13667,"play_addr":{"uri":"` + wireVideo + `"},"bit_rate":[` +
+			`{"gear_name":"normal_1080_0","format":"mp4","bit_rate":2100000,"play_addr":{"uri":"` + wireVideo + `","file_hash":"h` + awemeID + `","width":1920,"height":1080,"data_size":3500000,"url_list":["` + u1080 + `","` + www + `"]}}` +
+			`]}}}`)
+	}
+
+	jpDetailExec := resolveExecutor(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+		_, id, _ := strings.Cut(req.URL, "aweme_id=")
+		if idx := strings.IndexByte(id, '&'); idx >= 0 {
+			id = id[:idx]
+		}
+		return fetch.Response{StatusCode: 200, Body: detailFor(id, "v3-dy-ov.zjcdn.com")}, nil
+	})
+	shProbe := resolverFunc(func(_ context.Context, _ string) ([]unified.Object, error) {
+		return []unified.Object{deliveryRow("v26-cold.douyinvod.com", "objectA", "a")}, nil
+	})
+
+	// 1. Old Shanghai (fixed 3 v2 workers) <-> New Japan (pullCapacity=16 + 300ms short queue):
+	//    6 concurrent Douyin parses where Shanghai work takes ~70ms all succeed via Shanghai (0 fallbacks).
+	t.Run("old_shanghai_3_workers_new_japan_short_queue", func(t *testing.T) {
+		token := randomBrokerToken(t)
+		newBroker, err := NewPullBroker(token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newBroker.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+		}
+		srv := httptest.NewTLSServer(newBroker)
+		defer srv.Close()
+
+		shDetailSlow := resolveExecutor(func(ctx context.Context, req fetch.Request) (fetch.Response, error) {
+			_, id, _ := strings.Cut(req.URL, "aweme_id=")
+			if idx := strings.IndexByte(id, '&'); idx >= 0 {
+				id = id[:idx]
+			}
+			select {
+			case <-time.After(70 * time.Millisecond):
+			case <-ctx.Done():
+				return fetch.Response{}, ctx.Err()
+			}
+			return fetch.Response{StatusCode: 200, Body: detailFor(id, "v26-web.douyinvod.com")}, nil
+		})
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		var wgOld sync.WaitGroup
+		for range 3 {
+			wgOld.Add(1)
+			go func() {
+				defer wgOld.Done()
+				for ctx.Err() == nil {
+					if wErr := runFrozenV2OldWorkerOnce(ctx, controlTransportForTLS(srv, origin), shDetailSlow, origin, token, shProbe, nil); wErr != nil && ctx.Err() != nil {
+						return
+					}
+				}
+			}()
+		}
+		waitForPullCount(t, newBroker, 3)
+
+		parser := douyin.NewWithOriginalResolver(jpDetailExec, japanProbeFunc(func(context.Context, string) (unified.Object, error) {
+			return nil, errors.New("unexpected Japan fallback when old workers finish within 70ms")
+		}), newBroker)
+
+		now := time.Now().Unix()
+		errs := make(chan error, 6)
+		for i := range 6 {
+			id := fmt.Sprintf("77040567372337%05d", 10010+i)
+			go func() {
+				data, pErr := parser.Parse(t.Context(), "https://www.douyin.com/video/"+id, now)
+				if pErr != nil {
+					errs <- pErr
+					return
+				}
+				raw, _ := json.Marshal(unified.PublicView(data, false, now))
+				if !bytes.Contains(raw, []byte("v26-luna.douyinvod.com")) {
+					errs <- fmt.Errorf("missing Shanghai domestic rendition for %s: %s", id, raw)
+					return
+				}
+				errs <- nil
+			}()
+		}
+		for range 6 {
+			if rErr := <-errs; rErr != nil {
+				t.Fatal(rErr)
+			}
+		}
+		cancel()
+		wgOld.Wait()
+	})
+
+	// 2. Rolling restart overlap: Old Shanghai (-workers 8) + New Shanghai (-workers 8) = 16 concurrent
+	//    claims and 16 concurrent active leases against New Japan (pullCapacity=16) with 0 HTTP 429s!
+	t.Run("rolling_restart_overlap_8_old_plus_8_new_workers", func(t *testing.T) {
+		token := randomBrokerToken(t)
+		newBroker, err := NewPullBroker(token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newBroker.lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("1.1.1.1")}, nil
+		}
+
+		var got429 int32
+		var statusMu sync.Mutex
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sw := &interopStatusWriter{ResponseWriter: w, code: http.StatusOK}
+			newBroker.ServeHTTP(sw, r)
+			if sw.code == http.StatusTooManyRequests {
+				statusMu.Lock()
+				got429++
+				statusMu.Unlock()
+			}
+		}))
+		defer srv.Close()
+
+		allSixteenActive := make(chan struct{})
+		releaseSixteen := make(chan struct{})
+		var active int32
+
+		shDetailGate := resolveExecutor(func(ctx context.Context, req fetch.Request) (fetch.Response, error) {
+			_, id, _ := strings.Cut(req.URL, "aweme_id=")
+			if idx := strings.IndexByte(id, '&'); idx >= 0 {
+				id = id[:idx]
+			}
+			statusMu.Lock()
+			active++
+			if active == MaxPullWorkers*2 {
+				close(allSixteenActive)
+			}
+			statusMu.Unlock()
+			select {
+			case <-releaseSixteen:
+			case <-ctx.Done():
+				return fetch.Response{}, ctx.Err()
+			}
+			return fetch.Response{StatusCode: 200, Body: detailFor(id, "v26-web.douyinvod.com")}, nil
+		})
+
+		oldWorker, err := NewPullWorkerWithDetail(origin, token, controlTransportForTLS(srv, origin), shDetailGate, shProbe)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := oldWorker.WithWorkers(MaxPullWorkers); err != nil {
+			t.Fatal(err)
+		}
+		newWorker, err := NewPullWorkerWithDetail(origin, token, controlTransportForTLS(srv, origin), shDetailGate, shProbe)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := newWorker.WithWorkers(MaxPullWorkers); err != nil {
+			t.Fatal(err)
+		}
+
+		oldCtx, cancelOld := context.WithCancel(t.Context())
+		defer cancelOld()
+		newCtx, cancelNew := context.WithCancel(t.Context())
+		defer cancelNew()
+
+		oldDone := make(chan error, 1)
+		newDone := make(chan error, 1)
+		go func() { oldDone <- oldWorker.Run(oldCtx) }()
+		go func() { newDone <- newWorker.Run(newCtx) }()
+
+		// All 16 workers (8 old + 8 new) must park simultaneously without hitting 429.
+		waitForPullCount(t, newBroker, MaxPullWorkers*2)
+
+		parser := douyin.NewWithOriginalResolver(jpDetailExec, nil, newBroker)
+		now := time.Now().Unix()
+		errs := make(chan error, MaxPullWorkers*2)
+		for i := range MaxPullWorkers * 2 {
+			id := fmt.Sprintf("77040567372338%05d", 10010+i)
+			go func() {
+				data, pErr := parser.Parse(t.Context(), "https://www.douyin.com/video/"+id, now)
+				if pErr != nil {
+					errs <- pErr
+					return
+				}
+				raw, _ := json.Marshal(unified.PublicView(data, false, now))
+				if !bytes.Contains(raw, []byte("v26-luna.douyinvod.com")) {
+					errs <- fmt.Errorf("overlap parse %s missed Shanghai domestic route: %s", id, raw)
+					return
+				}
+				errs <- nil
+			}()
+		}
+
+		select {
+		case <-allSixteenActive:
+		case <-time.After(3 * time.Second):
+			t.Fatal("did not lease all 16 overlapping tasks simultaneously")
+		}
+		close(releaseSixteen)
+
+		for range MaxPullWorkers * 2 {
+			if rErr := <-errs; rErr != nil {
+				t.Fatal(rErr)
+			}
+		}
+
+		// Drain old Shanghai process and verify new Shanghai process continues serving cleanly.
+		waitForPullCount(t, newBroker, MaxPullWorkers*2)
+		cancelOld()
+		<-oldDone
+		waitForPullCount(t, newBroker, MaxPullWorkers)
+
+		postDrainData, err := parser.Parse(t.Context(), "https://www.douyin.com/video/7704056737233899999", now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		postDrainRaw, _ := json.Marshal(unified.PublicView(postDrainData, false, now))
+		if !bytes.Contains(postDrainRaw, []byte("v26-luna.douyinvod.com")) {
+			t.Fatalf("new worker did not continue serving after old process drained: %s", postDrainRaw)
+		}
+
+		statusMu.Lock()
+		rejects := got429
+		statusMu.Unlock()
+		if rejects != 0 {
+			t.Fatalf("rolling restart 8+8 overlap suffered %d HTTP 429 rejections, want 0", rejects)
+		}
+
+		cancelNew()
+		<-newDone
+	})
+
+	// 3. New Shanghai (-workers 1, 3, 8) <-> Frozen main (7ed670f, pullCapacity=8, 0ms queue):
+	//    Wire protocol v2 remains 100% compatible across all worker counts.
+	t.Run("new_shanghai_configurable_workers_with_frozen_main_broker", func(t *testing.T) {
+		shDetailFast := resolveExecutor(func(_ context.Context, req fetch.Request) (fetch.Response, error) {
+			_, id, _ := strings.Cut(req.URL, "aweme_id=")
+			if idx := strings.IndexByte(id, '&'); idx >= 0 {
+				id = id[:idx]
+			}
+			return fetch.Response{StatusCode: 200, Body: detailFor(id, "v26-web.douyinvod.com")}, nil
+		})
+
+		for _, nWorkers := range []int{1, 3, 8} {
+			token := randomBrokerToken(t)
+			oldMainBroker := newFrozenMain7ed670fBroker(t, token)
+			srv := httptest.NewTLSServer(oldMainBroker)
+
+			w, err := NewPullWorkerWithDetail(origin, token, controlTransportForTLS(srv, origin), shDetailFast, shProbe)
+			if err != nil {
+				srv.Close()
+				t.Fatal(err)
+			}
+			if _, err := w.WithWorkers(nWorkers); err != nil {
+				srv.Close()
+				t.Fatal(err)
+			}
+			wCtx, cancelW := context.WithCancel(t.Context())
+			wDone := make(chan error, 1)
+			go func() { wDone <- w.Run(wCtx) }()
+			waitForPullCount(t, oldMainBroker, nWorkers)
+
+			parser := douyin.NewWithOriginalResolver(jpDetailExec, nil, oldMainBroker)
+			now := time.Now().Unix()
+			data, err := parser.Parse(t.Context(), "https://www.douyin.com/video/7704056737233910001", now)
+			if err != nil {
+				cancelW()
+				srv.Close()
+				t.Fatalf("workers=%d against frozen main broker failed: %v", nWorkers, err)
+			}
+			raw, _ := json.Marshal(unified.PublicView(data, false, now))
+			if !bytes.Contains(raw, []byte("v26-luna.douyinvod.com")) || !bytes.Contains(raw, []byte("v26-cold.douyinvod.com")) {
+				cancelW()
+				srv.Close()
+				t.Fatalf("workers=%d missing domestic routes on frozen main broker: %s", nWorkers, raw)
+			}
+
+			cancelW()
+			<-wDone
+			srv.Close()
+		}
+	})
+}
