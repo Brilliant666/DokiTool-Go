@@ -338,6 +338,8 @@
 !/backend/internal/api/admission_config.go
 !/backend/internal/api/admission_test.go
 !/backend/internal/api/bilibili_test.go
+!/backend/internal/api/cache.go
+!/backend/internal/api/cache_test.go
 !/backend/internal/api/capacity_test.go
 !/backend/internal/api/douyin_test.go
 !/backend/internal/api/handler.go
